@@ -8,11 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
 from app.models import EvidenceBlob
+from app.ownership import AuthorizationRejected, require_item_access
 from app.settings import settings
+
 
 def object_path(principal: Principal, document_id: str) -> Path:
     safe_doc = hashlib.sha256(document_id.encode()).hexdigest()
     return settings.evidence_root / principal.organization_id / safe_doc
+
 
 async def put_blob(
     db: AsyncSession,
@@ -24,12 +27,25 @@ async def put_blob(
     expected_sha256: str,
     body: bytes,
 ) -> EvidenceBlob:
+    model = await db.get(EvidenceBlob, (principal.organization_id, document_id))
+    if model is not None and model.item_id != item_id:
+        # Reject a client attempt to re-parent existing evidence before touching canonical bytes.
+        raise HTTPException(409, "evidence ownership mismatch")
+
+    canonical_item_id = model.item_id if model is not None else item_id
+    try:
+        await require_item_access(
+            db,
+            principal,
+            canonical_item_id,
+            capability="item.evidence.manage",
+        )
+    except AuthorizationRejected as exc:
+        raise HTTPException(403, str(exc)) from exc
+
     digest = hashlib.sha256(body).hexdigest()
     if digest.lower() != expected_sha256.lower():
         raise HTTPException(409, "content digest mismatch")
-    model = await db.get(EvidenceBlob, (principal.organization_id, document_id))
-    if model is not None and model.item_id != item_id:
-        raise HTTPException(409, "evidence ownership mismatch")
 
     destination = object_path(principal, document_id)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -41,7 +57,7 @@ async def put_blob(
         model = EvidenceBlob(
             organization_id=principal.organization_id,
             document_id=document_id,
-            item_id=item_id,
+            item_id=canonical_item_id,
             filename=filename,
             mime_type=mime_type,
             sha256=digest,
