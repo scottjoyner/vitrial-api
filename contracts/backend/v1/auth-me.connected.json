@@ -1,0 +1,38 @@
+{
+  "principalID": "user-001",
+  "displayName": "Connected Operator",
+  "email": "operator@example.invalid",
+  "customerIDs": ["customer-001"],
+  "allCustomers": false,
+  "capabilities": [
+    "customer.create",
+    "customer.edit",
+    "project.create",
+    "project.edit",
+    "item.create",
+    "item.edit",
+    "item.readiness.change",
+    "item.blockers.manage",
+    "item.measurements.manage",
+    "item.evidence.manage",
+    "item.requirements.manage",
+    "item.configuration.manage",
+    "quotation.create",
+    "quotation.send",
+    "sync"
+  ],
+  "issuedAt": "2026-09-06T14:00:00Z",
+  "expiresAt": "2026-09-06T15:00:00Z",
+  "organizationID": "org-001",
+  "membershipID": "membership-001",
+  "sessionID": "session-001",
+  "authorizationRevision": 42,
+  "projectIDs": ["project-001"],
+  "allProjects": false,
+  "roles": [
+    {
+      "id": "operator",
+      "displayName": "Operator"
+    }
+  ]
+}
