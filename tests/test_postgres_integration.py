@@ -175,6 +175,7 @@ async def test_sync_idempotency_stale_rejection_and_pull_acknowledgement():
     async with SessionFactory() as db:
         await clear_database(db)
         db.add(Organization(id="org-1", name="Vitrial", authorization_revision=4))
+        await db.flush()
         db.add(CanonicalCustomer(organization_id="org-1", customer_id="customer-001"))
         db.add(SyncEntity(
             organization_id="org-1",
@@ -390,7 +391,7 @@ async def test_sibling_project_reparent_and_cross_tenant_mutations_fail_closed()
 
         item = await db.get(CanonicalItem, ("org-1", "item-1"))
         assert item is not None and item.project_id == "project-1"
-        assert await db.get(SyncEntity, ("org-1", "item-other")) is None
+        assert await db.get(SyncEntity, ("org-1", "item", "item-other")) is None
 
         pulled = await pull_since(db, actor, "seq:0")
         assert "item-2" not in {entry.entityID for entry in pulled.records}
@@ -420,6 +421,7 @@ async def test_unimplemented_child_entity_cannot_use_sync_as_blanket_write_autho
     async with SessionFactory() as db:
         await clear_database(db)
         db.add(Organization(id="org-1", name="Vitrial", authorization_revision=1))
+        await db.flush()
         db.add(CanonicalCustomer(organization_id="org-1", customer_id="customer-1"))
         await db.flush()
         db.add(CanonicalProject(
@@ -458,6 +460,7 @@ async def test_evidence_upload_uses_canonical_item_scope_and_capability(tmp_path
     async with SessionFactory() as db:
         await clear_database(db)
         db.add(Organization(id="org-1", name="Vitrial", authorization_revision=1))
+        await db.flush()
         db.add(CanonicalCustomer(organization_id="org-1", customer_id="customer-1"))
         await db.flush()
         db.add_all([
