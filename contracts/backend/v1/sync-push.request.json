@@ -1,0 +1,15 @@
+{
+  "deviceID": "device-001",
+  "cursor": "seq:7",
+  "records": [
+    {
+      "id": "record-001",
+      "entityType": "customer",
+      "entityID": "customer-001",
+      "updatedAt": "2026-09-06T14:00:00Z",
+      "payload": "eyJhZGRyZXNzIjoiIiwiY3JlYXRlZEF0IjoiMjAyNi0wOS0wNlQxNDowMDowMFoiLCJlbWFpbCI6IiIsImlkIjoiY3VzdG9tZXItMDAxIiwibmFtZSI6IkFjbWUgQ3VzdG9tZXIiLCJub3RlcyI6IiIsInBob25lIjoiIiwic3RhdHVzIjoiYWN0aXZlIiwidXBkYXRlZEF0IjoiMjAyNi0wOS0wNlQxNDowMDowMFoifQ==",
+      "baseServerRevision": 7,
+      "clientMutationID": "mutation-001"
+    }
+  ]
+}
