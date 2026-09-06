@@ -88,19 +88,93 @@ class CanonicalProject(Base):
     )
 
 
+class CanonicalProjectSector(Base):
+    """Immutable ProjectSector -> Project relationship; Sector itself remains reference data."""
+
+    __tablename__ = "canonical_project_sectors"
+    organization_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    project_sector_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    sector_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "project_id"],
+            ["canonical_projects.organization_id", "canonical_projects.project_id"],
+            name="fk_canonical_project_sector_project",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organization_id", "project_id", "project_sector_id",
+            name="uq_canonical_project_sector_project_identity",
+        ),
+    )
+
+
 class CanonicalItem(Base):
-    """Immutable server-owned Item -> Project relationship."""
+    """Immutable server-owned Item -> ProjectSector -> Project relationship."""
 
     __tablename__ = "canonical_items"
     organization_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     item_id: Mapped[str] = mapped_column(String(256), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    # Nullable only so migration can preserve legacy rows whose ProjectSector cannot be proven.
+    # Authorization treats a null value as unbound legacy state and fails closed.
+    project_sector_id: Mapped[str | None] = mapped_column(String(256), index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         ForeignKeyConstraint(
             ["organization_id", "project_id"],
             ["canonical_projects.organization_id", "canonical_projects.project_id"],
             name="fk_canonical_item_project",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "project_id", "project_sector_id"],
+            [
+                "canonical_project_sectors.organization_id",
+                "canonical_project_sectors.project_id",
+                "canonical_project_sectors.project_sector_id",
+            ],
+            name="fk_canonical_item_project_sector",
+            ondelete="RESTRICT",
+        ),
+    )
+
+
+class CanonicalProjectChild(Base):
+    """Canonical project-owned records such as quotations."""
+
+    __tablename__ = "canonical_project_children"
+    organization_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "project_id"],
+            ["canonical_projects.organization_id", "canonical_projects.project_id"],
+            name="fk_canonical_project_child_project",
+            ondelete="RESTRICT",
+        ),
+    )
+
+
+class CanonicalItemChild(Base):
+    """Canonical item-owned sidecars/history; entity_type distinguishes the V1 child type."""
+
+    __tablename__ = "canonical_item_children"
+    organization_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "item_id"],
+            ["canonical_items.organization_id", "canonical_items.item_id"],
+            name="fk_canonical_item_child_item",
             ondelete="RESTRICT",
         ),
     )
