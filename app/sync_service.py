@@ -1,25 +1,18 @@
 from __future__ import annotations
 import base64
 import json
-from dataclasses import dataclass
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
-from app.models import SyncChangeLog, SyncEntity, SyncMutation
+from app.models import Organization, SyncChangeLog, SyncEntity, SyncMutation
 from app.schemas import SyncBatch, SyncRecord, SyncResult
 
-@dataclass(frozen=True)
-class MutationOutcome:
-    accepted: bool
-    record_id: str
-
-class StaleRevision(Exception):
-    pass
 
 class InvalidMutation(Exception):
     pass
+
 
 def decode_payload(record: SyncRecord) -> dict:
     try:
@@ -32,6 +25,7 @@ def decode_payload(record: SyncRecord) -> dict:
     except Exception as exc:
         raise InvalidMutation(f"invalid payload: {exc}") from exc
 
+
 async def _next_revision(db: AsyncSession, organization_id: str) -> int:
     value = await db.scalar(
         select(func.coalesce(func.max(SyncEntity.server_revision), 0)).where(
@@ -40,9 +34,18 @@ async def _next_revision(db: AsyncSession, organization_id: str) -> int:
     )
     return int(value or 0) + 1
 
+
 async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -> SyncResult:
     if "sync" not in principal.capabilities:
         raise PermissionError("sync capability required")
+
+    # Serialize mutation/revision allocation per organization. This keeps the
+    # max-revision allocator deterministic and closes concurrent idempotency races.
+    organization = await db.scalar(
+        select(Organization).where(Organization.id == principal.organization_id).with_for_update()
+    )
+    if organization is None:
+        raise PermissionError("organization unavailable")
 
     accepted: list[str] = []
     rejected: list[str] = []
@@ -68,7 +71,10 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
         )
         current_revision = current.server_revision if current else None
 
-        if current is not None and record.baseServerRevision != current_revision:
+        if (
+            (current is not None and record.baseServerRevision != current_revision)
+            or (current is None and record.baseServerRevision is not None)
+        ):
             db.add(SyncMutation(
                 organization_id=principal.organization_id,
                 client_mutation_id=record.clientMutationID,
@@ -86,7 +92,26 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             rejected.append(record.id)
             continue
 
-        payload = decode_payload(record)
+        try:
+            payload = decode_payload(record)
+        except InvalidMutation:
+            db.add(SyncMutation(
+                organization_id=principal.organization_id,
+                client_mutation_id=record.clientMutationID,
+                submitted_by_user_id=principal.user_id,
+                membership_id=principal.membership_id,
+                session_id=principal.session_id,
+                authorization_revision=principal.authorization_revision,
+                device_id=batch.deviceID,
+                entity_type=record.entityType,
+                entity_id=record.entityID,
+                base_server_revision=record.baseServerRevision,
+                result_server_revision=current_revision,
+                result_status="rejected",
+            ))
+            rejected.append(record.id)
+            continue
+
         revision = await _next_revision(db, principal.organization_id)
 
         if current is None:
@@ -142,6 +167,7 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
         rejectedRecordIDs=rejected,
         nextCursor=f"seq:{int(seq or 0)}",
     )
+
 
 async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None) -> SyncBatch:
     if "sync" not in principal.capabilities:
