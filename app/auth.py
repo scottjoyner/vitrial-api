@@ -12,7 +12,7 @@ from app.db import session_scope
 from app.models import AuthSession, Membership, Organization, User
 from app.schemas import AuthorizationProfile, AuthorizationRole
 
-bearer = HTTPBearer(auto_error=False)
+bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
 
 @dataclass(frozen=True)
 class Principal:
@@ -48,6 +48,11 @@ async def current_principal(
     organization = await db.get(Organization, auth_session.organization_id)
     if not membership or not organization or not membership.active:
         raise HTTPException(401, "membership inactive")
+    if (
+        membership.organization_id != auth_session.organization_id
+        or membership.user_id != auth_session.user_id
+    ):
+        raise HTTPException(401, "session membership mismatch")
 
     return Principal(
         user_id=auth_session.user_id,
