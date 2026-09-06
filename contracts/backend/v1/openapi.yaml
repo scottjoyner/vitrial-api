@@ -1,0 +1,381 @@
+openapi: 3.1.0
+info:
+  title: Vitrial Connected Operations API
+  version: 0.2.0-v1
+  description: Machine-readable V1 contract consumed by the iOS Connected Operations client.
+servers:
+  - url: https://api.example.invalid
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/version:
+    get:
+      operationId: version
+      responses:
+        '200':
+          description: API/service version information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+  /api/v1/auth/me:
+    get:
+      operationId: authMe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authoritative Connected Operations profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationProfile'
+        '401':
+          description: Missing, expired, or revoked access token.
+  /api/v1/sync/push:
+    post:
+      operationId: syncPush
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncBatch'
+      responses:
+        '200':
+          description: Per-record acceptance summary. Durable acknowledgement still arrives through pull.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResult'
+        '401':
+          description: Authentication required.
+        '429':
+          description: Back pressure; may include Retry-After.
+        '503':
+          description: Temporarily unavailable; may include Retry-After.
+  /api/v1/sync/pull:
+    get:
+      operationId: syncPull
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Revisioned incremental change batch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncBatch'
+        '401':
+          description: Authentication required.
+  /api/v1/sync/evidence-blobs/{documentID}:
+    parameters:
+      - name: documentID
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+    head:
+      operationId: evidencePresence
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Evidence blob exists and is authorized.
+        '404':
+          description: Evidence blob missing.
+        '405':
+          description: Presence probing unsupported.
+        '501':
+          description: Presence probing unsupported.
+    put:
+      operationId: evidenceUpload
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-Vitrial-Item-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: X-Vitrial-Filename
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: X-Content-SHA256
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              contentEncoding: binary
+      responses:
+        '200':
+          description: Evidence blob stored and digest verified.
+        '201':
+          description: Evidence blob created and digest verified.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Item/evidence relationship is outside caller scope.
+        '409':
+          description: Metadata/ownership/digest conflict.
+    get:
+      operationId: evidenceDownload
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Canonical evidence bytes.
+          headers:
+            X-Content-SHA256:
+              required: true
+              schema:
+                type: string
+                pattern: '^[0-9a-fA-F]{64}$'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentEncoding: binary
+        '401':
+          description: Authentication required.
+        '403':
+          description: Evidence is outside caller scope.
+        '404':
+          description: Evidence blob missing.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: access-token
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    VersionResponse:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, serviceVersion]
+      properties:
+        apiVersion:
+          type: string
+          const: v1
+        serviceVersion:
+          type: string
+          minLength: 1
+    AuthorizationRole:
+      type: object
+      additionalProperties: false
+      required: [id, displayName]
+      properties:
+        id:
+          type: string
+          minLength: 1
+        displayName:
+          type: string
+          minLength: 1
+    ProjectCapability:
+      type: string
+      enum:
+        - customer.create
+        - customer.edit
+        - project.create
+        - project.edit
+        - item.create
+        - item.edit
+        - item.readiness.change
+        - item.readiness.override
+        - item.blockers.manage
+        - item.measurements.manage
+        - item.evidence.manage
+        - item.requirements.manage
+        - item.configuration.manage
+        - item.configuration.finalize
+        - item.configuration.reopen
+        - quotation.create
+        - quotation.send
+        - quotation.approve
+        - catalog.manage
+        - pricing.manage
+        - organization.members.manage
+        - organization.roles.manage
+        - sync
+    AuthorizationProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - principalID
+        - displayName
+        - customerIDs
+        - allCustomers
+        - capabilities
+        - issuedAt
+        - expiresAt
+        - organizationID
+        - membershipID
+        - sessionID
+        - authorizationRevision
+        - allProjects
+      properties:
+        principalID:
+          type: string
+          minLength: 1
+        displayName:
+          type: string
+          minLength: 1
+        email:
+          type: [string, 'null']
+        customerIDs:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        allCustomers:
+          type: boolean
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ProjectCapability'
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        organizationID:
+          type: string
+          minLength: 1
+        membershipID:
+          type: string
+          minLength: 1
+        sessionID:
+          type: string
+          minLength: 1
+        authorizationRevision:
+          type: integer
+          format: int64
+          minimum: 0
+        projectIDs:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        allProjects:
+          type: boolean
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorizationRole'
+    SyncEntityType:
+      type: string
+      enum:
+        - customer
+        - project
+        - project_sector
+        - item
+        - item_audit_event
+        - measurement
+        - evidence
+        - customer_requirement
+        - configuration
+        - configuration_version
+        - blocker
+        - quotation
+    SyncRecord:
+      type: object
+      additionalProperties: false
+      required: [id, entityType, entityID, updatedAt, payload]
+      properties:
+        id:
+          type: string
+          minLength: 1
+        entityType:
+          $ref: '#/components/schemas/SyncEntityType'
+        entityID:
+          type: string
+          minLength: 1
+        updatedAt:
+          type: string
+          format: date-time
+        payload:
+          type: string
+          contentEncoding: base64
+          description: V1 base64-encoded typed JSON payload.
+        baseServerRevision:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        serverRevision:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        clientMutationID:
+          type: [string, 'null']
+        deletedAt:
+          type: [string, 'null']
+          format: date-time
+    SyncBatch:
+      type: object
+      additionalProperties: false
+      required: [deviceID, records]
+      properties:
+        deviceID:
+          type: string
+          minLength: 1
+        cursor:
+          type: [string, 'null']
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncRecord'
+    SyncResult:
+      type: object
+      additionalProperties: false
+      required: [acceptedRecordIDs, rejectedRecordIDs]
+      properties:
+        acceptedRecordIDs:
+          type: array
+          items:
+            type: string
+        rejectedRecordIDs:
+          type: array
+          items:
+            type: string
+        nextCursor:
+          type: [string, 'null']
