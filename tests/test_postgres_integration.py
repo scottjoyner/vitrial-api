@@ -53,8 +53,11 @@ async def test_session_authentication_and_revocation():
 
     async with SessionFactory() as db:
         await clear_database(db)
+
         db.add(Organization(id="org-1", name="Vitrial", authorization_revision=9))
         db.add(User(id="user-1", display_name="Operator", email="operator@example.invalid"))
+        await db.flush()
+
         db.add(Membership(
             id="membership-1",
             organization_id="org-1",
@@ -67,6 +70,8 @@ async def test_session_authentication_and_revocation():
             roles=[{"id": "operator", "displayName": "Operator"}],
             capabilities=["sync", "item.edit"],
         ))
+        await db.flush()
+
         session = AuthSession(
             id="session-1",
             organization_id="org-1",
