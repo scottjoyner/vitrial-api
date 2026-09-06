@@ -115,6 +115,7 @@ async def test_sync_idempotency_stale_rejection_and_pull_acknowledgement():
 
     async with SessionFactory() as db:
         await clear_database(db)
+        db.add(Organization(id="org-1", name="Vitrial", authorization_revision=4))
         db.add(SyncEntity(
             organization_id="org-1",
             entity_type="customer",
