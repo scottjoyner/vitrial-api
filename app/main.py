@@ -9,6 +9,7 @@ from app.auth import Principal, current_principal, profile_for
 from app.db import session_scope
 from app.evidence import object_path, put_blob
 from app.models import EvidenceBlob
+from app.ownership import AuthorizationRejected, require_item_access
 from app.schemas import AuthorizationProfile, HealthResponse, SyncBatch, SyncResult, VersionResponse
 from app.settings import settings
 from app.sync_service import InvalidMutation, apply_push, pull_since
@@ -76,6 +77,10 @@ async def evidence_head(
     model = await db.get(EvidenceBlob, (principal.organization_id, documentID))
     if model is None or not object_path(principal, documentID).exists():
         raise HTTPException(404)
+    try:
+        await require_item_access(db, principal, model.item_id)
+    except AuthorizationRejected as exc:
+        raise HTTPException(403, str(exc)) from exc
     return Response(status_code=200, headers={"X-Content-SHA256": model.sha256})
 
 
@@ -124,6 +129,10 @@ async def evidence_get(
     path = object_path(principal, documentID)
     if model is None or not path.exists():
         raise HTTPException(404)
+    try:
+        await require_item_access(db, principal, model.item_id)
+    except AuthorizationRejected as exc:
+        raise HTTPException(403, str(exc)) from exc
     return FileResponse(
         path,
         media_type=model.mime_type or "application/octet-stream",
