@@ -7,6 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
 from app.models import Organization, SyncChangeLog, SyncEntity, SyncMutation
+from app.ownership import (
+    AuthorizationRejected,
+    EffectiveScope,
+    apply_ownership_plan,
+    authorize_record,
+    mutation_sort_key,
+    record_is_visible,
+)
 from app.schemas import SyncBatch, SyncRecord, SyncResult
 
 
@@ -19,9 +27,12 @@ def decode_payload(record: SyncRecord) -> dict:
         raw = record.payload
         try:
             decoded = base64.b64decode(raw, validate=True)
-            return json.loads(decoded)
+            value = json.loads(decoded)
         except Exception:
-            return json.loads(raw)
+            value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError("typed payload must decode to a JSON object")
+        return value
     except Exception as exc:
         raise InvalidMutation(f"invalid payload: {exc}") from exc
 
@@ -35,24 +46,50 @@ async def _next_revision(db: AsyncSession, organization_id: str) -> int:
     return int(value or 0) + 1
 
 
+def _mutation_row(
+    principal: Principal,
+    batch: SyncBatch,
+    record: SyncRecord,
+    *,
+    status: str,
+    result_revision: int | None,
+) -> SyncMutation:
+    return SyncMutation(
+        organization_id=principal.organization_id,
+        client_mutation_id=record.clientMutationID,
+        submitted_by_user_id=principal.user_id,
+        membership_id=principal.membership_id,
+        session_id=principal.session_id,
+        authorization_revision=principal.authorization_revision,
+        device_id=batch.deviceID,
+        entity_type=record.entityType,
+        entity_id=record.entityID,
+        base_server_revision=record.baseServerRevision,
+        result_server_revision=result_revision,
+        result_status=status,
+    )
+
+
 async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -> SyncResult:
     if "sync" not in principal.capabilities:
         raise PermissionError("sync capability required")
 
-    # Serialize mutation/revision allocation per organization. This keeps the
-    # max-revision allocator deterministic and closes concurrent idempotency races.
+    # Serialize canonical ownership, authorization-scope grants, idempotency and revision allocation
+    # per organization. One accepted transaction cannot race another into a last-writer-wins result.
     organization = await db.scalar(
         select(Organization).where(Organization.id == principal.organization_id).with_for_update()
     )
     if organization is None:
         raise PermissionError("organization unavailable")
 
-    accepted: list[str] = []
-    rejected: list[str] = []
+    scope = EffectiveScope.from_principal(principal)
+    outcomes: dict[int, bool] = {}
+    indexed_records = list(enumerate(batch.records))
+    indexed_records.sort(key=lambda pair: mutation_sort_key(pair[1].entityType, pair[0]))
 
-    for record in batch.records:
+    for original_index, record in indexed_records:
         if not record.clientMutationID:
-            rejected.append(record.id)
+            outcomes[original_index] = False
             continue
 
         prior = await db.scalar(
@@ -62,7 +99,7 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             )
         )
         if prior is not None:
-            (accepted if prior.result_status == "accepted" else rejected).append(record.id)
+            outcomes[original_index] = prior.result_status == "accepted"
             continue
 
         current = await db.get(
@@ -75,41 +112,32 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             (current is not None and record.baseServerRevision != current_revision)
             or (current is None and record.baseServerRevision is not None)
         ):
-            db.add(SyncMutation(
-                organization_id=principal.organization_id,
-                client_mutation_id=record.clientMutationID,
-                submitted_by_user_id=principal.user_id,
-                membership_id=principal.membership_id,
-                session_id=principal.session_id,
-                authorization_revision=principal.authorization_revision,
-                device_id=batch.deviceID,
-                entity_type=record.entityType,
-                entity_id=record.entityID,
-                base_server_revision=record.baseServerRevision,
-                result_server_revision=current_revision,
-                result_status="rejected",
+            db.add(_mutation_row(
+                principal, batch, record,
+                status="rejected", result_revision=current_revision,
             ))
-            rejected.append(record.id)
+            outcomes[original_index] = False
             continue
 
         try:
             payload = decode_payload(record)
-        except InvalidMutation:
-            db.add(SyncMutation(
-                organization_id=principal.organization_id,
-                client_mutation_id=record.clientMutationID,
-                submitted_by_user_id=principal.user_id,
-                membership_id=principal.membership_id,
-                session_id=principal.session_id,
-                authorization_revision=principal.authorization_revision,
-                device_id=batch.deviceID,
+            plan = await authorize_record(
+                db,
+                principal,
+                scope,
                 entity_type=record.entityType,
                 entity_id=record.entityID,
-                base_server_revision=record.baseServerRevision,
-                result_server_revision=current_revision,
-                result_status="rejected",
+                payload=payload,
+                deleted_at=record.deletedAt,
+                generic_entity_exists=current is not None,
+            )
+            await apply_ownership_plan(db, principal, scope, plan)
+        except (InvalidMutation, AuthorizationRejected):
+            db.add(_mutation_row(
+                principal, batch, record,
+                status="rejected", result_revision=current_revision,
             ))
-            rejected.append(record.id)
+            outcomes[original_index] = False
             continue
 
         revision = await _next_revision(db, principal.organization_id)
@@ -131,19 +159,9 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             current.updated_at = record.updatedAt
             current.deleted_at = record.deletedAt
 
-        db.add(SyncMutation(
-            organization_id=principal.organization_id,
-            client_mutation_id=record.clientMutationID,
-            submitted_by_user_id=principal.user_id,
-            membership_id=principal.membership_id,
-            session_id=principal.session_id,
-            authorization_revision=principal.authorization_revision,
-            device_id=batch.deviceID,
-            entity_type=record.entityType,
-            entity_id=record.entityID,
-            base_server_revision=record.baseServerRevision,
-            result_server_revision=revision,
-            result_status="accepted",
+        db.add(_mutation_row(
+            principal, batch, record,
+            status="accepted", result_revision=revision,
         ))
         db.add(SyncChangeLog(
             organization_id=principal.organization_id,
@@ -153,7 +171,8 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             client_mutation_id=record.clientMutationID,
             operation="delete" if record.deletedAt else "upsert",
         ))
-        accepted.append(record.id)
+        outcomes[original_index] = True
+        await db.flush()
 
     await db.commit()
 
@@ -163,8 +182,8 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
         )
     )
     return SyncResult(
-        acceptedRecordIDs=accepted,
-        rejectedRecordIDs=rejected,
+        acceptedRecordIDs=[record.id for index, record in enumerate(batch.records) if outcomes.get(index) is True],
+        rejectedRecordIDs=[record.id for index, record in enumerate(batch.records) if outcomes.get(index) is not True],
         nextCursor=f"seq:{int(seq or 0)}",
     )
 
@@ -194,7 +213,16 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
     records: list[SyncRecord] = []
     max_seq = start
     for change in changes:
+        # Advance through invisible changes as well. The opaque cursor must not become a side channel
+        # or trap a restricted caller repeatedly behind a sibling Project's records.
         max_seq = max(max_seq, change.sequence)
+        if not await record_is_visible(
+            db,
+            principal,
+            entity_type=change.entity_type,
+            entity_id=change.entity_id,
+        ):
+            continue
         entity = await db.get(
             SyncEntity,
             (principal.organization_id, change.entity_type, change.entity_id),
