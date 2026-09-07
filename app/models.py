@@ -118,8 +118,6 @@ class CanonicalItem(Base):
     organization_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     item_id: Mapped[str] = mapped_column(String(256), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
-    # Nullable only so migration can preserve legacy rows whose ProjectSector cannot be proven.
-    # Authorization treats a null value as unbound legacy state and fails closed.
     project_sector_id: Mapped[str | None] = mapped_column(String(256), index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
@@ -232,5 +230,22 @@ class EvidenceBlob(Base):
     mime_type: Mapped[str] = mapped_column(String(256))
     sha256: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int] = mapped_column(BigInteger)
+    storage_provider: Mapped[str] = mapped_column(String(32), default="local", nullable=False)
     object_key: Mapped[str] = mapped_column(String(1024), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvidenceObjectGC(Base):
+    """Durable queue for deleting non-canonical evidence object versions."""
+
+    __tablename__ = "evidence_object_gc"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[str] = mapped_column(String(128), index=True)
+    document_id: Mapped[str] = mapped_column(String(256), index=True)
+    storage_provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    object_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    not_before: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(String(1024))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

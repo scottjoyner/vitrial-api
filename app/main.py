@@ -1,17 +1,18 @@
 from __future__ import annotations
 from typing import Annotated
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Request, Response
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, current_principal, profile_for
 from app.db import session_scope
-from app.evidence import object_path, put_blob
+from app.evidence import put_blob
 from app.models import EvidenceBlob
 from app.ownership import AuthorizationRejected, require_item_access
 from app.schemas import AuthorizationProfile, HealthResponse, SyncBatch, SyncResult, VersionResponse
 from app.settings import settings
+from app.storage import StorageError, store_for_provider
 from app.sync_service import InvalidMutation, apply_push, pull_since
 
 app = FastAPI(title="Vitrial Connected Operations API", version=settings.service_version)
@@ -65,6 +66,21 @@ async def sync_pull(
         raise HTTPException(400, str(exc)) from exc
 
 
+async def _authorized_blob(
+    db: AsyncSession,
+    principal: Principal,
+    document_id: str,
+) -> EvidenceBlob:
+    model = await db.get(EvidenceBlob, (principal.organization_id, document_id))
+    if model is None:
+        raise HTTPException(404)
+    try:
+        await require_item_access(db, principal, model.item_id)
+    except AuthorizationRejected as exc:
+        raise HTTPException(403, str(exc)) from exc
+    return model
+
+
 @app.head(
     "/api/v1/sync/evidence-blobs/{documentID}",
     operation_id="evidencePresence",
@@ -74,13 +90,13 @@ async def evidence_head(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(session_scope),
 ) -> Response:
-    model = await db.get(EvidenceBlob, (principal.organization_id, documentID))
-    if model is None or not object_path(principal, documentID).exists():
-        raise HTTPException(404)
+    model = await _authorized_blob(db, principal, documentID)
     try:
-        await require_item_access(db, principal, model.item_id)
-    except AuthorizationRejected as exc:
-        raise HTTPException(403, str(exc)) from exc
+        present = await store_for_provider(model.storage_provider).exists(model.object_key)
+    except StorageError as exc:
+        raise HTTPException(503, "evidence object storage unavailable") from exc
+    if not present:
+        raise HTTPException(404)
     return Response(status_code=200, headers={"X-Content-SHA256": model.sha256})
 
 
@@ -88,11 +104,20 @@ async def evidence_head(
     "/api/v1/sync/evidence-blobs/{documentID}",
     operation_id="evidenceUpload",
     status_code=201,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "contentEncoding": "binary"}
+                }
+            },
+        }
+    },
 )
 async def evidence_put(
     documentID: DocumentID,
     request: Request,
-    body: Annotated[bytes, Body(media_type="application/octet-stream")],
     x_vitrial_item_id: Annotated[str, Header(alias="X-Vitrial-Item-ID", min_length=1)],
     x_vitrial_filename: Annotated[str, Header(alias="X-Vitrial-Filename", min_length=1)],
     x_content_sha256: Annotated[
@@ -110,7 +135,7 @@ async def evidence_put(
         x_vitrial_filename,
         request.headers.get("content-type", "application/octet-stream"),
         x_content_sha256,
-        body,
+        request.stream(),
     )
     return Response(status_code=201, headers={"X-Content-SHA256": model.sha256})
 
@@ -118,23 +143,21 @@ async def evidence_put(
 @app.get(
     "/api/v1/sync/evidence-blobs/{documentID}",
     operation_id="evidenceDownload",
-    response_class=FileResponse,
 )
 async def evidence_get(
     documentID: DocumentID,
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(session_scope),
 ):
-    model = await db.get(EvidenceBlob, (principal.organization_id, documentID))
-    path = object_path(principal, documentID)
-    if model is None or not path.exists():
-        raise HTTPException(404)
+    model = await _authorized_blob(db, principal, documentID)
+    store = store_for_provider(model.storage_provider)
     try:
-        await require_item_access(db, principal, model.item_id)
-    except AuthorizationRejected as exc:
-        raise HTTPException(403, str(exc)) from exc
-    return FileResponse(
-        path,
+        if not await store.exists(model.object_key):
+            raise HTTPException(404)
+    except StorageError as exc:
+        raise HTTPException(503, "evidence object storage unavailable") from exc
+    return StreamingResponse(
+        store.stream(model.object_key),
         media_type=model.mime_type or "application/octet-stream",
         headers={"X-Content-SHA256": model.sha256},
     )
