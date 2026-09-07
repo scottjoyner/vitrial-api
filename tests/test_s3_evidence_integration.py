@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.auth import Principal
@@ -20,7 +21,7 @@ from app.models import (
     EvidenceObjectGC,
     Organization,
 )
-from app.storage import store_for_provider
+from app.storage import object_key_for, store_for_provider
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("S3_INTEGRATION") != "1",
@@ -147,3 +148,19 @@ async def test_s3_stream_replace_and_canonical_gc():
         assert result.deleted >= 1
         assert not await store.exists(replacement_key)
         assert await db.get(EvidenceBlob, (org_id, document_id)) is None
+
+        post_delete = b"must-not-resurrect"
+        post_delete_digest = hashlib.sha256(post_delete).hexdigest()
+        with pytest.raises(HTTPException) as exc:
+            await put_blob(
+                db,
+                principal,
+                document_id,
+                item_id,
+                "post-delete.bin",
+                "application/octet-stream",
+                post_delete_digest,
+                chunked(post_delete),
+            )
+        assert exc.value.status_code == 409
+        assert not await store.exists(object_key_for(org_id, document_id, post_delete_digest))

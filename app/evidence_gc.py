@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CanonicalItemChild, EvidenceBlob, EvidenceObjectGC, SyncEntity
+from app.models import CanonicalItemChild, EvidenceBlob, EvidenceObjectGC, Organization, SyncEntity
 from app.settings import settings
 from app.storage import StorageError, store_for_provider
 
@@ -77,6 +77,12 @@ async def collect_due_evidence_gc(
 
     deleted = skipped = failed = 0
     for row in rows:
+        # Share the same organization lock used by sync publication and evidence pointer swaps.
+        # This prevents a collector from deleting the version an in-flight transaction is making
+        # canonical, while still allowing large uploads to stream without holding the lock.
+        await db.scalar(
+            select(Organization).where(Organization.id == row.organization_id).with_for_update()
+        )
         current = await db.get(EvidenceBlob, (row.organization_id, row.document_id))
         current_points_to_candidate = (
             current is not None
@@ -90,8 +96,6 @@ async def collect_due_evidence_gc(
                 (row.organization_id, "evidence", row.document_id),
             )
             if canonical is not None and canonical.deleted_at is None:
-                # An active canonical document still points at these bytes. The queue entry is stale
-                # and must never be allowed to turn a live document into a dangling pointer.
                 skipped += 1
                 if not dry_run:
                     await db.delete(row)
