@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
-from app.models import Organization, SyncChangeLog, SyncEntity, SyncMutation
+from app.models import CanonicalItemChild, Organization, SyncChangeLog, SyncEntity, SyncMutation
 from app.ownership import (
     AuthorizationRejected,
     EffectiveScope,
@@ -44,6 +44,22 @@ async def _next_revision(db: AsyncSession, organization_id: str) -> int:
         )
     )
     return int(value or 0) + 1
+
+
+async def _item_has_immutable_audit_history(
+    db: AsyncSession,
+    organization_id: str,
+    item_id: str,
+) -> bool:
+    audit_id = await db.scalar(
+        select(CanonicalItemChild.entity_id).where(
+            CanonicalItemChild.organization_id == organization_id,
+            CanonicalItemChild.entity_type == "item_audit_event",
+            CanonicalItemChild.item_id == item_id,
+            CanonicalItemChild.deleted_at.is_(None),
+        ).limit(1)
+    )
+    return audit_id is not None
 
 
 def _mutation_row(
@@ -121,6 +137,18 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
 
         try:
             payload = decode_payload(record)
+            # Item audit events are immutable history in the pinned iOS V1 model. Since those
+            # records can never be tombstoned themselves, an Item tombstone must not strand them.
+            if (
+                record.entityType == "item"
+                and record.deletedAt is not None
+                and await _item_has_immutable_audit_history(
+                    db, principal.organization_id, record.entityID
+                )
+            ):
+                raise AuthorizationRejected(
+                    "Item cannot be deleted while immutable audit history remains"
+                )
             plan = await authorize_record(
                 db,
                 principal,
