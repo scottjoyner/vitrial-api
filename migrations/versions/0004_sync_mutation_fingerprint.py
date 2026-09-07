@@ -1,18 +1,16 @@
 """bind client mutation ids to immutable request fingerprints
 
-Revision ID: 0004_sync_mutation_fingerprint
-Revises: 0003_canonical_child_ownership
+Revision ID: 0004
+Revises: 0003
 """
-
-from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "0004_sync_mutation_fingerprint"
-down_revision: Union[str, None] = "0003_canonical_child_ownership"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision = "0004"
+down_revision = "0003"
+branch_labels = None
+depends_on = None
 
 
 def upgrade() -> None:
