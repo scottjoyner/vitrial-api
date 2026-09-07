@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
+from app.lifecycle import LifecycleRejected, validate_lifecycle_mutation
 from app.models import CanonicalItemChild, Organization, SyncChangeLog, SyncEntity, SyncMutation
 from app.ownership import (
     AuthorizationRejected,
@@ -149,6 +150,15 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 raise AuthorizationRejected(
                     "Item cannot be deleted while immutable audit history remains"
                 )
+            await validate_lifecycle_mutation(
+                db,
+                principal,
+                entity_type=record.entityType,
+                entity_id=record.entityID,
+                payload=payload,
+                deleted_at=record.deletedAt,
+                current=current,
+            )
             plan = await authorize_record(
                 db,
                 principal,
@@ -160,7 +170,7 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 generic_entity_exists=current is not None,
             )
             await apply_ownership_plan(db, principal, scope, plan)
-        except (InvalidMutation, AuthorizationRejected):
+        except (InvalidMutation, AuthorizationRejected, LifecycleRejected):
             db.add(_mutation_row(
                 principal, batch, record,
                 status="rejected", result_revision=current_revision,
