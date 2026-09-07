@@ -6,9 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
+from app.evidence_gc import queue_blob_gc
 from app.idempotency import SyncMutationFingerprint, request_fingerprint
 from app.lifecycle import LifecycleRejected, validate_lifecycle_mutation
-from app.models import CanonicalItemChild, Organization, SyncChangeLog, SyncEntity, SyncMutation
+from app.models import CanonicalItemChild, EvidenceBlob, Organization, SyncChangeLog, SyncEntity, SyncMutation
 from app.ownership import (
     AuthorizationRejected,
     EffectiveScope,
@@ -115,8 +116,6 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
     if "sync" not in principal.capabilities:
         raise PermissionError("sync capability required")
 
-    # Serialize canonical ownership, authorization-scope grants, idempotency and revision allocation
-    # per organization. One accepted transaction cannot race another into a last-writer-wins result.
     organization = await db.scalar(
         select(Organization).where(Organization.id == principal.organization_id).with_for_update()
     )
@@ -145,12 +144,8 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 (principal.organization_id, record.clientMutationID),
             )
             if prior_fingerprint is not None:
-                same_request = (
-                    prior_fingerprint.request_fingerprint == request_fingerprint(record)
-                )
+                same_request = prior_fingerprint.request_fingerprint == request_fingerprint(record)
             else:
-                # Legacy mutation rows predate request fingerprints. Fail closed when even the
-                # stored identity/base envelope disagrees; exact payload equality cannot be proven.
                 same_request = (
                     prior.entity_type == record.entityType
                     and prior.entity_id == record.entityID
@@ -178,8 +173,6 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
 
         try:
             payload = decode_payload(record)
-            # Item audit events are immutable history in the pinned iOS V1 model. Since those
-            # records can never be tombstoned themselves, an Item tombstone must not strand them.
             if (
                 record.entityType == "item"
                 and record.deletedAt is not None
@@ -210,6 +203,15 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 generic_entity_exists=current is not None,
             )
             await apply_ownership_plan(db, principal, scope, plan)
+            if record.entityType == "evidence" and record.deletedAt is not None:
+                blob = await db.get(
+                    EvidenceBlob,
+                    (principal.organization_id, record.entityID),
+                )
+                if blob is not None:
+                    # Queue physical deletion in the same transaction as the canonical metadata
+                    # tombstone. The collector rechecks references before touching object storage.
+                    await queue_blob_gc(db, blob, reason="metadata_tombstone")
         except (InvalidMutation, AuthorizationRejected, LifecycleRejected):
             _record_mutation(
                 db, principal, batch, record,
@@ -291,8 +293,6 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
     records: list[SyncRecord] = []
     max_seq = start
     for change in changes:
-        # Advance through invisible changes as well. The opaque cursor must not become a side channel
-        # or trap a restricted caller repeatedly behind a sibling Project's records.
         max_seq = max(max_seq, change.sequence)
         if not await record_is_visible(
             db,

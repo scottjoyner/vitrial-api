@@ -23,11 +23,15 @@ class ExistingBlobDB:
         self.committed = True
 
 
-@pytest.mark.asyncio
-async def test_ownership_conflict_does_not_replace_existing_blob(tmp_path, monkeypatch):
-    target = tmp_path / "canonical-blob"
-    target.write_bytes(b"canonical")
+class UntouchedStore:
+    provider = "local"
 
+    async def put_verified(self, *_args, **_kwargs):
+        raise AssertionError("ownership conflict must be rejected before object storage")
+
+
+@pytest.mark.asyncio
+async def test_ownership_conflict_does_not_touch_object_storage(monkeypatch):
     existing = EvidenceBlob(
         organization_id="org-1",
         document_id="doc-1",
@@ -36,7 +40,8 @@ async def test_ownership_conflict_does_not_replace_existing_blob(tmp_path, monke
         mime_type="image/jpeg",
         sha256=hashlib.sha256(b"canonical").hexdigest(),
         size_bytes=len(b"canonical"),
-        object_key=str(target),
+        storage_provider="local",
+        object_key="blobs/canonical",
     )
     db = ExistingBlobDB(existing)
     principal = Principal(
@@ -51,8 +56,7 @@ async def test_ownership_conflict_does_not_replace_existing_blob(tmp_path, monke
         all_customers=True,
         all_projects=True,
     )
-
-    monkeypatch.setattr("app.evidence.object_path", lambda _principal, _document_id: target)
+    monkeypatch.setattr("app.evidence.current_store", lambda: UntouchedStore())
     replacement = b"replacement"
 
     with pytest.raises(HTTPException) as exc:
@@ -68,5 +72,4 @@ async def test_ownership_conflict_does_not_replace_existing_blob(tmp_path, monke
         )
 
     assert exc.value.status_code == 409
-    assert target.read_bytes() == b"canonical"
     assert not db.committed
