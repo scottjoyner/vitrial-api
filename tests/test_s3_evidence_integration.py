@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 
 from app.auth import Principal
 from app.db import SessionFactory
@@ -56,6 +57,7 @@ async def test_s3_stream_replace_and_canonical_gc():
 
     async with SessionFactory() as db:
         db.add(Organization(id=org_id, name="S3 integration"))
+        await db.flush()
         db.add(CanonicalCustomer(organization_id=org_id, customer_id=customer_id))
         await db.flush()
         db.add(CanonicalProject(
@@ -122,7 +124,7 @@ async def test_s3_stream_replace_and_canonical_gc():
         assert await store.exists(original_key)
         assert await store.exists(replacement_key)
         queued = (await db.scalars(
-            __import__("sqlalchemy").select(EvidenceObjectGC).where(
+            select(EvidenceObjectGC).where(
                 EvidenceObjectGC.organization_id == org_id,
                 EvidenceObjectGC.object_key == original_key,
             )
