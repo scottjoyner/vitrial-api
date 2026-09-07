@@ -6,6 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
+from app.idempotency import SyncMutationFingerprint, request_fingerprint
+from app.lifecycle import LifecycleRejected, validate_lifecycle_mutation
 from app.models import CanonicalItemChild, Organization, SyncChangeLog, SyncEntity, SyncMutation
 from app.ownership import (
     AuthorizationRejected,
@@ -86,6 +88,29 @@ def _mutation_row(
     )
 
 
+def _record_mutation(
+    db: AsyncSession,
+    principal: Principal,
+    batch: SyncBatch,
+    record: SyncRecord,
+    *,
+    status: str,
+    result_revision: int | None,
+) -> None:
+    db.add(_mutation_row(
+        principal,
+        batch,
+        record,
+        status=status,
+        result_revision=result_revision,
+    ))
+    db.add(SyncMutationFingerprint(
+        organization_id=principal.organization_id,
+        client_mutation_id=record.clientMutationID,
+        request_fingerprint=request_fingerprint(record),
+    ))
+
+
 async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -> SyncResult:
     if "sync" not in principal.capabilities:
         raise PermissionError("sync capability required")
@@ -115,7 +140,23 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             )
         )
         if prior is not None:
-            outcomes[original_index] = prior.result_status == "accepted"
+            prior_fingerprint = await db.get(
+                SyncMutationFingerprint,
+                (principal.organization_id, record.clientMutationID),
+            )
+            if prior_fingerprint is not None:
+                same_request = (
+                    prior_fingerprint.request_fingerprint == request_fingerprint(record)
+                )
+            else:
+                # Legacy mutation rows predate request fingerprints. Fail closed when even the
+                # stored identity/base envelope disagrees; exact payload equality cannot be proven.
+                same_request = (
+                    prior.entity_type == record.entityType
+                    and prior.entity_id == record.entityID
+                    and prior.base_server_revision == record.baseServerRevision
+                )
+            outcomes[original_index] = same_request and prior.result_status == "accepted"
             continue
 
         current = await db.get(
@@ -128,10 +169,10 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             (current is not None and record.baseServerRevision != current_revision)
             or (current is None and record.baseServerRevision is not None)
         ):
-            db.add(_mutation_row(
-                principal, batch, record,
+            _record_mutation(
+                db, principal, batch, record,
                 status="rejected", result_revision=current_revision,
-            ))
+            )
             outcomes[original_index] = False
             continue
 
@@ -149,6 +190,15 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 raise AuthorizationRejected(
                     "Item cannot be deleted while immutable audit history remains"
                 )
+            await validate_lifecycle_mutation(
+                db,
+                principal,
+                entity_type=record.entityType,
+                entity_id=record.entityID,
+                payload=payload,
+                deleted_at=record.deletedAt,
+                current=current,
+            )
             plan = await authorize_record(
                 db,
                 principal,
@@ -160,11 +210,11 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 generic_entity_exists=current is not None,
             )
             await apply_ownership_plan(db, principal, scope, plan)
-        except (InvalidMutation, AuthorizationRejected):
-            db.add(_mutation_row(
-                principal, batch, record,
+        except (InvalidMutation, AuthorizationRejected, LifecycleRejected):
+            _record_mutation(
+                db, principal, batch, record,
                 status="rejected", result_revision=current_revision,
-            ))
+            )
             outcomes[original_index] = False
             continue
 
@@ -187,10 +237,10 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             current.updated_at = record.updatedAt
             current.deleted_at = record.deletedAt
 
-        db.add(_mutation_row(
-            principal, batch, record,
+        _record_mutation(
+            db, principal, batch, record,
             status="accepted", result_revision=revision,
-        ))
+        )
         db.add(SyncChangeLog(
             organization_id=principal.organization_id,
             entity_type=record.entityType,
