@@ -53,7 +53,7 @@ def test_json_formatter_correlates_hashed_principal_and_never_emits_raw_credenti
     raw_token = "bearer-token-must-never-appear"
     raw_admin_key = "admin-key-must-never-appear"
 
-    tokens = begin_request("request-12345678")
+    tokens = begin_request("11111111-1111-4111-8111-111111111111")
     try:
         bind_principal(SimpleNamespace(
             organization_id=raw_org,
@@ -79,7 +79,7 @@ def test_json_formatter_correlates_hashed_principal_and_never_emits_raw_credenti
         }
         rendered = JsonFormatter().format(record)
         payload = json.loads(rendered)
-        assert payload["requestID"] == "request-12345678"
+        assert payload["requestID"] == "11111111-1111-4111-8111-111111111111"
         assert payload["organizationRef"] == correlation_ref(raw_org)
         assert payload["actorRef"] == correlation_ref(raw_user)
         assert payload["membershipRef"] == correlation_ref(raw_membership)
@@ -96,10 +96,12 @@ def test_json_formatter_correlates_hashed_principal_and_never_emits_raw_credenti
 
 
 def test_request_id_validation_and_response_echo():
-    valid = "client-request-1234"
+    valid = "22222222-2222-4222-8222-222222222222"
     assert request_id_for_header(valid) == valid
     generated = request_id_for_header("bad id with spaces")
     assert generated != "bad id with spaces"
+    generated_from_arbitrary_safe_text = request_id_for_header("bearer-looking-but-not-a-uuid")
+    assert generated_from_arbitrary_safe_text != "bearer-looking-but-not-a-uuid"
 
     response = TestClient(app).get("/health", headers={"X-Request-ID": valid})
     assert response.status_code == 200
