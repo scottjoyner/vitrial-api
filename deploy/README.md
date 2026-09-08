@@ -2,6 +2,12 @@
 
 This directory separates the real production topology from the single-host acceptance topology.
 
+## Immutable application image
+
+Every push to `main` runs `.github/workflows/release-image.yml`. It builds that exact Git SHA, publishes it to GitHub Container Registry as `ghcr.io/scottjoyner/vitrial-api:sha-<git-sha>`, resolves the registry digest, and saves a `release-image-<git-sha>` evidence artifact containing the digest-qualified deployment reference.
+
+Always set `API_IMAGE` to the emitted `ghcr.io/scottjoyner/vitrial-api@sha256:...` reference. The SHA tag is useful for discovery, but the digest is deployment authority. If the GHCR package is not publicly readable, authenticate the deployment host to `ghcr.io` before running Compose.
+
 ## Production topology
 
 `compose.production.yml` runs only the Vitrial API, a one-shot Alembic migration job, and Caddy. PostgreSQL and S3-compatible object storage are intentionally external persistent services. This prevents a convenient single-host Docker volume from being mistaken for production durability.
@@ -12,7 +18,7 @@ Required host preparation:
 2. Provision persistent S3-compatible object storage and a dedicated API credential scoped to the Vitrial evidence bucket.
 3. Point the API hostname at the deployment host and allow inbound TCP 80/443 to Caddy only.
 4. Copy `env.production.example` to a host-only path such as `/etc/vitrial/vitrial.env`, populate it, and `chmod 600` it.
-5. Set `API_IMAGE` to an immutable registry digest, not a mutable tag.
+5. Set `API_IMAGE` to the immutable GHCR digest emitted for the exact backend Git SHA.
 6. Store the raw admin bootstrap key separately; only its SHA-256 digest belongs in `ADMIN_API_KEY_HASH`.
 7. Validate configuration before any migration:
 
@@ -55,7 +61,7 @@ The repository intentionally contains no populated deployment env file. Runtime 
 Before a real production migration, capture a provider-level PostgreSQL backup/snapshot and verify object-storage durability/versioning policy. Preserve the following release evidence:
 
 - exact backend Git SHA;
-- immutable `API_IMAGE` digest;
+- immutable `API_IMAGE` digest and `release-image-<git-sha>` workflow artifact;
 - deployment configuration validation output (which contains no secret values);
 - Alembic current revision after migration;
 - dependency probe output;

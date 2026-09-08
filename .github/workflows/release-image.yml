@@ -1,0 +1,87 @@
+name: Publish immutable release image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-release-image-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish GHCR image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact source image
+        env:
+          IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image_repository="${IMAGE_REPOSITORY,,}"
+          image_tag="sha-${GITHUB_SHA}"
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${GITHUB_SHA}" \
+            -t "${image_repository}:${image_tag}" \
+            .
+          printf 'IMAGE_REPOSITORY=%s\n' "$image_repository" >> "$GITHUB_ENV"
+          printf 'IMAGE_TAG=%s\n' "$image_tag" >> "$GITHUB_ENV"
+
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish and resolve immutable digest
+        run: |
+          set -euo pipefail
+          docker push "${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+          digest="$(docker buildx imagetools inspect "${IMAGE_REPOSITORY}:${IMAGE_TAG}" | awk '/^Digest:/ {print $2; exit}')"
+          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "unable to resolve pushed image digest" >&2
+            exit 1
+          fi
+          immutable_ref="${IMAGE_REPOSITORY}@${digest}"
+          {
+            echo "gitSHA=${GITHUB_SHA}"
+            echo "taggedImage=${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+            echo "digest=${digest}"
+            echo "immutableRef=${immutable_ref}"
+          } | tee release-image.txt
+          printf 'IMMUTABLE_REF=%s\n' "$immutable_ref" >> "$GITHUB_ENV"
+
+      - name: Verify registry image labels
+        run: |
+          set -euo pipefail
+          inspect="$(docker buildx imagetools inspect "${IMMUTABLE_REF}" --raw)"
+          test -n "$inspect"
+
+      - name: Publish release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-image-${{ github.sha }}
+          path: release-image.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Record immutable deployment reference
+        run: |
+          {
+            echo '## Immutable backend image'
+            echo
+            echo "- Git SHA: \`${GITHUB_SHA}\`"
+            echo "- Image: \`${IMMUTABLE_REF}\`"
+            echo
+            echo 'Use the digest-qualified image as `API_IMAGE`; never deploy the mutable SHA tag as authority.'
+          } >> "$GITHUB_STEP_SUMMARY"
