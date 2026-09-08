@@ -12,17 +12,21 @@ from datetime import datetime, timezone
 from typing import Any
 
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
-_SENSITIVE_KEY_PARTS = (
+_SENSITIVE_KEYS = {
     "authorization",
+    "proxyauthorization",
     "bearer",
     "cookie",
+    "setcookie",
     "credential",
+    "credentials",
     "password",
     "secret",
-    "token",
-    "api_key",
     "apikey",
-)
+    "accesstoken",
+    "refreshtoken",
+    "xvitrialadminkey",
+}
 
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "vitrial_request_id", default=None
@@ -90,8 +94,13 @@ def bind_principal(principal: Any) -> None:
 
 
 def _sensitive_key(key: str) -> bool:
-    normalized = key.lower().replace("-", "_")
-    return any(part in normalized for part in _SENSITIVE_KEY_PARTS)
+    compact = re.sub(r"[^a-z0-9]", "", key.lower())
+    return (
+        compact in _SENSITIVE_KEYS
+        or compact.endswith("token")
+        or compact.endswith("password")
+        or compact.endswith("secret")
+    )
 
 
 def redact(value: Any, *, key: str | None = None) -> Any:
