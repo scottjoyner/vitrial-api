@@ -20,6 +20,8 @@ ORG_ID = "org-admin-provisioning-test"
 USER_ID = "user-admin-provisioning-test"
 MEMBERSHIP_ID = "membership-admin-provisioning-test"
 ADMIN_KEY = "integration-admin-key-not-a-user-bearer"
+BOOTSTRAP_REQUEST_ID = "33333333-3333-4333-8333-333333333333"
+PROFILE_REQUEST_ID = "44444444-4444-4444-8444-444444444444"
 
 
 def admin_key_hash() -> str:
@@ -82,14 +84,14 @@ async def test_admin_boundary_bootstrap_authority_refresh_and_revocation(monkeyp
         first = await client.post(
             "/internal/admin/v1/bootstrap",
             json=bootstrap_payload(session_id="session-admin-1"),
-            headers={"X-Vitrial-Admin-Key": ADMIN_KEY, "X-Request-ID": "admin-bootstrap-0001"},
+            headers={"X-Vitrial-Admin-Key": ADMIN_KEY, "X-Request-ID": BOOTSTRAP_REQUEST_ID},
         )
         assert first.status_code == 200, first.text
         first_body = first.json()
         first_token = first_body["accessToken"]
         assert first_body["authorizationRevision"] == 1
         assert first_body["sessionID"] == "session-admin-1"
-        assert first.headers["X-Request-ID"] == "admin-bootstrap-0001"
+        assert first.headers["X-Request-ID"] == BOOTSTRAP_REQUEST_ID
         assert first_token != ADMIN_KEY
 
         async with SessionFactory() as db:
@@ -102,10 +104,11 @@ async def test_admin_boundary_bootstrap_authority_refresh_and_revocation(monkeyp
             "/api/v1/auth/me",
             headers={
                 "Authorization": f"Bearer {first_token}",
-                "X-Request-ID": "auth-profile-0001",
+                "X-Request-ID": PROFILE_REQUEST_ID,
             },
         )
         assert profile.status_code == 200, profile.text
+        assert profile.headers["X-Request-ID"] == PROFILE_REQUEST_ID
         profile_body = profile.json()
         assert profile_body["organizationID"] == ORG_ID
         assert profile_body["principalID"] == USER_ID
