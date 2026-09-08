@@ -1,14 +1,26 @@
 from __future__ import annotations
+import logging
+import time
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin import (
+    AdminBootstrapRequest,
+    AdminBootstrapResponse,
+    AdminSessionRevokeRequest,
+    AdminSessionRevokeResponse,
+    bootstrap_identity,
+    require_admin_key,
+    revoke_session,
+)
 from app.auth import Principal, current_principal, profile_for
 from app.db import session_scope
 from app.evidence import put_blob
 from app.models import EvidenceBlob
+from app.observability import begin_request, end_request, log_event, request_id_for_header
 from app.ownership import AuthorizationRejected, require_item_access
 from app.schemas import AuthorizationProfile, HealthResponse, SyncBatch, SyncResult, VersionResponse
 from app.settings import settings
@@ -18,6 +30,44 @@ from app.sync_service import InvalidMutation, apply_push, pull_since
 app = FastAPI(title="Vitrial Connected Operations API", version=settings.service_version)
 
 DocumentID = Annotated[str, Path(min_length=1)]
+
+
+def _route_template(request: Request) -> str | None:
+    route = request.scope.get("route")
+    return getattr(route, "path", None)
+
+
+@app.middleware("http")
+async def request_correlation(request: Request, call_next):
+    request_id = request_id_for_header(request.headers.get("x-request-id"))
+    tokens = begin_request(request_id)
+    started = time.perf_counter()
+    # Do not log the unresolved raw URL here: resource IDs appear in evidence/admin paths.
+    log_event("request.started", method=request.method)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        log_event(
+            "request.failed",
+            level=logging.ERROR,
+            method=request.method,
+            routeTemplate=_route_template(request),
+            durationMs=round((time.perf_counter() - started) * 1000, 2),
+            errorType=type(exc).__name__,
+        )
+        raise
+    else:
+        response.headers["X-Request-ID"] = request_id
+        log_event(
+            "request.completed",
+            method=request.method,
+            routeTemplate=_route_template(request),
+            statusCode=response.status_code,
+            durationMs=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return response
+    finally:
+        end_request(tokens)
 
 
 @app.get("/health", response_model=HealthResponse, operation_id="health")
@@ -161,3 +211,32 @@ async def evidence_get(
         media_type=model.mime_type or "application/octet-stream",
         headers={"X-Content-SHA256": model.sha256},
     )
+
+
+# Internal operational control plane. These routes are deliberately excluded
+# from the public/pinned V1 OpenAPI contract and require a separate admin key.
+@app.post(
+    "/internal/admin/v1/bootstrap",
+    response_model=AdminBootstrapResponse,
+    include_in_schema=False,
+)
+async def admin_bootstrap(
+    request: AdminBootstrapRequest,
+    _: None = Depends(require_admin_key),
+    db: AsyncSession = Depends(session_scope),
+) -> AdminBootstrapResponse:
+    return await bootstrap_identity(db, request)
+
+
+@app.post(
+    "/internal/admin/v1/sessions/{sessionID}/revoke",
+    response_model=AdminSessionRevokeResponse,
+    include_in_schema=False,
+)
+async def admin_revoke_session(
+    sessionID: Annotated[str, Path(min_length=1, max_length=128)],
+    request: AdminSessionRevokeRequest,
+    _: None = Depends(require_admin_key),
+    db: AsyncSession = Depends(session_scope),
+) -> AdminSessionRevokeResponse:
+    return await revoke_session(db, sessionID, request)

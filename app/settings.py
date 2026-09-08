@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     service_version: str = "0.1.0"
     api_version: str = "v1"
 
+    # Internal provisioning is disabled unless a SHA-256 digest of a separate
+    # admin key is explicitly configured. Normal bearer sessions never satisfy
+    # this boundary.
+    admin_api_key_hash: str | None = None
+
     evidence_storage_provider: Literal["local", "s3"] = "local"
     evidence_root: Path = Path(".evidence")
     evidence_gc_grace_seconds: int = 86400
