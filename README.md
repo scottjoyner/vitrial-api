@@ -75,6 +75,26 @@ Set only the resulting digest as `ADMIN_API_KEY_HASH`. Send the original key at 
 
 Bootstrap is capable of creating or updating an organization/user/membership authority set and issuing a new revocable bearer session. Any membership authority change increments the organization's `authorizationRevision`; existing active clients therefore observe the new authority through `/api/v1/auth/me`. Newly issued access tokens are returned once and stored only as SHA-256 hashes. Session revocation is idempotent and takes effect on the next authenticated operation.
 
+## Deployment readiness
+
+The runtime image executes as an unprivileged UID/GID, runs with a writable evidence home only for local-development fallback, and includes a dependency probe that verifies both PostgreSQL and the configured object store without printing connection strings or credentials.
+
+Deployment assets live in `deploy/`:
+
+- `compose.production.yml` — API + Alembic migration job + Caddy; expects external persistent PostgreSQL and S3-compatible object storage.
+- `compose.acceptance.yml` — single-host physical-device environment with isolated persistent PostgreSQL + MinIO volumes.
+- `Caddyfile` — public automatic HTTPS edge.
+- `Caddyfile.smoke` — localhost internal-CA TLS for CI only.
+- `env.production.example` — non-secret configuration template.
+
+Before any real deployment, validate the host-only env file:
+
+```bash
+python scripts/validate_deployment.py --env-file /etc/vitrial/vitrial.env --mode production
+```
+
+The validator fails closed on placeholder/default credentials, group/world-readable secret files, localhost production persistence, insecure external S3 endpoints, malformed admin-key digests, and mutable API images. See `deploy/README.md` for deploy, rollback and acceptance instructions.
+
 ## Security invariants
 
 - Access tokens are stored only as SHA-256 hashes.
@@ -86,7 +106,8 @@ Bootstrap is capable of creating or updating an organization/user/membership aut
 - Audit/history provenance stores actor/org/membership/session/revision, never bearer tokens.
 - Evidence uploads are streamed and digest checked before canonical promotion.
 - Evidence replacement/tombstone GC rechecks canonical/reference state before physical deletion.
+- Production deployment exposes only the TLS edge; databases/object storage are not application-public endpoints.
 
 ## Current release boundary
 
-Canonical ownership/authorization, lifecycle/concurrency hardening, and S3-compatible evidence persistence/GC are implemented and CI-proven. The remaining production release gates are persistent HTTPS deployment with managed secrets/services and the required two-user/two-physical-device iOS acceptance run.
+Canonical ownership/authorization, lifecycle/concurrency hardening, S3-compatible evidence persistence/GC, structured observability, admin provisioning, and deployment topology/preflight automation are implemented and CI-proven. A real public deployment still must prove DNS/trusted HTTPS plus the selected persistent PostgreSQL/object-storage/secret-management services. After that, the remaining release gate is the required two-user/two-physical-device iOS acceptance run.
