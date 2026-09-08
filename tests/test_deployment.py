@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "validate_deployment.py"
+DEPLOY_SCRIPT = ROOT / "scripts" / "deploy.sh"
 
 
 def run_validator(path: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -106,3 +107,20 @@ def test_validator_rejects_group_readable_secret_file(tmp_path: Path):
     result = run_validator(path, "--mode", "production")
     assert result.returncode == 1
     assert "chmod 600" in result.stdout
+
+
+def test_deploy_script_is_syntax_valid_and_verifies_runtime_release_identity():
+    syntax = subprocess.run(
+        ["bash", "-n", str(DEPLOY_SCRIPT)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert syntax.returncode == 0, syntax.stderr
+
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    assert "docker inspect --format '{{.Config.Image}}'" in script
+    assert '[[ "$RUNNING_API_IMAGE" != "$API_IMAGE" ]]' in script
+    assert '"https://${API_HOST}/api/v1/version"' in script
+    assert 'payload.get("serviceVersion") != expected' in script
