@@ -104,3 +104,85 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t vitrial-api:ci .
+
+  deployment:
+    name: Acceptance deployment topology
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build hardened application image
+        run: docker build -t vitrial-api:deployment-smoke .
+      - name: Generate ephemeral host-only acceptance configuration
+        run: |
+          cat > /tmp/vitrial-acceptance.env <<'EOF'
+          API_HOST=localhost
+          API_IMAGE=vitrial-api:deployment-smoke
+          CADDY_IMAGE=caddy:2-alpine
+          SERVICE_VERSION=0.2.0-ci
+          DATABASE_URL=postgresql+asyncpg://vitrial:ci-postgres-secret-12345@postgres:5432/vitrial
+          DATABASE_NULL_POOL=false
+          S3_BUCKET=vitrial-evidence
+          S3_REGION=us-east-1
+          ADMIN_API_KEY_HASH=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          POSTGRES_IMAGE=postgres:17
+          POSTGRES_DB=vitrial
+          POSTGRES_USER=vitrial
+          POSTGRES_PASSWORD=ci-postgres-secret-12345
+          MINIO_IMAGE=minio/minio:latest
+          MINIO_MC_IMAGE=minio/mc:latest
+          MINIO_ROOT_USER=ci-minio-access-12345
+          MINIO_ROOT_PASSWORD=ci-minio-secret-12345
+          HTTP_PORT=8080
+          HTTPS_PORT=8443
+          CADDYFILE_PATH=./Caddyfile.smoke
+          EOF
+          chmod 600 /tmp/vitrial-acceptance.env
+      - name: Fail-closed config validation and Compose rendering
+        run: |
+          python scripts/validate_deployment.py \
+            --env-file /tmp/vitrial-acceptance.env \
+            --mode acceptance \
+            --allow-localhost \
+            --allow-mutable-images
+          docker compose --env-file /tmp/vitrial-acceptance.env \
+            -f deploy/compose.acceptance.yml config >/dev/null
+      - name: Boot migrations, persistent services, API and internal-CA HTTPS edge
+        run: |
+          docker compose --env-file /tmp/vitrial-acceptance.env \
+            -f deploy/compose.acceptance.yml up -d
+          for attempt in $(seq 1 30); do
+            if curl -kfsS https://localhost:8443/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose --env-file /tmp/vitrial-acceptance.env \
+            -f deploy/compose.acceptance.yml ps
+          docker compose --env-file /tmp/vitrial-acceptance.env \
+            -f deploy/compose.acceptance.yml logs --no-color
+          exit 1
+      - name: Prove dependency readiness and restart persistence
+        run: |
+          COMPOSE="docker compose --env-file /tmp/vitrial-acceptance.env -f deploy/compose.acceptance.yml"
+          $COMPOSE exec -T api python scripts/probe_dependencies.py
+          $COMPOSE exec -T postgres psql -U vitrial -d vitrial -v ON_ERROR_STOP=1 \
+            -c "CREATE TABLE IF NOT EXISTS deployment_smoke (id integer primary key); INSERT INTO deployment_smoke (id) VALUES (1) ON CONFLICT DO NOTHING;"
+          $COMPOSE exec -T minio sh -ec 'printf persistent > /data/.vitrial-deployment-smoke'
+          $COMPOSE restart postgres minio api
+          for attempt in $(seq 1 30); do
+            if curl -kfsS https://localhost:8443/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          test "$($COMPOSE exec -T postgres psql -U vitrial -d vitrial -Atc 'SELECT count(*) FROM deployment_smoke WHERE id = 1')" = "1"
+          test "$($COMPOSE exec -T minio sh -ec 'cat /data/.vitrial-deployment-smoke')" = "persistent"
+          $COMPOSE exec -T api python scripts/probe_dependencies.py --quiet
+      - name: Tear down smoke deployment
+        if: always()
+        run: |
+          docker compose --env-file /tmp/vitrial-acceptance.env \
+            -f deploy/compose.acceptance.yml down -v --remove-orphans || true
