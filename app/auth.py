@@ -10,9 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import session_scope
 from app.models import AuthSession, Membership, Organization, User
+from app.observability import bind_principal, log_event
 from app.schemas import AuthorizationProfile, AuthorizationRole
 
 bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
+
 
 @dataclass(frozen=True)
 class Principal:
@@ -27,8 +29,10 @@ class Principal:
     all_customers: bool
     all_projects: bool
 
+
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 
 async def current_principal(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
@@ -54,7 +58,7 @@ async def current_principal(
     ):
         raise HTTPException(401, "session membership mismatch")
 
-    return Principal(
+    principal = Principal(
         user_id=auth_session.user_id,
         organization_id=auth_session.organization_id,
         membership_id=auth_session.membership_id,
@@ -66,6 +70,10 @@ async def current_principal(
         all_customers=membership.all_customers,
         all_projects=membership.all_projects,
     )
+    bind_principal(principal)
+    log_event("auth.session_authenticated", authorizationRevision=principal.authorization_revision)
+    return principal
+
 
 async def profile_for(principal: Principal, db: AsyncSession) -> AuthorizationProfile:
     user = await db.get(User, principal.user_id)
