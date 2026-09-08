@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 _SENSITIVE_KEYS = {
     "authorization",
     "proxyauthorization",
@@ -63,8 +62,14 @@ def correlation_ref(value: str | None) -> str | None:
 
 
 def request_id_for_header(value: str | None) -> str:
-    if value and _REQUEST_ID_RE.fullmatch(value):
-        return value
+    # Only accept canonical UUID correlation values from callers. This prevents
+    # arbitrary header contents (including accidentally copied credentials)
+    # from being reflected into logs under the request-ID field.
+    if value:
+        try:
+            return str(uuid.UUID(value))
+        except (ValueError, AttributeError):
+            pass
     return str(uuid.uuid4())
 
 
