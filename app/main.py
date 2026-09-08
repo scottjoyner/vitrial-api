@@ -32,12 +32,18 @@ app = FastAPI(title="Vitrial Connected Operations API", version=settings.service
 DocumentID = Annotated[str, Path(min_length=1)]
 
 
+def _route_template(request: Request) -> str | None:
+    route = request.scope.get("route")
+    return getattr(route, "path", None)
+
+
 @app.middleware("http")
 async def request_correlation(request: Request, call_next):
     request_id = request_id_for_header(request.headers.get("x-request-id"))
     tokens = begin_request(request_id)
     started = time.perf_counter()
-    log_event("request.started", method=request.method, path=request.url.path)
+    # Do not log the unresolved raw URL here: resource IDs appear in evidence/admin paths.
+    log_event("request.started", method=request.method)
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -45,7 +51,7 @@ async def request_correlation(request: Request, call_next):
             "request.failed",
             level=logging.ERROR,
             method=request.method,
-            path=request.url.path,
+            routeTemplate=_route_template(request),
             durationMs=round((time.perf_counter() - started) * 1000, 2),
             errorType=type(exc).__name__,
         )
@@ -55,7 +61,7 @@ async def request_correlation(request: Request, call_next):
         log_event(
             "request.completed",
             method=request.method,
-            path=request.url.path,
+            routeTemplate=_route_template(request),
             statusCode=response.status_code,
             durationMs=round((time.perf_counter() - started) * 1000, 2),
         )
