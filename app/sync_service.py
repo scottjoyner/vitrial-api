@@ -10,6 +10,7 @@ from app.evidence_gc import queue_blob_gc
 from app.idempotency import SyncMutationFingerprint, request_fingerprint
 from app.lifecycle import LifecycleRejected, validate_lifecycle_mutation
 from app.models import CanonicalItemChild, EvidenceBlob, Organization, SyncChangeLog, SyncEntity, SyncMutation
+from app.observability import correlation_ref, log_event
 from app.ownership import (
     AuthorizationRejected,
     EffectiveScope,
@@ -112,6 +113,26 @@ def _record_mutation(
     ))
 
 
+def _outcome_event(
+    batch: SyncBatch,
+    record: SyncRecord,
+    *,
+    status: str,
+    reason: str,
+    result_revision: int | None = None,
+) -> dict:
+    return {
+        "mutationRef": correlation_ref(record.clientMutationID),
+        "deviceRef": correlation_ref(batch.deviceID),
+        "entityRef": correlation_ref(record.entityID),
+        "entityType": record.entityType,
+        "resultStatus": status,
+        "reason": reason,
+        "baseServerRevision": record.baseServerRevision,
+        "resultServerRevision": result_revision,
+    }
+
+
 async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -> SyncResult:
     if "sync" not in principal.capabilities:
         raise PermissionError("sync capability required")
@@ -124,12 +145,16 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
 
     scope = EffectiveScope.from_principal(principal)
     outcomes: dict[int, bool] = {}
+    outcome_events: list[dict] = []
     indexed_records = list(enumerate(batch.records))
     indexed_records.sort(key=lambda pair: mutation_sort_key(pair[1].entityType, pair[0]))
 
     for original_index, record in indexed_records:
         if not record.clientMutationID:
             outcomes[original_index] = False
+            outcome_events.append(_outcome_event(
+                batch, record, status="rejected", reason="missing_client_mutation_id"
+            ))
             continue
 
         prior = await db.scalar(
@@ -151,7 +176,15 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                     and prior.entity_id == record.entityID
                     and prior.base_server_revision == record.baseServerRevision
                 )
-            outcomes[original_index] = same_request and prior.result_status == "accepted"
+            accepted_replay = same_request and prior.result_status == "accepted"
+            outcomes[original_index] = accepted_replay
+            outcome_events.append(_outcome_event(
+                batch,
+                record,
+                status="accepted" if accepted_replay else "rejected",
+                reason="idempotent_replay" if same_request else "mutation_id_collision",
+                result_revision=prior.result_server_revision,
+            ))
             continue
 
         current = await db.get(
@@ -169,6 +202,13 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                 status="rejected", result_revision=current_revision,
             )
             outcomes[original_index] = False
+            outcome_events.append(_outcome_event(
+                batch,
+                record,
+                status="rejected",
+                reason="stale_revision",
+                result_revision=current_revision,
+            ))
             continue
 
         try:
@@ -212,12 +252,19 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
                     # Queue physical deletion in the same transaction as the canonical metadata
                     # tombstone. The collector rechecks references before touching object storage.
                     await queue_blob_gc(db, blob, reason="metadata_tombstone")
-        except (InvalidMutation, AuthorizationRejected, LifecycleRejected):
+        except (InvalidMutation, AuthorizationRejected, LifecycleRejected) as exc:
             _record_mutation(
                 db, principal, batch, record,
                 status="rejected", result_revision=current_revision,
             )
             outcomes[original_index] = False
+            outcome_events.append(_outcome_event(
+                batch,
+                record,
+                status="rejected",
+                reason=type(exc).__name__,
+                result_revision=current_revision,
+            ))
             continue
 
         revision = await _next_revision(db, principal.organization_id)
@@ -252,20 +299,39 @@ async def apply_push(db: AsyncSession, principal: Principal, batch: SyncBatch) -
             operation="delete" if record.deletedAt else "upsert",
         ))
         outcomes[original_index] = True
+        outcome_events.append(_outcome_event(
+            batch,
+            record,
+            status="accepted",
+            reason="committed",
+            result_revision=revision,
+        ))
         await db.flush()
 
     await db.commit()
+
+    for event in outcome_events:
+        log_event("sync.mutation_result", **event)
 
     seq = await db.scalar(
         select(func.coalesce(func.max(SyncChangeLog.sequence), 0)).where(
             SyncChangeLog.organization_id == principal.organization_id
         )
     )
-    return SyncResult(
+    result = SyncResult(
         acceptedRecordIDs=[record.id for index, record in enumerate(batch.records) if outcomes.get(index) is True],
         rejectedRecordIDs=[record.id for index, record in enumerate(batch.records) if outcomes.get(index) is not True],
         nextCursor=f"seq:{int(seq or 0)}",
     )
+    log_event(
+        "sync.push_completed",
+        deviceRef=correlation_ref(batch.deviceID),
+        recordCount=len(batch.records),
+        acceptedCount=len(result.acceptedRecordIDs),
+        rejectedCount=len(result.rejectedRecordIDs),
+        nextSequence=int(seq or 0),
+    )
+    return result
 
 
 async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None) -> SyncBatch:
@@ -320,4 +386,12 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
             deletedAt=entity.deleted_at,
         ))
 
-    return SyncBatch(deviceID="server", cursor=f"seq:{max_seq}", records=records)
+    result = SyncBatch(deviceID="server", cursor=f"seq:{max_seq}", records=records)
+    log_event(
+        "sync.pull_completed",
+        startSequence=start,
+        endSequence=max_seq,
+        scannedChangeCount=len(changes),
+        visibleRecordCount=len(records),
+    )
+    return result
