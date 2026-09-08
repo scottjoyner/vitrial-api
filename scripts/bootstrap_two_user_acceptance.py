@@ -2,14 +2,20 @@
 """Provision a privacy-safe two-user Vitrial acceptance handoff.
 
 This is an operator tool, not an application startup path. It talks only to the
-existing admin bootstrap and public auth/version endpoints. The admin key is
-read from an environment variable and is never written to output. Issued bearer
-tokens are written only to the requested private handoff file (mode 0600).
+existing admin bootstrap and public V1 endpoints. The admin key is read from an
+environment variable and is never written to output. Issued bearer tokens are
+written only to the requested private handoff file (mode 0600).
+
+The helper also creates a canonical Customer + Project through the real sync API
+using operator A, then proves operator B can pull the same Project. This leaves
+the two physical devices with a genuinely shared server-backed acceptance scope,
+not merely matching authorization IDs.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import secrets
@@ -18,11 +24,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 DEFAULT_CAPABILITIES = [
     "sync",
+    "customer.create",
+    "customer.edit",
+    "project.create",
+    "project.edit",
     "item.create",
     "item.edit",
     "item.readiness.change",
@@ -122,13 +132,120 @@ def _bootstrap_payload(
 
 
 def _profile_matches(profile: dict, *, organization_id: str, user_id: str, project_id: str) -> bool:
+    capabilities = set(profile.get("capabilities", []))
     return (
         profile.get("organizationID") == organization_id
         and profile.get("principalID") == user_id
         and project_id in profile.get("projectIDs", [])
         and profile.get("allProjects") is False
-        and "sync" in profile.get("capabilities", [])
+        and {"sync", "project.create", "item.create"}.issubset(capabilities)
     )
+
+
+def _encoded_payload(payload: dict) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.b64encode(raw).decode("ascii")
+
+
+def _sync_record(
+    *,
+    record_id: str,
+    entity_type: str,
+    entity_id: str,
+    payload: dict,
+    mutation_id: str,
+    updated_at: str,
+) -> dict:
+    return {
+        "id": record_id,
+        "entityType": entity_type,
+        "entityID": entity_id,
+        "updatedAt": updated_at,
+        "payload": _encoded_payload(payload),
+        "baseServerRevision": None,
+        "clientMutationID": mutation_id,
+        "deletedAt": None,
+    }
+
+
+def _seed_shared_project(
+    *,
+    base_url: str,
+    token: str,
+    run_id: str,
+    customer_id: str,
+    project_id: str,
+) -> dict:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    customer_record_id = f"record-customer-{run_id}"
+    project_record_id = f"record-project-{run_id}"
+    batch = {
+        "deviceID": f"acceptance-bootstrap-{run_id}",
+        "cursor": None,
+        "records": [
+            # Server-side mutation ordering canonicalizes Customer before Project
+            # even if a future caller changes record order.
+            _sync_record(
+                record_id=project_record_id,
+                entity_type="project",
+                entity_id=project_id,
+                payload={
+                    "id": project_id,
+                    "customerID": customer_id,
+                    "name": "Vitrial 0.2.0 Shared Acceptance Project",
+                },
+                mutation_id=f"mutation-project-{run_id}",
+                updated_at=updated_at,
+            ),
+            _sync_record(
+                record_id=customer_record_id,
+                entity_type="customer",
+                entity_id=customer_id,
+                payload={
+                    "id": customer_id,
+                    "name": "Vitrial 0.2.0 Acceptance Customer",
+                },
+                mutation_id=f"mutation-customer-{run_id}",
+                updated_at=updated_at,
+            ),
+        ],
+    }
+    result = _request_json(
+        "POST",
+        f"{base_url}/api/v1/sync/push",
+        headers={"Authorization": f"Bearer {token}"},
+        payload=batch,
+    )
+    accepted = set(result.get("acceptedRecordIDs", []))
+    rejected = set(result.get("rejectedRecordIDs", []))
+    expected = {customer_record_id, project_record_id}
+    if accepted != expected or rejected:
+        raise RuntimeError("shared Customer/Project bootstrap was not fully accepted")
+    next_cursor = result.get("nextCursor")
+    if not isinstance(next_cursor, str) or not next_cursor.startswith("seq:"):
+        raise RuntimeError("shared Customer/Project bootstrap did not return a valid sync cursor")
+    return {
+        "customerRecordID": customer_record_id,
+        "projectRecordID": project_record_id,
+        "nextCursor": next_cursor,
+    }
+
+
+def _pull_visible_entity_ids(*, base_url: str, token: str, cursor: str = "seq:0") -> set[str]:
+    query = urlencode({"cursor": cursor})
+    result = _request_json(
+        "GET",
+        f"{base_url}/api/v1/sync/pull?{query}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    records = result.get("records")
+    if not isinstance(records, list):
+        raise RuntimeError("sync pull did not return a records array")
+    return {
+        str(record.get("entityID"))
+        for record in records
+        if isinstance(record, dict) and isinstance(record.get("entityID"), str)
+    }
 
 
 def _private_write_json(path: Path, payload: dict) -> None:
@@ -154,7 +271,10 @@ def _new_run_id() -> str:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Bootstrap two scoped Vitrial acceptance users and write their bearer tokens to a 0600 handoff file."
+        description=(
+            "Bootstrap two scoped Vitrial acceptance users, seed one canonical shared "
+            "Customer/Project through sync, and write bearer tokens to a 0600 handoff file."
+        )
     )
     parser.add_argument("--base-url", required=True, help="Trusted HTTPS Vitrial API origin")
     parser.add_argument("--output", required=True, type=Path, help="Private JSON handoff path")
@@ -213,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError("target did not report healthy V1 service identity")
 
         handoff_users: list[dict] = []
+        token_by_label: dict[str, str] = {}
         for user in users:
             response = _request_json(
                 "POST",
@@ -234,6 +355,26 @@ def main(argv: list[str] | None = None) -> int:
             token = response.get("accessToken")
             if not isinstance(token, str) or not token:
                 raise RuntimeError(f"bootstrap for user {user['label']} did not return an access token")
+            token_by_label[user["label"]] = token
+
+        seed = _seed_shared_project(
+            base_url=base_url,
+            token=token_by_label["A"],
+            run_id=run_id,
+            customer_id=customer_id,
+            project_id=project_id,
+        )
+
+        visible_to_b = _pull_visible_entity_ids(
+            base_url=base_url,
+            token=token_by_label["B"],
+            cursor="seq:0",
+        )
+        if customer_id not in visible_to_b or project_id not in visible_to_b:
+            raise RuntimeError("operator B cannot pull the canonical shared Customer/Project")
+
+        for user in users:
+            token = token_by_label[user["label"]]
             profile = _request_json(
                 "GET",
                 f"{base_url}/api/v1/auth/me",
@@ -250,16 +391,24 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "label": user["label"],
                     "userID": user["user_id"],
-                    "membershipID": response.get("membershipID"),
-                    "sessionID": response.get("sessionID"),
+                    "membershipID": profile.get("membershipID"),
+                    "sessionID": profile.get("sessionID"),
                     "authorizationRevision": profile.get("authorizationRevision"),
-                    "expiresAt": response.get("expiresAt"),
+                    "expiresAt": profile.get("expiresAt"),
                     "accessToken": token,
                 }
             )
 
+        revisions = {
+            entry.get("authorizationRevision")
+            for entry in handoff_users
+            if isinstance(entry.get("authorizationRevision"), int)
+        }
+        if len(revisions) != 1:
+            raise RuntimeError("acceptance users do not observe one current authorizationRevision")
+
         handoff = {
-            "format": "vitrial.two-user-acceptance.v1",
+            "format": "vitrial.two-user-acceptance.v2",
             "createdAt": datetime.now(timezone.utc).isoformat(),
             "baseURL": base_url,
             "apiVersion": version.get("apiVersion"),
@@ -268,7 +417,9 @@ def main(argv: list[str] | None = None) -> int:
             "organizationID": organization_id,
             "customerID": customer_id,
             "projectID": project_id,
+            "seedCursor": seed["nextCursor"],
             "capabilities": list(DEFAULT_CAPABILITIES),
+            "sharedProjectVerifiedFromUserB": True,
             "users": handoff_users,
         }
         _private_write_json(args.output, handoff)
@@ -281,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Two-user Vitrial acceptance bootstrap complete.")
     print(f"  organization: {organization_id}")
     print(f"  customer:     {customer_id}")
-    print(f"  project:      {project_id}")
+    print(f"  project:      {project_id} (canonical and visible to both users)")
     print(f"  handoff:      {args.output} (0600; contains bearer tokens)")
     return 0
 
