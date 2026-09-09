@@ -23,12 +23,16 @@ from app.models import EvidenceBlob
 from app.observability import begin_request, end_request, log_event, request_id_for_header
 from app.ownership import AuthorizationRejected, require_item_access
 from app.readiness import collect_dependency_readiness
+from app.reference_routes import router as reference_router
 from app.schemas import AuthorizationProfile, HealthResponse, ReadinessResponse, SyncBatch, SyncResult, VersionResponse
 from app.settings import settings
 from app.storage import StorageError, store_for_provider
 from app.sync_service import InvalidMutation, apply_push, pull_since
+from app.sync_v2_routes import router as sync_v2_router
 
 app = FastAPI(title="Vitrial Connected Operations API", version=settings.service_version)
+app.include_router(reference_router)
+app.include_router(sync_v2_router)
 
 DocumentID = Annotated[str, Path(min_length=1)]
 
