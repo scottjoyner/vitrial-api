@@ -2,20 +2,13 @@ import base64
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
 
 from app.auth import Principal
 from app.db import SessionFactory
-from app.idempotency import SyncMutationFingerprint
-from app.models import (
-    CanonicalCustomer,
-    Organization,
-    SyncChangeLog,
-    SyncEntity,
-    SyncMutation,
-)
+from app.models import Organization
 from app.reference_data import (
     PublicationConflict,
     ReferenceEntry,
@@ -25,7 +18,6 @@ from app.reference_data import (
     get_publication,
     publish_reference,
 )
-from app.reference_models import ReferencePublication
 from app.schemas import SyncBatch
 from app.sync_service import apply_push
 from app.sync_v2 import SyncBatchV2, apply_push_v2, pull_since_v2
@@ -36,12 +28,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def principal(*, capabilities: set[str], organization_id: str = "org-scrum21") -> Principal:
+def principal(*, capabilities: set[str], organization_id: str) -> Principal:
     return Principal(
-        user_id="user-scrum21",
+        user_id=f"user-{organization_id}",
         organization_id=organization_id,
-        membership_id="membership-scrum21",
-        session_id="session-scrum21",
+        membership_id=f"membership-{organization_id}",
+        session_id=f"session-{organization_id}",
         authorization_revision=1,
         capabilities=frozenset(capabilities),
         customer_ids=frozenset(),
@@ -51,26 +43,19 @@ def principal(*, capabilities: set[str], organization_id: str = "org-scrum21") -
     )
 
 
-async def clear_scrum21(db):
-    for model in (
-        ReferencePublication,
-        SyncMutationFingerprint,
-        SyncChangeLog,
-        SyncMutation,
-        SyncEntity,
-        CanonicalCustomer,
-        Organization,
-    ):
-        await db.execute(delete(model))
-    await db.commit()
+def isolated_org(prefix: str) -> str:
+    return f"{prefix}-{uuid4().hex}"
 
 
 @pytest.mark.asyncio
 async def test_reference_publications_are_immutable_effective_and_historical():
-    actor = principal(capabilities={"catalog.manage", "pricing.manage", "sync"})
+    organization_id = isolated_org("org-scrum21-reference")
+    actor = principal(
+        capabilities={"catalog.manage", "pricing.manage", "sync"},
+        organization_id=organization_id,
+    )
     async with SessionFactory() as db:
-        await clear_scrum21(db)
-        db.add(Organization(id=actor.organization_id, name="SCRUM-21", authorization_revision=1))
+        db.add(Organization(id=actor.organization_id, name="SCRUM-21 Reference", authorization_revision=1))
         await db.commit()
 
         baseline = await current_publications(db, actor)
@@ -81,10 +66,11 @@ async def test_reference_publications_are_immutable_effective_and_historical():
         assert old_catalog.versionID == "configurator-catalog-v1"
 
         now = datetime.now(timezone.utc)
+        suffix = uuid4().hex
         request = ReferencePublicationCreate(
-            publicationID="catalog-authoritative-2026-09",
+            publicationID=f"catalog-authoritative-{suffix}",
             kind="catalog",
-            versionID="catalog-2026.09.09",
+            versionID=f"catalog-{suffix}",
             effectiveFrom=now - timedelta(seconds=1),
             supersedesPublicationID=old_catalog.publicationID,
             payload=ReferencePublicationPayload(
@@ -127,65 +113,68 @@ async def test_reference_publications_are_immutable_effective_and_historical():
         with pytest.raises(PublicationConflict, match="immutable"):
             await publish_reference(db, actor, conflicting)
 
-        await clear_scrum21(db)
-
 
 @pytest.mark.asyncio
 async def test_v2_native_json_reuses_canonical_revision_engine_and_is_replay_safe():
-    actor = principal(capabilities={"sync", "customer.create", "customer.edit"})
+    organization_id = isolated_org("org-scrum21-v2")
+    actor = principal(
+        capabilities={"sync", "customer.create", "customer.edit"},
+        organization_id=organization_id,
+    )
     async with SessionFactory() as db:
-        await clear_scrum21(db)
-        db.add(Organization(id=actor.organization_id, name="SCRUM-21", authorization_revision=1))
+        db.add(Organization(id=actor.organization_id, name="SCRUM-21 V2", authorization_revision=1))
         await db.commit()
 
+        suffix = uuid4().hex
+        customer_id = f"customer-v2-{suffix}"
+        mutation_id = f"mutation-v2-{suffix}"
         now = datetime.now(timezone.utc).isoformat()
-        payload = {"id": "customer-v2-integration", "name": "Native JSON Customer", "status": "active"}
+        payload = {"id": customer_id, "name": "Native JSON Customer", "status": "active"}
         batch = SyncBatchV2.model_validate({
             "protocolVersion": 2,
-            "deviceID": "device-v2-integration",
+            "deviceID": f"device-v2-{suffix}",
             "cursor": "seq:0",
             "records": [{
-                "id": "record-v2-integration",
+                "id": f"record-v2-{suffix}",
                 "entityType": "customer",
-                "entityID": "customer-v2-integration",
+                "entityID": customer_id,
                 "updatedAt": now,
                 "payload": payload,
                 "entitySchemaVersion": 1,
                 "baseServerRevision": None,
-                "clientMutationID": "mutation-v2-integration",
+                "clientMutationID": mutation_id,
                 "deletedAt": None,
             }],
         })
 
         first = await apply_push_v2(db, actor, batch)
-        assert first.acceptedRecordIDs == ["record-v2-integration"]
+        assert first.acceptedRecordIDs == [f"record-v2-{suffix}"]
         replay = await apply_push_v2(db, actor, batch)
-        assert replay.acceptedRecordIDs == ["record-v2-integration"]
+        assert replay.acceptedRecordIDs == [f"record-v2-{suffix}"]
 
         pulled = await pull_since_v2(db, actor, "seq:0")
+        matching = [record for record in pulled.records if record.entityID == customer_id]
         assert pulled.protocolVersion == 2
-        assert len(pulled.records) == 1
-        assert pulled.records[0].payload == payload
-        assert pulled.records[0].entitySchemaVersion == 1
-        assert pulled.records[0].serverRevision is not None
+        assert len(matching) == 1
+        assert matching[0].payload == payload
+        assert matching[0].entitySchemaVersion == 1
+        assert matching[0].serverRevision is not None
 
         canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
         cross_protocol = SyncBatch.model_validate({
-            "deviceID": "device-v1-cross-protocol",
+            "deviceID": f"device-v1-cross-protocol-{suffix}",
             "cursor": "seq:0",
             "records": [{
-                "id": "record-v1-cross-protocol",
+                "id": f"record-v1-cross-protocol-{suffix}",
                 "entityType": "customer",
-                "entityID": "customer-v2-integration",
+                "entityID": customer_id,
                 "updatedAt": now,
                 "payload": base64.b64encode(canonical).decode("ascii"),
                 "baseServerRevision": None,
-                "clientMutationID": "mutation-v2-integration",
+                "clientMutationID": mutation_id,
                 "deletedAt": None,
             }],
         })
         collision = await apply_push(db, actor, cross_protocol)
         assert collision.acceptedRecordIDs == []
-        assert collision.rejectedRecordIDs == ["record-v1-cross-protocol"]
-
-        await clear_scrum21(db)
+        assert collision.rejectedRecordIDs == [f"record-v1-cross-protocol-{suffix}"]
