@@ -32,7 +32,13 @@ Deploy with:
 scripts/deploy.sh /etc/vitrial/vitrial.env
 ```
 
-The deploy command validates configuration, pulls images, runs Alembic as a one-shot job, replaces the API, starts Caddy, probes PostgreSQL/object storage from inside the API container, and requires a successful public HTTPS `/health` response.
+The deploy command validates configuration, pulls images, runs Alembic as a one-shot job, replaces the API, starts Caddy, verifies the exact running image identity, probes PostgreSQL/object storage from inside the API container, and then requires all three public HTTPS gates to pass:
+
+- `/health` proves the API process is alive behind the trusted TLS edge;
+- `/ready` proves PostgreSQL and evidence storage are both currently usable and that the reported service version matches the requested release;
+- `/api/v1/version` proves the public V1 service identity matches the requested release.
+
+A deployment is **not** considered successful when `/health` passes but `/ready` reports degraded dependencies.
 
 ## Rollback
 
@@ -65,5 +71,5 @@ Before a real production migration, capture a provider-level PostgreSQL backup/s
 - deployment configuration validation output (which contains no secret values);
 - Alembic current revision after migration;
 - dependency probe output;
-- public HTTPS `/health` and `/api/v1/version` results;
+- public HTTPS `/health`, `/ready`, and `/api/v1/version` results;
 - two-user/two-physical-device acceptance evidence from the pinned iOS client.
