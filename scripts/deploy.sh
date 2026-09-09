@@ -67,10 +67,30 @@ fi
 echo "==> verifying dependency health inside the running API container"
 compose exec -T api python scripts/probe_dependencies.py
 
-echo "==> verifying public HTTPS health and version"
+echo "==> verifying public HTTPS liveness, readiness, and version"
 curl --fail --silent --show-error \
   --retry 12 --retry-delay 5 --retry-all-errors \
   "https://${API_HOST}/health" >/dev/null
+
+READY_JSON="$(curl --fail --silent --show-error \
+  --retry 12 --retry-delay 5 --retry-all-errors \
+  "https://${API_HOST}/ready")"
+python - "$SERVICE_VERSION" "$READY_JSON" <<'PY'
+import json
+import sys
+
+expected = sys.argv[1]
+payload = json.loads(sys.argv[2])
+if payload.get("status") != "ready":
+    raise SystemExit("public readiness endpoint did not report ready")
+if payload.get("serviceVersion") != expected:
+    raise SystemExit("public readiness endpoint does not match requested SERVICE_VERSION")
+if payload.get("database") != "ok":
+    raise SystemExit("public readiness endpoint reports PostgreSQL unavailable")
+if payload.get("objectStorage") != "ok":
+    raise SystemExit("public readiness endpoint reports evidence storage unavailable")
+PY
+
 VERSION_JSON="$(curl --fail --silent --show-error \
   --retry 12 --retry-delay 5 --retry-all-errors \
   "https://${API_HOST}/api/v1/version")"
@@ -86,4 +106,4 @@ if payload.get("serviceVersion") != expected:
     raise SystemExit("public version endpoint does not match requested SERVICE_VERSION")
 PY
 
-echo "deployment verified: https://${API_HOST}/health (${SERVICE_VERSION}, ${API_IMAGE})"
+echo "deployment verified: https://${API_HOST} is live + ready (${SERVICE_VERSION}, ${API_IMAGE})"
