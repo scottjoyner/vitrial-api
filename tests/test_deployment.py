@@ -122,5 +122,10 @@ def test_deploy_script_is_syntax_valid_and_verifies_runtime_release_identity():
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     assert "docker inspect --format '{{.Config.Image}}'" in script
     assert '[[ "$RUNNING_API_IMAGE" != "$API_IMAGE" ]]' in script
+    assert '"https://${API_HOST}/health"' in script
+    assert '"https://${API_HOST}/ready"' in script
+    assert 'payload.get("status") != "ready"' in script
+    assert 'payload.get("database") != "ok"' in script
+    assert 'payload.get("objectStorage") != "ok"' in script
     assert '"https://${API_HOST}/api/v1/version"' in script
     assert 'payload.get("serviceVersion") != expected' in script
