@@ -22,7 +22,8 @@ from app.evidence import put_blob
 from app.models import EvidenceBlob
 from app.observability import begin_request, end_request, log_event, request_id_for_header
 from app.ownership import AuthorizationRejected, require_item_access
-from app.schemas import AuthorizationProfile, HealthResponse, SyncBatch, SyncResult, VersionResponse
+from app.readiness import collect_dependency_readiness
+from app.schemas import AuthorizationProfile, HealthResponse, ReadinessResponse, SyncBatch, SyncResult, VersionResponse
 from app.settings import settings
 from app.storage import StorageError, store_for_provider
 from app.sync_service import InvalidMutation, apply_push, pull_since
@@ -73,6 +74,19 @@ async def request_correlation(request: Request, call_next):
 @app.get("/health", response_model=HealthResponse, operation_id="health")
 async def health() -> HealthResponse:
     return HealthResponse()
+
+
+@app.get("/ready", response_model=ReadinessResponse, include_in_schema=False)
+async def ready(response: Response) -> ReadinessResponse:
+    readiness = await collect_dependency_readiness()
+    if readiness.status != "ready":
+        response.status_code = 503
+    return ReadinessResponse(
+        status=readiness.status,
+        serviceVersion=settings.service_version,
+        database=readiness.database,
+        objectStorage=readiness.object_storage,
+    )
 
 
 @app.get("/api/v1/version", response_model=VersionResponse, operation_id="version")
