@@ -50,6 +50,9 @@ def isolated_org(prefix: str) -> str:
 async def seed_actor(db, actor: Principal, *, organization_name: str) -> None:
     db.add(Organization(id=actor.organization_id, name=organization_name, authorization_revision=1))
     db.add(User(id=actor.user_id, display_name="SCRUM-21 Test Actor", email=f"{actor.user_id}@example.invalid"))
+    # These fixture models intentionally have no ORM relationships, so flush the
+    # FK parents before inserting the Membership instead of relying on unit-of-work ordering.
+    await db.flush()
     db.add(Membership(
         id=actor.membership_id,
         organization_id=actor.organization_id,
