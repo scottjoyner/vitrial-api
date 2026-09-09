@@ -25,6 +25,12 @@ class StrictModel(BaseModel):
 class HealthResponse(StrictModel):
     status: Literal["ok"] = "ok"
 
+class ReadinessResponse(StrictModel):
+    status: Literal["ready", "not-ready"]
+    serviceVersion: str
+    database: Literal["ok", "unavailable"]
+    objectStorage: Literal["ok", "unavailable"]
+
 class VersionResponse(StrictModel):
     apiVersion: Literal["v1"] = "v1"
     serviceVersion: str
