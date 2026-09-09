@@ -1,0 +1,6 @@
+{
+  "protocolVersion": 2,
+  "acceptedRecordIDs": ["record-v2-customer-1"],
+  "rejectedRecordIDs": [],
+  "nextCursor": "seq:1"
+}
