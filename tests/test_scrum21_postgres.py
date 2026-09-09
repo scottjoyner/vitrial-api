@@ -8,7 +8,7 @@ import pytest
 
 from app.auth import Principal
 from app.db import SessionFactory
-from app.models import Organization
+from app.models import Membership, Organization, User
 from app.reference_data import (
     PublicationConflict,
     ReferenceEntry,
@@ -47,6 +47,24 @@ def isolated_org(prefix: str) -> str:
     return f"{prefix}-{uuid4().hex}"
 
 
+async def seed_actor(db, actor: Principal, *, organization_name: str) -> None:
+    db.add(Organization(id=actor.organization_id, name=organization_name, authorization_revision=1))
+    db.add(User(id=actor.user_id, display_name="SCRUM-21 Test Actor", email=f"{actor.user_id}@example.invalid"))
+    db.add(Membership(
+        id=actor.membership_id,
+        organization_id=actor.organization_id,
+        user_id=actor.user_id,
+        active=True,
+        all_customers=actor.all_customers,
+        all_projects=actor.all_projects,
+        customer_ids=list(actor.customer_ids),
+        project_ids=list(actor.project_ids),
+        roles=[{"id": "scrum21-test", "displayName": "SCRUM-21 Test"}],
+        capabilities=sorted(actor.capabilities),
+    ))
+    await db.commit()
+
+
 @pytest.mark.asyncio
 async def test_reference_publications_are_immutable_effective_and_historical():
     organization_id = isolated_org("org-scrum21-reference")
@@ -55,8 +73,7 @@ async def test_reference_publications_are_immutable_effective_and_historical():
         organization_id=organization_id,
     )
     async with SessionFactory() as db:
-        db.add(Organization(id=actor.organization_id, name="SCRUM-21 Reference", authorization_revision=1))
-        await db.commit()
+        await seed_actor(db, actor, organization_name="SCRUM-21 Reference")
 
         baseline = await current_publications(db, actor)
         assert {p.kind for p in baseline.publications} == {
@@ -122,14 +139,23 @@ async def test_v2_native_json_reuses_canonical_revision_engine_and_is_replay_saf
         organization_id=organization_id,
     )
     async with SessionFactory() as db:
-        db.add(Organization(id=actor.organization_id, name="SCRUM-21 V2", authorization_revision=1))
-        await db.commit()
+        await seed_actor(db, actor, organization_name="SCRUM-21 V2")
 
         suffix = uuid4().hex
         customer_id = f"customer-v2-{suffix}"
         mutation_id = f"mutation-v2-{suffix}"
         now = datetime.now(timezone.utc).isoformat()
-        payload = {"id": customer_id, "name": "Native JSON Customer", "status": "active"}
+        payload = {
+            "id": customer_id,
+            "name": "Native JSON Customer",
+            "status": "active",
+            "address": "",
+            "email": "",
+            "phone": "",
+            "notes": "",
+            "createdAt": now,
+            "updatedAt": now,
+        }
         batch = SyncBatchV2.model_validate({
             "protocolVersion": 2,
             "deviceID": f"device-v2-{suffix}",
