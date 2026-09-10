@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 2,
+  "deviceID": "server",
+  "cursor": "seq:1",
+  "records": [
+    {
+      "id": "server:1",
+      "entityType": "customer",
+      "entityID": "customer-v2-1",
+      "updatedAt": "2026-09-09T16:00:00Z",
+      "payload": {
+        "id": "customer-v2-1",
+        "name": "V2 Fixture Customer",
+        "status": "active"
+      },
+      "entitySchemaVersion": 1,
+      "baseServerRevision": null,
+      "serverRevision": 1,
+      "clientMutationID": "mutation-v2-customer-1",
+      "deletedAt": null
+    }
+  ]
+}
