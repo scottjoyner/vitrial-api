@@ -20,7 +20,13 @@ from app.auth import Principal, current_principal, profile_for
 from app.db import session_scope
 from app.evidence import put_blob
 from app.models import EvidenceBlob
-from app.observability import begin_request, end_request, log_event, request_id_for_header
+from app.observability import (
+    begin_request,
+    bind_request_metadata,
+    end_request,
+    log_event,
+    request_id_for_header,
+)
 from app.ownership import AuthorizationRejected, require_item_access
 from app.readiness import collect_dependency_readiness
 from app.reference_routes import router as reference_router
@@ -46,8 +52,14 @@ def _route_template(request: Request) -> str | None:
 async def request_correlation(request: Request, call_next):
     request_id = request_id_for_header(request.headers.get("x-request-id"))
     tokens = begin_request(request_id)
+    bind_request_metadata(
+        device_id=request.headers.get("x-vitrial-device-id"),
+        app_version=request.headers.get("x-vitrial-app-version"),
+        app_build=request.headers.get("x-vitrial-app-build"),
+    )
     started = time.perf_counter()
     # Do not log the unresolved raw URL here: resource IDs appear in evidence/admin paths.
+    # Device identity is stored only as a one-way correlation reference by observability.py.
     log_event("request.started", method=request.method)
     try:
         response = await call_next(request)
