@@ -82,8 +82,33 @@ async def test_reference_publications_are_immutable_effective_and_historical():
         assert {p.kind for p in baseline.publications} == {
             "catalog", "compatibility_rules", "price_book"
         }
-        old_catalog = next(p for p in baseline.publications if p.kind == "catalog")
-        assert old_catalog.versionID == "configurator-catalog-v1"
+        current_baseline_catalog = next(p for p in baseline.publications if p.kind == "catalog")
+        assert current_baseline_catalog.versionID == "configurator-catalog-v2"
+        assert current_baseline_catalog.supersedesPublicationID == "catalog-bundled-v1"
+
+        sector = next(
+            entry for entry in current_baseline_catalog.payload.entries
+            if entry.id == "sector-aluminum-glass-steel"
+        )
+        assert sector.kind == "sector"
+        assert sector.code == "ALUMINUM_GLASS_STEEL"
+
+        item_types = [
+            entry for entry in current_baseline_catalog.payload.entries
+            if entry.kind == "item_type"
+        ]
+        assert len(item_types) == 7
+        assert {entry.attributes["sectorID"] for entry in item_types} == {
+            "sector-aluminum-glass-steel"
+        }
+        assert {entry.code for entry in item_types} == {
+            "WINDOW", "DOOR", "BATHROOM_DIVISION", "OFFICE_DIVISION",
+            "FACADE", "BALCONY_RAILING", "OTHER",
+        }
+
+        original_v1 = await get_publication(db, actor, "catalog-bundled-v1")
+        assert original_v1.versionID == "configurator-catalog-v1"
+        assert not any(entry.kind in {"sector", "item_type"} for entry in original_v1.payload.entries)
 
         now = datetime.now(timezone.utc)
         suffix = uuid4().hex
@@ -92,7 +117,7 @@ async def test_reference_publications_are_immutable_effective_and_historical():
             kind="catalog",
             versionID=f"catalog-{suffix}",
             effectiveFrom=now - timedelta(seconds=1),
-            supersedesPublicationID=old_catalog.publicationID,
+            supersedesPublicationID=current_baseline_catalog.publicationID,
             payload=ReferencePublicationPayload(
                 source="operator-publication",
                 authoritative=True,
@@ -118,9 +143,9 @@ async def test_reference_publications_are_immutable_effective_and_historical():
         current_catalog = next(p for p in current.publications if p.kind == "catalog")
         assert current_catalog.publicationID == request.publicationID
 
-        historical = await get_publication(db, actor, old_catalog.publicationID)
-        assert historical.versionID == "configurator-catalog-v1"
-        assert historical.contentSHA256 == old_catalog.contentSHA256
+        historical = await get_publication(db, actor, current_baseline_catalog.publicationID)
+        assert historical.versionID == "configurator-catalog-v2"
+        assert historical.contentSHA256 == current_baseline_catalog.contentSHA256
 
         conflicting = request.model_copy(
             update={
