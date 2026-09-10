@@ -16,6 +16,8 @@ from app.schemas import StrictModel
 
 PublicationKind = Literal["catalog", "compatibility_rules", "price_book"]
 ReferenceEntryKind = Literal[
+    "sector",
+    "item_type",
     "aluminum_system",
     "aluminum_profile",
     "finish",
@@ -121,6 +123,7 @@ class PublicationNotFound(Exception):
 
 
 BASELINE_EFFECTIVE_FROM = datetime(2026, 1, 1, tzinfo=timezone.utc)
+APPLICATION_CATALOG_EFFECTIVE_FROM = datetime(2026, 9, 10, tzinfo=timezone.utc)
 
 
 def _entry(id: str, kind: ReferenceEntryKind, code: str, name: str) -> dict:
@@ -181,6 +184,42 @@ BASELINE_CATALOG = ReferencePublicationCreate(
         ],
         metadata={
             "note": "Bundled compatibility baseline; vendor SKUs/costs are intentionally absent until authoritative data is published."
+        },
+    ),
+)
+
+
+APPLICATION_CATALOG_ENTRIES = [
+    ReferenceEntry(
+        id="sector-aluminum-glass-steel",
+        kind="sector",
+        code="ALUMINUM_GLASS_STEEL",
+        name="Aluminum, Glass & Steel",
+        attributes={
+            "description": "Architectural aluminum, glass, steel and metal construction elements."
+        },
+    ),
+    ReferenceEntry(id="item-type-window", kind="item_type", code="WINDOW", name="Window", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 10}),
+    ReferenceEntry(id="item-type-door", kind="item_type", code="DOOR", name="Door", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 20}),
+    ReferenceEntry(id="item-type-bathroom-division", kind="item_type", code="BATHROOM_DIVISION", name="Bathroom Division", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 30}),
+    ReferenceEntry(id="item-type-office-division", kind="item_type", code="OFFICE_DIVISION", name="Office Division", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 40}),
+    ReferenceEntry(id="item-type-facade", kind="item_type", code="FACADE", name="Facade", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 50}),
+    ReferenceEntry(id="item-type-balcony-railing", kind="item_type", code="BALCONY_RAILING", name="Balcony / Railing", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 60}),
+    ReferenceEntry(id="item-type-other", kind="item_type", code="OTHER", name="Other", attributes={"sectorID": "sector-aluminum-glass-steel", "sortOrder": 70}),
+]
+
+BASELINE_CATALOG_V2 = ReferencePublicationCreate(
+    publicationID="catalog-bundled-v2",
+    kind="catalog",
+    versionID="configurator-catalog-v2",
+    effectiveFrom=APPLICATION_CATALOG_EFFECTIVE_FROM,
+    supersedesPublicationID="catalog-bundled-v1",
+    payload=ReferencePublicationPayload(
+        source="bundled-ios-v1+application-catalog-v2",
+        authoritative=False,
+        entries=[*BASELINE_CATALOG.payload.entries, *APPLICATION_CATALOG_ENTRIES],
+        metadata={
+            "note": "Adds typed configurable Sector and Item Type entries required by SCRUM-1/SCRUM-5 while preserving the V1 technical catalog IDs. Vendor SKUs/costs remain intentionally absent until authoritative data is published."
         },
     ),
 )
@@ -265,7 +304,12 @@ BASELINE_PRICE_BOOK = ReferencePublicationCreate(
     ),
 )
 
-BASELINE_PUBLICATIONS = (BASELINE_CATALOG, BASELINE_RULES, BASELINE_PRICE_BOOK)
+BASELINE_PUBLICATIONS = (
+    BASELINE_CATALOG,
+    BASELINE_CATALOG_V2,
+    BASELINE_RULES,
+    BASELINE_PRICE_BOOK,
+)
 
 
 def _canonical_material(request: ReferencePublicationCreate) -> bytes:
