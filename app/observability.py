@@ -42,6 +42,15 @@ _membership_ref: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _session_ref: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "vitrial_session_ref", default=None
 )
+_device_ref: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "vitrial_device_ref", default=None
+)
+_app_version: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "vitrial_app_version", default=None
+)
+_app_build: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "vitrial_app_build", default=None
+)
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,9 @@ class RequestContextTokens:
     actor_ref: contextvars.Token
     membership_ref: contextvars.Token
     session_ref: contextvars.Token
+    device_ref: contextvars.Token
+    app_version: contextvars.Token
+    app_build: contextvars.Token
 
 
 def correlation_ref(value: str | None) -> str | None:
@@ -73,6 +85,18 @@ def request_id_for_header(value: str | None) -> str:
     return str(uuid.uuid4())
 
 
+def _release_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if not normalized or len(normalized) > 64:
+        return None
+    # Version/build are operational labels, never arbitrary free-form log fields.
+    if re.fullmatch(r"[A-Za-z0-9._+\-]+", normalized) is None:
+        return None
+    return normalized
+
+
 def begin_request(request_id: str) -> RequestContextTokens:
     return RequestContextTokens(
         request_id=_request_id.set(request_id),
@@ -80,15 +104,32 @@ def begin_request(request_id: str) -> RequestContextTokens:
         actor_ref=_actor_ref.set(None),
         membership_ref=_membership_ref.set(None),
         session_ref=_session_ref.set(None),
+        device_ref=_device_ref.set(None),
+        app_version=_app_version.set(None),
+        app_build=_app_build.set(None),
     )
 
 
 def end_request(tokens: RequestContextTokens) -> None:
+    _app_build.reset(tokens.app_build)
+    _app_version.reset(tokens.app_version)
+    _device_ref.reset(tokens.device_ref)
     _session_ref.reset(tokens.session_ref)
     _membership_ref.reset(tokens.membership_ref)
     _actor_ref.reset(tokens.actor_ref)
     _organization_ref.reset(tokens.organization_ref)
     _request_id.reset(tokens.request_id)
+
+
+def bind_request_metadata(
+    *,
+    device_id: str | None,
+    app_version: str | None,
+    app_build: str | None,
+) -> None:
+    _device_ref.set(correlation_ref(device_id.strip()) if device_id and device_id.strip() else None)
+    _app_version.set(_release_value(app_version))
+    _app_build.set(_release_value(app_build))
 
 
 def bind_principal(principal: Any) -> None:
@@ -133,6 +174,9 @@ class JsonFormatter(logging.Formatter):
             "actorRef": _actor_ref.get(),
             "membershipRef": _membership_ref.get(),
             "sessionRef": _session_ref.get(),
+            "deviceRef": _device_ref.get(),
+            "appVersion": _app_version.get(),
+            "appBuild": _app_build.get(),
         }
         if isinstance(fields, dict):
             payload.update(fields)
