@@ -1,0 +1,38 @@
+{
+  "request": {
+    "publicationID": "fixture-catalog-2026-09-14",
+    "kind": "catalog",
+    "versionID": "fixture-catalog-v1",
+    "effectiveFrom": "2026-09-14T12:00:00Z",
+    "effectiveUntil": null,
+    "supersedesPublicationID": null,
+    "payload": {
+      "source": "contract-fixture",
+      "authoritative": true,
+      "entries": [
+        {
+          "id": "fixture-profile-001",
+          "kind": "aluminum_profile",
+          "code": "FIXTURE_PROFILE",
+          "name": "Fixture Profile",
+          "active": true,
+          "vendorSKU": "FIX-001",
+          "unitCostMinor": 12345,
+          "currency": "USD",
+          "attributes": {
+            "sortOrder": 1,
+            "notes": "café"
+          }
+        }
+      ],
+      "compatibilityRules": [],
+      "priceBookLines": [],
+      "metadata": {
+        "fixture": true,
+        "revision": 1
+      }
+    }
+  },
+  "canonicalMaterial": "{\"effectiveFrom\":\"2026-09-14T12:00:00Z\",\"effectiveUntil\":null,\"kind\":\"catalog\",\"payload\":{\"authoritative\":true,\"compatibilityRules\":[],\"entries\":[{\"active\":true,\"attributes\":{\"notes\":\"café\",\"sortOrder\":1},\"code\":\"FIXTURE_PROFILE\",\"currency\":\"USD\",\"id\":\"fixture-profile-001\",\"kind\":\"aluminum_profile\",\"name\":\"Fixture Profile\",\"unitCostMinor\":12345,\"vendorSKU\":\"FIX-001\"}],\"metadata\":{\"fixture\":true,\"revision\":1},\"priceBookLines\":[],\"source\":\"contract-fixture\"},\"publicationID\":\"fixture-catalog-2026-09-14\",\"supersedesPublicationID\":null,\"versionID\":\"fixture-catalog-v1\"}",
+  "sha256": "07719b182f05835135561fb482df904f20353536a2efa4030c7337d7d7be7503"
+}
