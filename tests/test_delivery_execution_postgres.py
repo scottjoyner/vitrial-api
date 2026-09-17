@@ -115,8 +115,12 @@ async def clear_database(db) -> None:
 
 
 async def seed_approved_quotation(db, actor: Principal) -> None:
+    # Flush the FK root before inserting canonical children. These models intentionally do not
+    # carry ORM relationship metadata, so SQLAlchemy cannot infer insert ordering for us.
     db.add(Organization(id="org-1", name="Vitrial", authorization_revision=7))
+    await db.flush()
     db.add(CanonicalCustomer(organization_id="org-1", customer_id="customer-1"))
+    await db.flush()
     db.add(CanonicalProject(
         organization_id="org-1",
         project_id="project-1",
@@ -234,7 +238,7 @@ async def test_delivery_execution_create_advance_pull_and_authority():
 
 
 @pytest.mark.asyncio
-async def test_delivery_execution_rejects_noncanonical_handoff_and_tombstone():
+async def test_delivery_execution_rejects_noncanonical_handoff():
     actor = principal(capabilities={"sync", "delivery.manage"})
     async with SessionFactory() as db:
         await clear_database(db)
