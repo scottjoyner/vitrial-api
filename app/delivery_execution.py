@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
+from app.delivery_production import DeliveryProductionRejected, validate_production_handoff
 from app.models import CanonicalProject, CanonicalProjectChild, SyncEntity
 from app.ownership import EffectiveScope
 
@@ -353,14 +354,8 @@ def _validate_procurement_plan(
 
         shortage_quantity = requirement.get("shortageQuantity")
         if status == "shortage":
-            shortage = _decimal(
-                shortage_quantity,
-                name="delivery procurement shortage quantity",
-            )
-            required = _decimal(
-                material.get("quantity"),
-                name="delivery material quantity",
-            )
+            shortage = _decimal(shortage_quantity, name="delivery procurement shortage quantity")
+            required = _decimal(material.get("quantity"), name="delivery material quantity")
             if shortage <= 0 or shortage > required:
                 raise DeliveryExecutionRejected(
                     "delivery procurement shortage quantity is invalid"
@@ -477,11 +472,7 @@ def _validate_procurement_handoff(
     status: str,
 ) -> None:
     materials_plan = _validate_materials_plan(payload.get("materialsPlan"), principal)
-    plan = _validate_procurement_plan(
-        payload.get("procurementPlan"),
-        materials_plan,
-        principal,
-    )
+    plan = _validate_procurement_plan(payload.get("procurementPlan"), materials_plan, principal)
 
     if status in {"engineeringReview", "materialsRequired"} and plan is not None:
         raise DeliveryExecutionRejected(
@@ -493,10 +484,7 @@ def _validate_procurement_handoff(
         return
 
     current_status = current_payload.get("status")
-    current_materials = _validate_materials_plan(
-        current_payload.get("materialsPlan"),
-        principal,
-    )
+    current_materials = _validate_materials_plan(current_payload.get("materialsPlan"), principal)
     current_plan = _validate_procurement_plan(
         current_payload.get("procurementPlan"),
         current_materials,
@@ -586,7 +574,13 @@ def validate_delivery_execution_payload(
         expected = DELIVERY_TRANSITIONS.get(state)
         is_materials_revision = state == "materialsRequired" and to_status == "materialsRequired"
         is_procurement_revision = state == "procurement" and to_status == "procurement"
-        if to_status != expected and not is_materials_revision and not is_procurement_revision:
+        is_production_revision = state == "production" and to_status == "production"
+        if (
+            to_status != expected
+            and not is_materials_revision
+            and not is_procurement_revision
+            and not is_production_revision
+        ):
             raise DeliveryExecutionRejected("delivery execution transition is invalid")
         state = to_status
 
@@ -606,6 +600,10 @@ def validate_delivery_execution_payload(
 
     _validate_materials_handoff(payload, current_payload, principal, status=status)
     _validate_procurement_handoff(payload, current_payload, principal, status=status)
+    try:
+        validate_production_handoff(payload, current_payload, principal, status=status)
+    except DeliveryProductionRejected as exc:
+        raise DeliveryExecutionRejected(str(exc)) from exc
 
     if current_payload is None:
         _require_event_provenance(events[-1], principal, current_actor=True)
@@ -629,7 +627,7 @@ def validate_delivery_execution_payload(
 
     appended = events[len(current_events) :]
     if not appended:
-        protected = {"status", "updatedAt", "materialsPlan", "procurementPlan"}
+        protected = {"status", "updatedAt", "materialsPlan", "procurementPlan", "productionPlan"}
         if any(current_payload.get(key) != payload.get(key) for key in protected):
             raise DeliveryExecutionRejected(
                 "delivery execution operational changes must append a lifecycle event"
@@ -655,6 +653,14 @@ def validate_delivery_execution_payload(
     ):
         raise DeliveryExecutionRejected(
             "Procurement self-transition requires a procurement plan revision"
+        )
+    if (
+        newest.get("fromStatus") == "production"
+        and newest.get("toStatus") == "production"
+        and current_payload.get("productionPlan") == payload.get("productionPlan")
+    ):
+        raise DeliveryExecutionRejected(
+            "Production self-transition requires a production plan revision"
         )
     _require_event_provenance(newest, principal, current_actor=True)
 
