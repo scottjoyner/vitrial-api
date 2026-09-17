@@ -29,6 +29,7 @@ from app.observability import (
     request_id_for_header,
 )
 from app.ownership import AuthorizationRejected, require_item_access
+from app.payment_routes import router as payment_router
 from app.readiness import collect_dependency_readiness
 from app.reference_routes import router as reference_router
 from app.schemas import AuthorizationProfile, HealthResponse, ReadinessResponse, SyncBatch, SyncResult, VersionResponse
@@ -41,6 +42,7 @@ app = FastAPI(title="Vitrial Connected Operations API", version=settings.service
 app.include_router(auth_session_router)
 app.include_router(reference_router)
 app.include_router(sync_v2_router)
+app.include_router(payment_router)
 
 DocumentID = Annotated[str, Path(min_length=1)]
 
