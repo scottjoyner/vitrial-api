@@ -34,6 +34,14 @@ DELIVERY_TRANSITIONS = {
     "scheduled": "installed",
     "installed": "complete",
 }
+MATERIALS_FROZEN_STATUSES = frozenset({
+    "procurement",
+    "production",
+    "readyForInstallation",
+    "scheduled",
+    "installed",
+    "complete",
+})
 IMMUTABLE_HANDOFF_KEYS = (
     "id",
     "quotationID",
@@ -139,6 +147,145 @@ def _require_event_provenance(
         )
 
 
+def _require_materials_plan_provenance(
+    plan: dict,
+    principal: Principal,
+    *,
+    current_actor: bool = False,
+) -> None:
+    actor_id = _normalized(plan.get("actorID"))
+    organization_id = _normalized(plan.get("organizationID"))
+    membership_id = _normalized(plan.get("membershipID"))
+    session_id = _normalized(plan.get("sessionID"))
+    revision = plan.get("authorizationRevision")
+    if (
+        actor_id is None
+        or organization_id is None
+        or membership_id is None
+        or session_id is None
+        or not isinstance(revision, int)
+        or isinstance(revision, bool)
+        or revision < 0
+    ):
+        raise DeliveryExecutionRejected("delivery materials plan provenance is incomplete")
+    if organization_id != principal.organization_id:
+        raise DeliveryExecutionRejected("delivery materials plan organization is invalid")
+    if current_actor and (
+        actor_id != principal.user_id
+        or membership_id != principal.membership_id
+        or session_id != principal.session_id
+        or revision != principal.authorization_revision
+    ):
+        raise DeliveryExecutionRejected(
+            "delivery materials plan does not match authenticated provenance"
+        )
+
+
+def _validate_materials_plan(plan: object, principal: Principal) -> dict | None:
+    if plan is None:
+        return None
+    if not isinstance(plan, dict):
+        raise DeliveryExecutionRejected("delivery materials plan is malformed")
+
+    revision = plan.get("revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+        raise DeliveryExecutionRejected("delivery materials plan revision is invalid")
+    if _normalized(plan.get("updatedAt")) is None:
+        raise DeliveryExecutionRejected("delivery materials plan updatedAt is required")
+
+    requirements = plan.get("requirements")
+    if not isinstance(requirements, list) or not requirements:
+        raise DeliveryExecutionRejected("delivery materials plan requires at least one material")
+
+    seen_ids: set[str] = set()
+    for requirement in requirements:
+        if not isinstance(requirement, dict):
+            raise DeliveryExecutionRejected("delivery material requirement is malformed")
+        requirement_id = _normalized(requirement.get("id"))
+        if requirement_id is None:
+            raise DeliveryExecutionRejected("delivery material requirement id is required")
+        if requirement_id in seen_ids:
+            raise DeliveryExecutionRejected("delivery material requirement ids must be unique")
+        seen_ids.add(requirement_id)
+
+        if _normalized(requirement.get("description")) is None:
+            raise DeliveryExecutionRejected("delivery material description is required")
+        if _normalized(requirement.get("unit")) is None:
+            raise DeliveryExecutionRejected("delivery material unit is required")
+        if _decimal(requirement.get("quantity"), name="delivery material quantity") <= 0:
+            raise DeliveryExecutionRejected("delivery material quantity must be greater than zero")
+        note = requirement.get("note")
+        if note is not None and not isinstance(note, str):
+            raise DeliveryExecutionRejected("delivery material note is invalid")
+
+    _require_materials_plan_provenance(plan, principal)
+    return plan
+
+
+def _validate_materials_handoff(
+    payload: dict,
+    current_payload: dict | None,
+    principal: Principal,
+    *,
+    status: str,
+) -> None:
+    plan = _validate_materials_plan(payload.get("materialsPlan"), principal)
+
+    if status == "engineeringReview" and plan is not None:
+        raise DeliveryExecutionRejected(
+            "delivery materials plan can only be authored during Materials Required"
+        )
+    if status in MATERIALS_FROZEN_STATUSES and plan is None:
+        raise DeliveryExecutionRejected(
+            "delivery materials plan is required before Procurement"
+        )
+    if current_payload is None:
+        return
+
+    current_status = current_payload.get("status")
+    current_plan = _validate_materials_plan(current_payload.get("materialsPlan"), principal)
+
+    if current_status in MATERIALS_FROZEN_STATUSES:
+        if plan != current_plan:
+            raise DeliveryExecutionRejected(
+                "delivery materials plan is immutable after Procurement starts"
+            )
+        return
+
+    if current_status == "engineeringReview":
+        if plan is not None:
+            raise DeliveryExecutionRejected(
+                "enter Materials Required before authoring the delivery materials plan"
+            )
+        return
+
+    if current_status != "materialsRequired":
+        return
+
+    if status == "procurement":
+        if current_plan is None:
+            raise DeliveryExecutionRejected(
+                "save a delivery materials plan before starting Procurement"
+            )
+        if plan != current_plan:
+            raise DeliveryExecutionRejected(
+                "delivery materials plan must be saved before the Procurement transition"
+            )
+        return
+
+    if status != "materialsRequired" or plan == current_plan:
+        return
+    if plan is None:
+        raise DeliveryExecutionRejected("delivery materials plan cannot be cleared")
+
+    expected_revision = 1 if current_plan is None else current_plan["revision"] + 1
+    if plan["revision"] != expected_revision:
+        raise DeliveryExecutionRejected(
+            "delivery materials plan revision must advance by exactly one"
+        )
+    _require_materials_plan_provenance(plan, principal, current_actor=True)
+
+
 def validate_delivery_execution_payload(
     payload: dict,
     current_payload: dict | None,
@@ -191,6 +338,8 @@ def validate_delivery_execution_payload(
         raise DeliveryExecutionRejected(
             "delivery execution startedAt must match its initial event"
         )
+
+    _validate_materials_handoff(payload, current_payload, principal, status=status)
 
     if current_payload is None:
         _require_event_provenance(events[-1], principal, current_actor=True)
