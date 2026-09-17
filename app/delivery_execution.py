@@ -5,7 +5,11 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
-from app.delivery_installation import DeliveryInstallationRejected, validate_installation_handoff
+from app.delivery_installation import (
+    DeliveryInstallationRejected,
+    validate_installation_evidence_authority,
+    validate_installation_handoff,
+)
 from app.delivery_production import DeliveryProductionRejected, validate_production_handoff
 from app.models import CanonicalProject, CanonicalProjectChild, SyncEntity
 from app.ownership import EffectiveScope
@@ -640,6 +644,7 @@ def validate_delivery_execution_payload(
             "procurementPlan",
             "productionPlan",
             "installationSchedule",
+            "installationCompletion",
         }
         if any(current_payload.get(key) != payload.get(key) for key in protected):
             raise DeliveryExecutionRejected(
@@ -676,12 +681,21 @@ def validate_delivery_execution_payload(
             "Production self-transition requires a production plan revision"
         )
     if (
-        newest.get("fromStatus") in {"readyForInstallation", "scheduled"}
-        and newest.get("toStatus") == newest.get("fromStatus")
+        newest.get("fromStatus") == "readyForInstallation"
+        and newest.get("toStatus") == "readyForInstallation"
         and current_payload.get("installationSchedule") == payload.get("installationSchedule")
     ):
         raise DeliveryExecutionRejected(
             "Installation schedule self-transition requires an installation schedule revision"
+        )
+    if (
+        newest.get("fromStatus") == "scheduled"
+        and newest.get("toStatus") == "scheduled"
+        and current_payload.get("installationSchedule") == payload.get("installationSchedule")
+        and current_payload.get("installationCompletion") == payload.get("installationCompletion")
+    ):
+        raise DeliveryExecutionRejected(
+            "Scheduled self-transition requires an installation schedule or completion revision"
         )
     _require_event_provenance(newest, principal, current_actor=True)
 
@@ -730,6 +744,17 @@ async def authorize_delivery_execution(
         )
     if not scope.can_access_project(project.project_id, project.customer_id):
         raise DeliveryExecutionRejected("delivery execution Project is outside authorized scope")
+
+    try:
+        await validate_installation_evidence_authority(
+            db,
+            principal,
+            payload,
+            current_payload,
+            project_id=project_id,
+        )
+    except DeliveryInstallationRejected as exc:
+        raise DeliveryExecutionRejected(str(exc)) from exc
 
     quotation = await db.get(
         SyncEntity,
