@@ -1,0 +1,95 @@
+name: Publish immutable candidate image
+
+on:
+  push:
+    branches:
+      - feature/SCRUM-21-remote-catalogs-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-candidate-image-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish exact-head GHCR candidate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove exact checkout
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git diff --exit-code
+
+      - name: Build exact source image
+        env:
+          IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image_repository="${IMAGE_REPOSITORY,,}"
+          image_tag="candidate-sha-${GITHUB_SHA}"
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${GITHUB_SHA}" \
+            --label "com.vitrial.release-channel=scrum21-candidate" \
+            -t "${image_repository}:${image_tag}" \
+            .
+          printf 'IMAGE_REPOSITORY=%s\n' "$image_repository" >> "$GITHUB_ENV"
+          printf 'IMAGE_TAG=%s\n' "$image_tag" >> "$GITHUB_ENV"
+
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish and resolve immutable digest
+        run: |
+          set -euo pipefail
+          docker push "${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+          digest="$(docker buildx imagetools inspect "${IMAGE_REPOSITORY}:${IMAGE_TAG}" | awk '/^Digest:/ {print $2; exit}')"
+          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "unable to resolve pushed candidate image digest" >&2
+            exit 1
+          fi
+          immutable_ref="${IMAGE_REPOSITORY}@${digest}"
+          {
+            echo "channel=scrum21-candidate"
+            echo "gitSHA=${GITHUB_SHA}"
+            echo "taggedImage=${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+            echo "digest=${digest}"
+            echo "immutableRef=${immutable_ref}"
+          } | tee candidate-image.txt
+          printf 'IMMUTABLE_REF=%s\n' "$immutable_ref" >> "$GITHUB_ENV"
+
+      - name: Verify immutable registry image
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "${IMMUTABLE_REF}" >/dev/null
+
+      - name: Publish candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-image-${{ github.sha }}
+          path: candidate-image.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Record immutable candidate reference
+        run: |
+          {
+            echo '## SCRUM-21 immutable backend candidate'
+            echo
+            echo "- Git SHA: \`${GITHUB_SHA}\`"
+            echo "- Image: \`${IMMUTABLE_REF}\`"
+            echo
+            echo 'This is a draft-PR candidate image. Deploy only by digest; do not treat it as main/release authority until promotion gates are complete.'
+          } >> "$GITHUB_STEP_SUMMARY"

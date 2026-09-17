@@ -66,7 +66,7 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:latest server /data
+            quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z server /data
           for attempt in $(seq 1 30); do
             if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then
               exit 0
@@ -131,8 +131,8 @@ jobs:
           POSTGRES_DB=vitrial
           POSTGRES_USER=vitrial
           POSTGRES_PASSWORD=ci-postgres-secret-12345
-          MINIO_IMAGE=minio/minio:latest
-          MINIO_MC_IMAGE=minio/mc:latest
+          MINIO_IMAGE=quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+          MINIO_MC_IMAGE=quay.io/minio/mc:RELEASE.2025-02-08T19-14-21Z
           MINIO_ROOT_USER=ci-minio-access-12345
           MINIO_ROOT_PASSWORD=ci-minio-secret-12345
           HTTP_PORT=8080

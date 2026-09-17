@@ -9,6 +9,7 @@ from app.observability import (
     JsonFormatter,
     begin_request,
     bind_principal,
+    bind_request_metadata,
     correlation_ref,
     end_request,
     redact,
@@ -95,6 +96,65 @@ def test_json_formatter_correlates_hashed_principal_and_never_emits_raw_credenti
         end_request(tokens)
 
 
+def test_request_metadata_correlates_device_and_release_without_raw_device_id():
+    request_id = "33333333-3333-4333-8333-333333333333"
+    raw_device_id = "77777777-7777-4777-8777-777777777777"
+    tokens = begin_request(request_id)
+    try:
+        bind_request_metadata(
+            device_id=raw_device_id,
+            app_version="0.2.0",
+            app_build="121",
+        )
+        record = logging.LogRecord(
+            name="vitrial",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="request.test",
+            args=(),
+            exc_info=None,
+        )
+        record.event_name = "request.test"
+        record.event_fields = {}
+        rendered = JsonFormatter().format(record)
+        payload = json.loads(rendered)
+        assert payload["requestID"] == request_id
+        assert payload["deviceRef"] == correlation_ref(raw_device_id)
+        assert payload["appVersion"] == "0.2.0"
+        assert payload["appBuild"] == "121"
+        assert raw_device_id not in rendered
+    finally:
+        end_request(tokens)
+
+
+def test_request_metadata_rejects_free_form_release_strings():
+    tokens = begin_request("44444444-4444-4444-8444-444444444444")
+    try:
+        bind_request_metadata(
+            device_id=None,
+            app_version="0.2.0 token=should-not-log",
+            app_build="121/../../secret",
+        )
+        record = logging.LogRecord(
+            name="vitrial",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="request.test",
+            args=(),
+            exc_info=None,
+        )
+        record.event_name = "request.test"
+        record.event_fields = {}
+        payload = json.loads(JsonFormatter().format(record))
+        assert payload["deviceRef"] is None
+        assert payload["appVersion"] is None
+        assert payload["appBuild"] is None
+    finally:
+        end_request(tokens)
+
+
 def test_request_id_validation_and_response_echo():
     valid = "22222222-2222-4222-8222-222222222222"
     assert request_id_for_header(valid) == valid
@@ -103,7 +163,15 @@ def test_request_id_validation_and_response_echo():
     generated_from_arbitrary_safe_text = request_id_for_header("bearer-looking-but-not-a-uuid")
     assert generated_from_arbitrary_safe_text != "bearer-looking-but-not-a-uuid"
 
-    response = TestClient(app).get("/health", headers={"X-Request-ID": valid})
+    response = TestClient(app).get(
+        "/health",
+        headers={
+            "X-Request-ID": valid,
+            "X-Vitrial-Device-ID": "77777777-7777-4777-8777-777777777777",
+            "X-Vitrial-App-Version": "0.2.0",
+            "X-Vitrial-App-Build": "121",
+        },
+    )
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == valid
 
