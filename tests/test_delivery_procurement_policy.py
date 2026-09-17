@@ -310,6 +310,6 @@ def test_procurement_plan_cannot_change_without_audit_event():
     actor = principal()
     current = procurement_stage(actor)
     proposed = dict(current)
-    proposed["procurementPlan"] = procurement_plan(actor)
+    proposed["procurementPlan"] = procurement_plan(actor, at=current["updatedAt"])
     with pytest.raises(DeliveryExecutionRejected, match="operational changes must append"):
         validate_delivery_execution_payload(proposed, current, actor, entity_id="delivery-1")
