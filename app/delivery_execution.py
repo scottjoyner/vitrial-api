@@ -321,7 +321,8 @@ def validate_delivery_execution_payload(
         if event.get("fromStatus") != state:
             raise DeliveryExecutionRejected("delivery execution event chain is discontinuous")
         expected = DELIVERY_TRANSITIONS.get(state)
-        if to_status != expected:
+        is_materials_revision = state == "materialsRequired" and to_status == "materialsRequired"
+        if to_status != expected and not is_materials_revision:
             raise DeliveryExecutionRejected("delivery execution transition is invalid")
         state = to_status
 
@@ -373,7 +374,16 @@ def validate_delivery_execution_payload(
         raise DeliveryExecutionRejected(
             "delivery execution may append only one transition per mutation"
         )
-    _require_event_provenance(appended[-1], principal, current_actor=True)
+    newest = appended[-1]
+    if (
+        newest.get("fromStatus") == "materialsRequired"
+        and newest.get("toStatus") == "materialsRequired"
+        and current_payload.get("materialsPlan") == payload.get("materialsPlan")
+    ):
+        raise DeliveryExecutionRejected(
+            "Materials Required self-transition requires a materials plan revision"
+        )
+    _require_event_provenance(newest, principal, current_actor=True)
 
 
 async def authorize_delivery_execution(
