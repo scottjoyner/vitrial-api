@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.auth import Principal
+from app.models import CanonicalItem, CanonicalItemChild
 
 
 class DeliveryInstallationRejected(Exception):
-    """An installation schedule mutation violates delivery execution policy."""
+    """An installation schedule/completion mutation violates delivery execution policy."""
 
 
 INSTALLATION_EDITABLE_STATUSES = frozenset({"readyForInstallation", "scheduled"})
@@ -19,16 +22,17 @@ def _normalized(value: object) -> str | None:
 
 
 def _require_provenance(
-    schedule: dict,
+    value: dict,
     principal: Principal,
     *,
     current_actor: bool = False,
+    label: str,
 ) -> None:
-    actor_id = _normalized(schedule.get("actorID"))
-    organization_id = _normalized(schedule.get("organizationID"))
-    membership_id = _normalized(schedule.get("membershipID"))
-    session_id = _normalized(schedule.get("sessionID"))
-    revision = schedule.get("authorizationRevision")
+    actor_id = _normalized(value.get("actorID"))
+    organization_id = _normalized(value.get("organizationID"))
+    membership_id = _normalized(value.get("membershipID"))
+    session_id = _normalized(value.get("sessionID"))
+    revision = value.get("authorizationRevision")
     if (
         actor_id is None
         or organization_id is None
@@ -39,11 +43,11 @@ def _require_provenance(
         or revision < 0
     ):
         raise DeliveryInstallationRejected(
-            "delivery installation schedule provenance is incomplete"
+            f"delivery installation {label} provenance is incomplete"
         )
     if organization_id != principal.organization_id:
         raise DeliveryInstallationRejected(
-            "delivery installation schedule organization is invalid"
+            f"delivery installation {label} organization is invalid"
         )
     if current_actor and (
         actor_id != principal.user_id
@@ -52,7 +56,7 @@ def _require_provenance(
         or revision != principal.authorization_revision
     ):
         raise DeliveryInstallationRejected(
-            "delivery installation schedule does not match authenticated provenance"
+            f"delivery installation {label} does not match authenticated provenance"
         )
 
 
@@ -120,8 +124,81 @@ def _validate_schedule(
             "delivery installation schedule note is invalid"
         )
 
-    _require_provenance(schedule, principal)
+    _require_provenance(schedule, principal, label="schedule")
     return schedule
+
+
+def _validate_completion(
+    completion: object,
+    schedule: dict | None,
+    principal: Principal,
+) -> dict | None:
+    if completion is None:
+        return None
+    if not isinstance(completion, dict):
+        raise DeliveryInstallationRejected(
+            "delivery installation completion is malformed"
+        )
+    if schedule is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation completion requires a saved installation schedule"
+        )
+
+    revision = completion.get("revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+        raise DeliveryInstallationRejected(
+            "delivery installation completion revision is invalid"
+        )
+    schedule_revision = completion.get("installationScheduleRevision")
+    if (
+        not isinstance(schedule_revision, int)
+        or isinstance(schedule_revision, bool)
+        or schedule_revision < 1
+        or schedule_revision != schedule.get("revision")
+    ):
+        raise DeliveryInstallationRejected(
+            "delivery installation completion schedule revision does not match saved schedule"
+        )
+    if _normalized(completion.get("completedAt")) is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation completion completedAt is required"
+        )
+    if _normalized(completion.get("updatedAt")) is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation completion updatedAt is required"
+        )
+    note = completion.get("note")
+    if note is not None and not isinstance(note, str):
+        raise DeliveryInstallationRejected(
+            "delivery installation completion note is invalid"
+        )
+
+    references = completion.get("evidenceReferences")
+    if not isinstance(references, list) or not references:
+        raise DeliveryInstallationRejected(
+            "delivery installation completion requires at least one evidence reference"
+        )
+    seen: set[tuple[str, str]] = set()
+    for reference in references:
+        if not isinstance(reference, dict):
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence reference is malformed"
+            )
+        item_id = _normalized(reference.get("itemID"))
+        document_id = _normalized(reference.get("documentID"))
+        if item_id is None or document_id is None:
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence reference requires itemID and documentID"
+            )
+        key = (item_id, document_id)
+        if key in seen:
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence references must be unique"
+            )
+        seen.add(key)
+
+    _require_provenance(completion, principal, label="completion")
+    return completion
 
 
 def validate_installation_handoff(
@@ -135,6 +212,11 @@ def validate_installation_handoff(
     schedule = _validate_schedule(
         payload.get("installationSchedule"),
         production_plan,
+        principal,
+    )
+    completion = _validate_completion(
+        payload.get("installationCompletion"),
+        schedule,
         principal,
     )
 
@@ -151,6 +233,20 @@ def validate_installation_handoff(
         raise DeliveryInstallationRejected(
             "save delivery installation schedule before moving work to Scheduled"
         )
+    if status in {
+        "engineeringReview",
+        "materialsRequired",
+        "procurement",
+        "production",
+        "readyForInstallation",
+    } and completion is not None:
+        raise DeliveryInstallationRejected(
+            "delivery installation completion can only be authored while Scheduled"
+        )
+    if status in {"installed", "complete"} and completion is None:
+        raise DeliveryInstallationRejected(
+            "save installation completion evidence before marking delivery Installed"
+        )
     if current_payload is None:
         return
 
@@ -161,11 +257,20 @@ def validate_installation_handoff(
         current_production_plan,
         principal,
     )
+    current_completion = _validate_completion(
+        current_payload.get("installationCompletion"),
+        current_schedule,
+        principal,
+    )
 
     if current_status in INSTALLATION_FROZEN_STATUSES:
         if schedule != current_schedule:
             raise DeliveryInstallationRejected(
                 "delivery installation schedule is immutable after installation is recorded"
+            )
+        if completion != current_completion:
+            raise DeliveryInstallationRejected(
+                "delivery installation completion is immutable after installation is recorded"
             )
         return
 
@@ -174,44 +279,160 @@ def validate_installation_handoff(
             raise DeliveryInstallationRejected(
                 "enter Ready for Installation before authoring an installation schedule"
             )
-        return
-
-    if current_status == "readyForInstallation" and status == "scheduled":
-        if current_schedule is None:
+        if completion is not None:
             raise DeliveryInstallationRejected(
-                "save delivery installation schedule before moving work to Scheduled"
-            )
-        if schedule != current_schedule:
-            raise DeliveryInstallationRejected(
-                "delivery installation schedule must be saved before the Scheduled transition"
+                "enter Scheduled before authoring installation completion"
             )
         return
 
-    if current_status == "scheduled" and status == "installed":
+    if current_status == "readyForInstallation":
+        if completion is not None:
+            raise DeliveryInstallationRejected(
+                "enter Scheduled before authoring installation completion"
+            )
+        if status == "scheduled":
+            if current_schedule is None:
+                raise DeliveryInstallationRejected(
+                    "save delivery installation schedule before moving work to Scheduled"
+                )
+            if schedule != current_schedule:
+                raise DeliveryInstallationRejected(
+                    "delivery installation schedule must be saved before the Scheduled transition"
+                )
+            return
+        if status != "readyForInstallation" or schedule == current_schedule:
+            return
+        if schedule is None:
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule cannot be cleared"
+            )
+        expected_revision = 1 if current_schedule is None else current_schedule["revision"] + 1
+        if schedule["revision"] != expected_revision:
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule revision must advance by exactly one"
+            )
+        if schedule.get("updatedAt") != payload.get("updatedAt"):
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule updatedAt must match delivery execution updatedAt"
+            )
+        _require_provenance(schedule, principal, current_actor=True, label="schedule")
+        return
+
+    # Scheduled: allow either an audited reschedule or an audited completion revision per mutation.
+    if status == "installed":
         if current_schedule is None:
             raise DeliveryInstallationRejected(
                 "delivery installation schedule is required before recording installation"
+            )
+        if current_completion is None:
+            raise DeliveryInstallationRejected(
+                "save installation completion evidence before marking delivery Installed"
             )
         if schedule != current_schedule:
             raise DeliveryInstallationRejected(
                 "delivery installation schedule must be saved before recording installation"
             )
+        if completion != current_completion:
+            raise DeliveryInstallationRejected(
+                "delivery installation completion must be saved before recording installation"
+            )
         return
 
-    if status != current_status or schedule == current_schedule:
+    if status != "scheduled":
         return
-    if schedule is None:
+
+    schedule_changed = schedule != current_schedule
+    completion_changed = completion != current_completion
+    if schedule_changed and completion_changed:
         raise DeliveryInstallationRejected(
-            "delivery installation schedule cannot be cleared"
+            "delivery installation may revise either schedule or completion per mutation, not both"
         )
 
-    expected_revision = 1 if current_schedule is None else current_schedule["revision"] + 1
-    if schedule["revision"] != expected_revision:
+    if schedule_changed:
+        if current_completion is not None:
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule is frozen once completion evidence is recorded"
+            )
+        if schedule is None:
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule cannot be cleared"
+            )
+        expected_revision = 1 if current_schedule is None else current_schedule["revision"] + 1
+        if schedule["revision"] != expected_revision:
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule revision must advance by exactly one"
+            )
+        if schedule.get("updatedAt") != payload.get("updatedAt"):
+            raise DeliveryInstallationRejected(
+                "delivery installation schedule updatedAt must match delivery execution updatedAt"
+            )
+        _require_provenance(schedule, principal, current_actor=True, label="schedule")
+        return
+
+    if completion_changed:
+        if completion is None:
+            raise DeliveryInstallationRejected(
+                "delivery installation completion cannot be cleared"
+            )
+        expected_revision = 1 if current_completion is None else current_completion["revision"] + 1
+        if completion["revision"] != expected_revision:
+            raise DeliveryInstallationRejected(
+                "delivery installation completion revision must advance by exactly one"
+            )
+        if completion.get("updatedAt") != payload.get("updatedAt"):
+            raise DeliveryInstallationRejected(
+                "delivery installation completion updatedAt must match delivery execution updatedAt"
+            )
+        _require_provenance(completion, principal, current_actor=True, label="completion")
+
+
+async def validate_installation_evidence_authority(
+    db: AsyncSession,
+    principal: Principal,
+    payload: dict,
+    current_payload: dict | None,
+    *,
+    project_id: str,
+) -> None:
+    completion = payload.get("installationCompletion")
+    current_completion = (
+        current_payload.get("installationCompletion")
+        if isinstance(current_payload, dict)
+        else None
+    )
+    if completion is None or completion == current_completion:
+        return
+    if not isinstance(completion, dict):
         raise DeliveryInstallationRejected(
-            "delivery installation schedule revision must advance by exactly one"
+            "delivery installation completion is malformed"
         )
-    if schedule.get("updatedAt") != payload.get("updatedAt"):
-        raise DeliveryInstallationRejected(
-            "delivery installation schedule updatedAt must match delivery execution updatedAt"
+
+    for reference in completion.get("evidenceReferences", []):
+        if not isinstance(reference, dict):
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence reference is malformed"
+            )
+        item_id = _normalized(reference.get("itemID"))
+        document_id = _normalized(reference.get("documentID"))
+        if item_id is None or document_id is None:
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence reference requires itemID and documentID"
+            )
+
+        item = await db.get(CanonicalItem, (principal.organization_id, item_id))
+        if item is None or item.deleted_at is not None or item.project_id != project_id:
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence Item is not active in the delivery Project"
+            )
+        evidence = await db.get(
+            CanonicalItemChild,
+            (principal.organization_id, "evidence", document_id),
         )
-    _require_provenance(schedule, principal, current_actor=True)
+        if (
+            evidence is None
+            or evidence.deleted_at is not None
+            or evidence.item_id != item_id
+        ):
+            raise DeliveryInstallationRejected(
+                "delivery installation evidence is not canonical for the referenced Item"
+            )
