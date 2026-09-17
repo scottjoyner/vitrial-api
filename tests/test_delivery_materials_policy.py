@@ -89,7 +89,7 @@ def materials_stage(actor: Principal) -> dict:
     return value
 
 
-def materials_plan(actor: Principal, *, revision: int = 1) -> dict:
+def materials_plan(actor: Principal, *, revision: int = 1, updated_at: str | None = None) -> dict:
     return {
         "revision": revision,
         "requirements": [
@@ -101,9 +101,33 @@ def materials_plan(actor: Principal, *, revision: int = 1) -> dict:
                 "note": "Cut list pending vendor allocation",
             }
         ],
-        "updatedAt": f"2026-09-17T14:{5 + revision:02d}:00Z",
+        "updatedAt": updated_at or f"2026-09-17T14:{5 + revision:02d}:00Z",
         **provenance(actor),
     }
+
+
+def apply_plan(
+    current: dict,
+    actor: Principal,
+    *,
+    revision: int,
+    occurred_at: str,
+    event_id: str,
+    quantity: int = 12,
+) -> dict:
+    proposed = dict(current)
+    plan = materials_plan(actor, revision=revision, updated_at=occurred_at)
+    plan["requirements"] = [dict(plan["requirements"][0]) | {"quantity": quantity}]
+    proposed["materialsPlan"] = plan
+    proposed["updatedAt"] = occurred_at
+    proposed["events"] = current["events"] + [event(
+        actor,
+        event_id,
+        from_status="materialsRequired",
+        to_status="materialsRequired",
+        occurred_at=occurred_at,
+    )]
+    return proposed
 
 
 def test_materials_plan_can_only_be_authored_in_materials_required():
@@ -119,27 +143,70 @@ def test_materials_plan_can_only_be_authored_in_materials_required():
 def test_materials_plan_revision_is_monotonic_and_current_actor_bound():
     actor = principal()
     current = materials_stage(actor)
-    proposed = dict(current)
-    proposed["materialsPlan"] = materials_plan(actor, revision=1)
+    proposed = apply_plan(
+        current,
+        actor,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-event-1",
+    )
     validate_delivery_execution_payload(proposed, current, actor, entity_id="delivery-1")
 
-    revised = dict(proposed)
-    revised["materialsPlan"] = materials_plan(actor, revision=2)
-    revised["materialsPlan"]["requirements"] = [
-        dict(revised["materialsPlan"]["requirements"][0]) | {"quantity": 14}
-    ]
+    revised = apply_plan(
+        proposed,
+        actor,
+        revision=2,
+        occurred_at="2026-09-17T14:07:00Z",
+        event_id="materials-plan-event-2",
+        quantity=14,
+    )
     validate_delivery_execution_payload(revised, proposed, actor, entity_id="delivery-1")
 
-    skipped = dict(revised)
-    skipped["materialsPlan"] = materials_plan(actor, revision=4)
+    skipped = apply_plan(
+        revised,
+        actor,
+        revision=4,
+        occurred_at="2026-09-17T14:08:00Z",
+        event_id="materials-plan-event-4",
+    )
     with pytest.raises(DeliveryExecutionRejected, match="revision must advance by exactly one"):
         validate_delivery_execution_payload(skipped, revised, actor, entity_id="delivery-1")
 
     other = principal(user_id="other-user", session_id="other-session")
-    forged = dict(current)
-    forged["materialsPlan"] = materials_plan(other, revision=1)
+    forged = apply_plan(
+        current,
+        other,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-event-forged",
+    )
     with pytest.raises(DeliveryExecutionRejected, match="does not match authenticated provenance"):
         validate_delivery_execution_payload(forged, current, actor, entity_id="delivery-1")
+
+
+def test_materials_self_status_event_requires_an_actual_plan_revision():
+    actor = principal()
+    current = materials_stage(actor)
+    planned = apply_plan(
+        current,
+        actor,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-event-1",
+    )
+    validate_delivery_execution_payload(planned, current, actor, entity_id="delivery-1")
+
+    no_op = dict(planned)
+    no_op["updatedAt"] = "2026-09-17T14:07:00Z"
+    no_op["events"] = planned["events"] + [event(
+        actor,
+        "materials-plan-no-op",
+        from_status="materialsRequired",
+        to_status="materialsRequired",
+        occurred_at="2026-09-17T14:07:00Z",
+    )]
+    with pytest.raises(DeliveryExecutionRejected, match="requires a materials plan revision"):
+        validate_delivery_execution_payload(no_op, planned, actor, entity_id="delivery-1")
 
 
 def test_procurement_requires_saved_plan_and_freezes_it():
@@ -160,8 +227,13 @@ def test_procurement_requires_saved_plan_and_freezes_it():
     with pytest.raises(DeliveryExecutionRejected, match="required before Procurement"):
         validate_delivery_execution_payload(missing, current, actor, entity_id="delivery-1")
 
-    planned = dict(current)
-    planned["materialsPlan"] = materials_plan(actor)
+    planned = apply_plan(
+        current,
+        actor,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-event-1",
+    )
     validate_delivery_execution_payload(planned, current, actor, entity_id="delivery-1")
 
     procurement = dict(planned)
@@ -177,7 +249,11 @@ def test_procurement_requires_saved_plan_and_freezes_it():
     validate_delivery_execution_payload(procurement, planned, actor, entity_id="delivery-1")
 
     mutated = dict(procurement)
-    mutated["materialsPlan"] = materials_plan(actor, revision=2)
+    mutated["materialsPlan"] = materials_plan(
+        actor,
+        revision=2,
+        updated_at="2026-09-17T14:11:00Z",
+    )
     with pytest.raises(DeliveryExecutionRejected, match="immutable after Procurement starts"):
         validate_delivery_execution_payload(mutated, procurement, actor, entity_id="delivery-1")
 
@@ -186,22 +262,35 @@ def test_material_requirements_reject_empty_invalid_or_duplicate_lines():
     actor = principal()
     current = materials_stage(actor)
 
-    empty = dict(current)
-    empty["materialsPlan"] = materials_plan(actor)
+    empty = apply_plan(
+        current,
+        actor,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-empty",
+    )
     empty["materialsPlan"]["requirements"] = []
     with pytest.raises(DeliveryExecutionRejected, match="at least one material"):
         validate_delivery_execution_payload(empty, current, actor, entity_id="delivery-1")
 
-    invalid_quantity = dict(current)
-    invalid_quantity["materialsPlan"] = materials_plan(actor)
-    invalid_quantity["materialsPlan"]["requirements"] = [
-        dict(invalid_quantity["materialsPlan"]["requirements"][0]) | {"quantity": 0}
-    ]
+    invalid_quantity = apply_plan(
+        current,
+        actor,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-invalid-quantity",
+        quantity=0,
+    )
     with pytest.raises(DeliveryExecutionRejected, match="greater than zero"):
         validate_delivery_execution_payload(invalid_quantity, current, actor, entity_id="delivery-1")
 
-    duplicate = dict(current)
-    duplicate["materialsPlan"] = materials_plan(actor)
+    duplicate = apply_plan(
+        current,
+        actor,
+        revision=1,
+        occurred_at="2026-09-17T14:06:00Z",
+        event_id="materials-plan-duplicate",
+    )
     duplicate["materialsPlan"]["requirements"] = [
         duplicate["materialsPlan"]["requirements"][0],
         dict(duplicate["materialsPlan"]["requirements"][0]),
