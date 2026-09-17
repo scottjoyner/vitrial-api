@@ -214,6 +214,23 @@ def validate_installation_handoff(
         production_plan,
         principal,
     )
+
+    # Once completion evidence has been recorded, the appointment it completed is immutable.
+    # Check this before validating the proposed completion against the proposed schedule so a
+    # forbidden reschedule reports the semantic freeze rather than a downstream revision mismatch.
+    if current_payload is not None and current_payload.get("status") == "scheduled":
+        raw_current_completion = current_payload.get("installationCompletion")
+        if raw_current_completion is not None:
+            current_schedule_for_freeze = _validate_schedule(
+                current_payload.get("installationSchedule"),
+                current_payload.get("productionPlan"),
+                principal,
+            )
+            if schedule != current_schedule_for_freeze:
+                raise DeliveryInstallationRejected(
+                    "delivery installation schedule is frozen once completion evidence is recorded"
+                )
+
     completion = _validate_completion(
         payload.get("installationCompletion"),
         schedule,
@@ -318,7 +335,6 @@ def validate_installation_handoff(
         _require_provenance(schedule, principal, current_actor=True, label="schedule")
         return
 
-    # Scheduled: allow either an audited reschedule or an audited completion revision per mutation.
     if status == "installed":
         if current_schedule is None:
             raise DeliveryInstallationRejected(
