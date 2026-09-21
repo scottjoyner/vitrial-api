@@ -85,6 +85,13 @@ def _validate_installer_assignment(value: object) -> dict | None:
     return value
 
 
+def _require_installer_assignment_for_revision(schedule: dict) -> None:
+    if schedule.get("installerAssignment") is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation installer assignment is required for a new schedule revision"
+        )
+
+
 def _production_ready(production_plan: object) -> bool:
     if not isinstance(production_plan, dict):
         return False
@@ -467,6 +474,7 @@ def validate_installation_handoff(
             raise DeliveryInstallationRejected(
                 "delivery installation schedule updatedAt must match delivery execution updatedAt"
             )
+        _require_installer_assignment_for_revision(schedule)
         _require_provenance(schedule, principal, current_actor=True, label="schedule")
         return
 
@@ -517,6 +525,7 @@ def validate_installation_handoff(
             raise DeliveryInstallationRejected(
                 "delivery installation schedule updatedAt must match delivery execution updatedAt"
             )
+        _require_installer_assignment_for_revision(schedule)
         _require_provenance(schedule, principal, current_actor=True, label="schedule")
         return
 
