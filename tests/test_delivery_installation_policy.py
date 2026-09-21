@@ -117,11 +117,25 @@ def ready_stage(actor: Principal) -> dict:
     }
 
 
-def schedule(actor: Principal, *, revision: int = 1, at: str = "2026-09-17T14:15:00Z", scheduled_for: str = "2026-09-20T13:00:00Z") -> dict:
+def schedule(
+    actor: Principal,
+    *,
+    revision: int = 1,
+    at: str = "2026-09-17T14:15:00Z",
+    scheduled_for: str = "2026-09-20T13:00:00Z",
+    installer_id: str = "installer-crew-alpha",
+    installer_name: str = "Crew Alpha",
+    installer_phone: str | None = "+57 300 555 0101",
+) -> dict:
     return {
         "revision": revision,
         "productionPlanRevision": 1,
         "scheduledFor": scheduled_for,
+        "installerAssignment": {
+            "id": installer_id,
+            "displayName": installer_name,
+            "phone": installer_phone,
+        },
         "note": "Customer confirmed",
         "updatedAt": at,
         **provenance(actor),
@@ -266,6 +280,56 @@ def test_scheduled_self_status_event_requires_schedule_or_completion_revision():
     no_op["events"] = scheduled["events"] + [event(actor, "scheduled-no-op", "scheduled", "scheduled", "2026-09-17T14:21:00Z")]
     with pytest.raises(DeliveryExecutionRejected, match="schedule or completion revision"):
         validate_delivery_execution_payload(no_op, scheduled, actor, entity_id="delivery-1")
+
+
+def test_installer_assignment_is_validated_and_legacy_schedule_remains_compatible():
+    actor = principal()
+    current = ready_stage(actor)
+
+    legacy = apply_schedule(current, actor)
+    legacy["installationSchedule"].pop("installerAssignment")
+    validate_delivery_execution_payload(legacy, current, actor, entity_id="delivery-1")
+
+    malformed = apply_schedule(current, actor)
+    malformed["installationSchedule"]["installerAssignment"] = {"id": " ", "displayName": "Crew Alpha"}
+    with pytest.raises(DeliveryExecutionRejected, match="installer assignment id is required"):
+        validate_delivery_execution_payload(malformed, current, actor, entity_id="delivery-1")
+
+    missing_name = apply_schedule(current, actor)
+    missing_name["installationSchedule"]["installerAssignment"] = {"id": "crew-1", "displayName": " "}
+    with pytest.raises(DeliveryExecutionRejected, match="installer displayName is required"):
+        validate_delivery_execution_payload(missing_name, current, actor, entity_id="delivery-1")
+
+    bad_phone = apply_schedule(current, actor)
+    bad_phone["installationSchedule"]["installerAssignment"] = {
+        "id": "crew-1",
+        "displayName": "Crew Alpha",
+        "phone": " ",
+    }
+    with pytest.raises(DeliveryExecutionRejected, match="installer phone is invalid"):
+        validate_delivery_execution_payload(bad_phone, current, actor, entity_id="delivery-1")
+
+
+def test_installer_assignment_change_requires_audited_schedule_revision():
+    actor = principal()
+    current = ready_stage(actor)
+    first = apply_schedule(current, actor)
+    validate_delivery_execution_payload(first, current, actor, entity_id="delivery-1")
+
+    reassigned = apply_schedule(
+        first,
+        actor,
+        revision=2,
+        at="2026-09-17T14:16:00Z",
+        scheduled_for="2026-09-20T13:00:00Z",
+        event_id="installation-schedule-reassigned",
+    )
+    reassigned["installationSchedule"]["installerAssignment"] = {
+        "id": "installer-crew-beta",
+        "displayName": "Crew Beta",
+        "phone": "+57 300 555 0202",
+    }
+    validate_delivery_execution_payload(reassigned, first, actor, entity_id="delivery-1")
 
 
 def test_schedule_rejects_invalid_shape_and_production_revision_mismatch():
