@@ -286,9 +286,48 @@ def test_installer_assignment_is_validated_and_legacy_schedule_remains_compatibl
     actor = principal()
     current = ready_stage(actor)
 
-    legacy = apply_schedule(current, actor)
-    legacy["installationSchedule"].pop("installerAssignment")
-    validate_delivery_execution_payload(legacy, current, actor, entity_id="delivery-1")
+    missing = apply_schedule(current, actor)
+    missing["installationSchedule"].pop("installerAssignment")
+    with pytest.raises(
+        DeliveryExecutionRejected,
+        match="installer assignment is required for a new schedule revision",
+    ):
+        validate_delivery_execution_payload(missing, current, actor, entity_id="delivery-1")
+
+    # Simulate an RC3 schedule that was persisted before 0.2.1 existed. The
+    # backend must not force a destructive migration just to advance or complete it.
+    legacy_ready = apply_schedule(current, actor)
+    legacy_ready["installationSchedule"].pop("installerAssignment")
+    scheduled_at = "2026-09-17T14:20:00Z"
+    legacy_scheduled = dict(legacy_ready)
+    legacy_scheduled["status"] = "scheduled"
+    legacy_scheduled["updatedAt"] = scheduled_at
+    legacy_scheduled["events"] = legacy_ready["events"] + [
+        event(
+            actor,
+            "legacy-delivery-event-scheduled",
+            "readyForInstallation",
+            "scheduled",
+            scheduled_at,
+        )
+    ]
+    validate_delivery_execution_payload(
+        legacy_scheduled,
+        legacy_ready,
+        actor,
+        entity_id="delivery-1",
+    )
+    legacy_completed = apply_completion(
+        legacy_scheduled,
+        actor,
+        event_id="legacy-installation-completion",
+    )
+    validate_delivery_execution_payload(
+        legacy_completed,
+        legacy_scheduled,
+        actor,
+        entity_id="delivery-1",
+    )
 
     malformed = apply_schedule(current, actor)
     malformed["installationSchedule"]["installerAssignment"] = {"id": " ", "displayName": "Crew Alpha"}
@@ -330,6 +369,21 @@ def test_installer_assignment_change_requires_audited_schedule_revision():
         "phone": "+57 300 555 0202",
     }
     validate_delivery_execution_payload(reassigned, first, actor, entity_id="delivery-1")
+
+    removed = apply_schedule(
+        first,
+        actor,
+        revision=2,
+        at="2026-09-17T14:16:30Z",
+        scheduled_for="2026-09-20T13:00:00Z",
+        event_id="installation-schedule-assignment-removed",
+    )
+    removed["installationSchedule"].pop("installerAssignment")
+    with pytest.raises(
+        DeliveryExecutionRejected,
+        match="installer assignment is required for a new schedule revision",
+    ):
+        validate_delivery_execution_payload(removed, first, actor, entity_id="delivery-1")
 
 
 def test_schedule_rejects_invalid_shape_and_production_revision_mismatch():
