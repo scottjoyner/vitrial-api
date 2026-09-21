@@ -60,6 +60,38 @@ def _require_provenance(
         )
 
 
+def _validate_installer_assignment(value: object) -> dict | None:
+    if value is None:
+        # 0.2.0 schedules did not carry installer assignment. Preserve read/forward
+        # compatibility while 0.2.1 clients require assignment when authoring a revision.
+        return None
+    if not isinstance(value, dict):
+        raise DeliveryInstallationRejected(
+            "delivery installation installer assignment is malformed"
+        )
+    if _normalized(value.get("id")) is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation installer assignment id is required"
+        )
+    if _normalized(value.get("displayName")) is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation installer displayName is required"
+        )
+    phone = value.get("phone")
+    if phone is not None and _normalized(phone) is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation installer phone is invalid"
+        )
+    return value
+
+
+def _require_installer_assignment_for_revision(schedule: dict) -> None:
+    if schedule.get("installerAssignment") is None:
+        raise DeliveryInstallationRejected(
+            "delivery installation installer assignment is required for a new schedule revision"
+        )
+
+
 def _production_ready(production_plan: object) -> bool:
     if not isinstance(production_plan, dict):
         return False
@@ -118,6 +150,7 @@ def _validate_schedule(
         raise DeliveryInstallationRejected(
             "delivery installation schedule updatedAt is required"
         )
+    _validate_installer_assignment(schedule.get("installerAssignment"))
     note = schedule.get("note")
     if note is not None and not isinstance(note, str):
         raise DeliveryInstallationRejected(
@@ -441,6 +474,7 @@ def validate_installation_handoff(
             raise DeliveryInstallationRejected(
                 "delivery installation schedule updatedAt must match delivery execution updatedAt"
             )
+        _require_installer_assignment_for_revision(schedule)
         _require_provenance(schedule, principal, current_actor=True, label="schedule")
         return
 
@@ -491,6 +525,7 @@ def validate_installation_handoff(
             raise DeliveryInstallationRejected(
                 "delivery installation schedule updatedAt must match delivery execution updatedAt"
             )
+        _require_installer_assignment_for_revision(schedule)
         _require_provenance(schedule, principal, current_actor=True, label="schedule")
         return
 
