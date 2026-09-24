@@ -82,10 +82,9 @@ def test_acceptance_validator_requires_private_postgres_and_bootstrap_authority(
         "DATABASE_URL": "postgresql+asyncpg://vitrial:acceptance-db-secret@postgres:5432/vitrial",
         "POSTGRES_IMAGE": "postgres:17",
         "POSTGRES_PASSWORD": "acceptance-db-secret-12345",
-        "MINIO_IMAGE": "minio/minio:RELEASE.2026-01-01T00-00-00Z",
-        "MINIO_MC_IMAGE": "minio/mc:RELEASE.2026-01-01T00-00-00Z",
-        "MINIO_ROOT_USER": "acceptance-access-12345",
-        "MINIO_ROOT_PASSWORD": "acceptance-secret-12345",
+        "S3_TEST_IMAGE": "motoserver/moto:5.2.3",
+        "S3_TEST_ACCESS_KEY": "acceptance-access-12345",
+        "S3_TEST_SECRET_KEY": "acceptance-secret-12345",
     })
     write_env(path, values)
     result = run_validator(path, "--mode", "acceptance", "--allow-localhost")
@@ -96,6 +95,15 @@ def test_acceptance_validator_requires_private_postgres_and_bootstrap_authority(
     rejected = run_validator(path, "--mode", "acceptance", "--allow-localhost")
     assert rejected.returncode == 1
     assert "ADMIN_API_KEY_HASH is required" in rejected.stdout
+
+
+def test_acceptance_topology_uses_provider_neutral_s3_test_service():
+    compose = (ROOT / "deploy" / "compose.acceptance.yml").read_text(encoding="utf-8")
+    assert "S3_TEST_IMAGE" in compose
+    assert "http://s3-test:5000" in compose
+    assert "motoserver" not in compose
+    assert "minio" not in compose.lower()
+    assert "/data/.vitrial-deployment-smoke" not in compose
 
 
 def test_validator_rejects_group_readable_secret_file(tmp_path: Path):
