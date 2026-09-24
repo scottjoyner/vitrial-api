@@ -103,6 +103,27 @@ def production_stage(actor: Principal) -> dict:
     }
 
 
+def production_step(step_id: str, description: str, status: str, at: str, *, owned: bool = True) -> dict:
+    step = {
+        "id": step_id,
+        "description": description,
+        "status": status,
+        "note": None,
+        "owner": None,
+        "targetCompletionAt": None,
+        "completedAt": None,
+    }
+    if owned and status != "pending":
+        step["owner"] = {
+            "id": "crew-a",
+            "displayName": "Crew A",
+            "role": "Fabrication",
+        }
+    if status == "complete":
+        step["completedAt"] = at
+    return step
+
+
 def production_plan(
     actor: Principal,
     *,
@@ -110,23 +131,26 @@ def production_plan(
     at: str = "2026-09-17T14:13:00Z",
     first_status: str = "pending",
     second_status: str = "pending",
+    owned_active_steps: bool = True,
 ) -> dict:
     return {
         "revision": revision,
         "procurementPlanRevision": 1,
         "steps": [
-            {
-                "id": "production-step-1",
-                "description": "Fabricate frame",
-                "status": first_status,
-                "note": None,
-            },
-            {
-                "id": "production-step-2",
-                "description": "Glaze and inspect assembly",
-                "status": second_status,
-                "note": None,
-            },
+            production_step(
+                "production-step-1",
+                "Fabricate frame",
+                first_status,
+                at,
+                owned=owned_active_steps,
+            ),
+            production_step(
+                "production-step-2",
+                "Glaze and inspect assembly",
+                second_status,
+                at,
+                owned=owned_active_steps,
+            ),
         ],
         "updatedAt": at,
         **provenance(actor),
@@ -142,6 +166,7 @@ def apply_production_plan(
     event_id: str = "production-plan-event-1",
     first_status: str = "pending",
     second_status: str = "pending",
+    owned_active_steps: bool = True,
 ) -> dict:
     proposed = dict(current)
     proposed["productionPlan"] = production_plan(
@@ -150,6 +175,7 @@ def apply_production_plan(
         at=at,
         first_status=first_status,
         second_status=second_status,
+        owned_active_steps=owned_active_steps,
     )
     proposed["updatedAt"] = at
     proposed["events"] = current["events"] + [
@@ -271,6 +297,89 @@ def test_production_plan_rejects_duplicate_invalid_status_and_procurement_revisi
     wrong_revision["productionPlan"]["procurementPlanRevision"] = 2
     with pytest.raises(DeliveryExecutionRejected, match="procurement revision does not match"):
         validate_delivery_execution_payload(wrong_revision, current, actor, entity_id="delivery-1")
+
+
+def test_server_rejects_ownerless_active_or_complete_step_mutations():
+    actor = principal()
+    current = production_stage(actor)
+
+    ownerless_active = apply_production_plan(
+        current,
+        actor,
+        first_status="inProgress",
+        owned_active_steps=False,
+    )
+    with pytest.raises(DeliveryExecutionRejected, match="requires an owner before active work"):
+        validate_delivery_execution_payload(
+            ownerless_active,
+            current,
+            actor,
+            entity_id="delivery-1",
+        )
+
+    ownerless_complete = apply_production_plan(
+        current,
+        actor,
+        first_status="complete",
+        owned_active_steps=False,
+    )
+    with pytest.raises(DeliveryExecutionRejected, match="requires an owner before active work"):
+        validate_delivery_execution_payload(
+            ownerless_complete,
+            current,
+            actor,
+            entity_id="delivery-1",
+        )
+
+
+def test_server_rejects_complete_step_without_completion_timestamp():
+    actor = principal()
+    current = production_stage(actor)
+    proposed = apply_production_plan(
+        current,
+        actor,
+        first_status="complete",
+    )
+    proposed["productionPlan"]["steps"][0]["completedAt"] = None
+
+    with pytest.raises(DeliveryExecutionRejected, match="requires completedAt when complete"):
+        validate_delivery_execution_payload(proposed, current, actor, entity_id="delivery-1")
+
+
+def test_legacy_ownerless_active_plan_can_be_repaired_but_not_extended_ownerless():
+    actor = principal()
+    base = production_stage(actor)
+
+    # Simulate canonical pre-hardening state already persisted by an older client.
+    legacy = apply_production_plan(
+        base,
+        actor,
+        first_status="inProgress",
+        owned_active_steps=False,
+    )
+
+    repaired = apply_production_plan(
+        legacy,
+        actor,
+        revision=2,
+        at="2026-09-17T14:14:00Z",
+        event_id="production-plan-repair",
+        first_status="inProgress",
+        owned_active_steps=True,
+    )
+    validate_delivery_execution_payload(repaired, legacy, actor, entity_id="delivery-1")
+
+    still_ownerless = apply_production_plan(
+        legacy,
+        actor,
+        revision=2,
+        at="2026-09-17T14:14:00Z",
+        event_id="production-plan-ownerless",
+        first_status="inProgress",
+        owned_active_steps=False,
+    )
+    with pytest.raises(DeliveryExecutionRejected, match="requires an owner before active work"):
+        validate_delivery_execution_payload(still_ownerless, legacy, actor, entity_id="delivery-1")
 
 
 def test_production_self_status_event_requires_real_plan_revision():
