@@ -1,5 +1,7 @@
 https://localhost {
     tls internal
     encode zstd gzip
+    @internal_admin path /internal/admin/*
+    respond @internal_admin 404
     reverse_proxy api:8000
 }
