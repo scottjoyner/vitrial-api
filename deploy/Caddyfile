@@ -8,6 +8,16 @@
         Referrer-Policy "no-referrer"
     }
 
+    # Reject pathological structured sync requests before FastAPI buffers/parses
+    # their JSON bodies. Evidence blobs use a separate streaming ceiling in-app.
+    @sync_push {
+        method POST
+        path /api/v1/sync/push /api/v2/sync/push
+    }
+    request_body @sync_push {
+        max_size 4MB
+    }
+
     reverse_proxy api:8000 {
         health_uri /health
         health_interval 15s
