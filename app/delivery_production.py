@@ -111,9 +111,54 @@ def _validate_plan(
         note = step.get("note")
         if note is not None and not isinstance(note, str):
             raise DeliveryProductionRejected("delivery production step note is invalid")
+        _validate_step_owner_metadata(step, step_id)
 
     _require_provenance(plan, principal)
     return plan
+
+
+def _validate_step_owner_metadata(step: dict, step_id: str) -> None:
+    owner = step.get("owner")
+    if owner is not None:
+        if not isinstance(owner, dict):
+            raise DeliveryProductionRejected("delivery production step owner is malformed")
+        if _normalized(owner.get("id")) is None or _normalized(owner.get("displayName")) is None:
+            raise DeliveryProductionRejected(
+                f"delivery production step {step_id} owner is invalid"
+            )
+        role = owner.get("role")
+        if role is not None and not isinstance(role, str):
+            raise DeliveryProductionRejected(
+                f"delivery production step {step_id} owner role is invalid"
+            )
+
+    for field in ("targetCompletionAt", "completedAt"):
+        value = step.get(field)
+        if value is not None and _normalized(value) is None:
+            raise DeliveryProductionRejected(
+                f"delivery production step {step_id} {field} is invalid"
+            )
+
+
+def _require_active_step_owners(plan: dict | None) -> None:
+    if plan is None:
+        return
+    for step in plan.get("steps", []):
+        status = step.get("status")
+        step_id = _normalized(step.get("id")) or "<unknown>"
+        owner = step.get("owner")
+        if status in {"inProgress", "complete"} and not isinstance(owner, dict):
+            raise DeliveryProductionRejected(
+                f"delivery production step {step_id} requires an owner before active work"
+            )
+        if status == "complete" and _normalized(step.get("completedAt")) is None:
+            raise DeliveryProductionRejected(
+                f"delivery production step {step_id} requires completedAt when complete"
+            )
+        if status != "complete" and step.get("completedAt") is not None:
+            raise DeliveryProductionRejected(
+                f"delivery production step {step_id} completedAt is only valid when complete"
+            )
 
 
 def _require_installation_ready(plan: dict | None) -> None:
@@ -185,6 +230,7 @@ def validate_production_handoff(
             raise DeliveryProductionRejected(
                 "delivery production plan must be saved before the Ready for Installation transition"
             )
+        _require_active_step_owners(plan)
         _require_installation_ready(plan)
         return
 
@@ -192,6 +238,10 @@ def validate_production_handoff(
         return
     if plan is None:
         raise DeliveryProductionRejected("delivery production plan cannot be cleared")
+
+    # Legacy persisted plans remain readable as current state, but every new Production
+    # plan revision must satisfy the owner/completion invariants enforced by current clients.
+    _require_active_step_owners(plan)
 
     expected_revision = 1 if current_plan is None else current_plan["revision"] + 1
     if plan["revision"] != expected_revision:
