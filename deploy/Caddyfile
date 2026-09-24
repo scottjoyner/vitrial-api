@@ -6,12 +6,21 @@
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
+        Cache-Control "no-store"
     }
 
     # Public edge must never expose the operational control plane. Admin
     # provisioning/revocation is performed over a private operator path only.
     @internal_admin path /internal/admin/*
     respond @internal_admin 404
+
+    @small_auth_write {
+        method POST
+        path /api/v1/auth/pair /api/v1/auth/logout
+    }
+    request_body @small_auth_write {
+        max_size 16KB
+    }
 
     # Reject pathological structured sync requests before FastAPI buffers/parses
     # their JSON bodies. Evidence blobs use a separate streaming ceiling in-app.
