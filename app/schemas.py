@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_SYNC_RECORDS = 200
 MAX_SYNC_IDENTIFIER_LENGTH = 256
@@ -9,6 +9,10 @@ MAX_SYNC_IDENTIFIER_LENGTH = 256
 # base64 on the JSON wire, so leave enough room for that expansion while rejecting
 # anomalously large individual records.
 MAX_SYNC_V1_WIRE_PAYLOAD_BYTES = 2_100_000
+# Aggregate ceiling matching the iOS V1 chunking contract. This is deliberately
+# separate from the per-record ceiling: accepting 200 near-limit records would
+# otherwise allow hundreds of megabytes in a single logical sync batch.
+MAX_SYNC_V1_BATCH_PAYLOAD_BYTES = 2_100_000
 
 Capability = Literal[
     "customer.create", "customer.edit", "project.create", "project.edit",
@@ -78,6 +82,15 @@ class SyncBatch(StrictModel):
     deviceID: str = Field(min_length=1, max_length=MAX_SYNC_IDENTIFIER_LENGTH)
     cursor: str | None = Field(default=None, max_length=MAX_SYNC_IDENTIFIER_LENGTH)
     records: list[SyncRecord] = Field(default_factory=list, max_length=MAX_SYNC_RECORDS)
+
+    @model_validator(mode="after")
+    def aggregate_payload_must_be_bounded(self) -> "SyncBatch":
+        total = sum(len(record.payload) for record in self.records)
+        if total > MAX_SYNC_V1_BATCH_PAYLOAD_BYTES:
+            raise ValueError(
+                f"aggregate sync payload exceeds {MAX_SYNC_V1_BATCH_PAYLOAD_BYTES} bytes"
+            )
+        return self
 
 class SyncResult(StrictModel):
     acceptedRecordIDs: list[str] = Field(default_factory=list)
