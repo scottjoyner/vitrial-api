@@ -8,6 +8,11 @@
         Referrer-Policy "no-referrer"
     }
 
+    # Public edge must never expose the operational control plane. Admin
+    # provisioning/revocation is performed over a private operator path only.
+    @internal_admin path /internal/admin/*
+    respond @internal_admin 404
+
     # Reject pathological structured sync requests before FastAPI buffers/parses
     # their JSON bodies. Evidence blobs use a separate streaming ceiling in-app.
     @sync_push {
