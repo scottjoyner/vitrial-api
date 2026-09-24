@@ -1,7 +1,15 @@
 https://localhost {
     tls internal
     encode zstd gzip
+    header Cache-Control "no-store"
     @internal_admin path /internal/admin/*
     respond @internal_admin 404
+    @small_auth_write {
+        method POST
+        path /api/v1/auth/pair /api/v1/auth/logout
+    }
+    request_body @small_auth_write {
+        max_size 16KB
+    }
     reverse_proxy api:8000
 }
