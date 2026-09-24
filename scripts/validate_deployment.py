@@ -78,8 +78,11 @@ def validate(args: argparse.Namespace) -> tuple[list[str], dict[str, object]]:
             errors.append("API_IMAGE still contains a placeholder")
         if "@sha256:" not in api_image and not args.allow_mutable_images:
             errors.append("API_IMAGE must be pinned by sha256 digest")
-    if caddy_image.endswith(":latest") and not args.allow_mutable_images:
-        errors.append("CADDY_IMAGE must not use :latest")
+    if caddy_image:
+        if looks_placeholder(caddy_image):
+            errors.append("CADDY_IMAGE still contains a placeholder")
+        if "@sha256:" not in caddy_image and not args.allow_mutable_images:
+            errors.append("CADDY_IMAGE must be pinned by sha256 digest")
 
     if database_url and not database_url.startswith("postgresql+asyncpg://"):
         errors.append("DATABASE_URL must use postgresql+asyncpg://")
