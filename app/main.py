@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +42,7 @@ app.include_router(auth_session_router)
 app.include_router(reference_router)
 app.include_router(sync_v2_router)
 
-DocumentID = Annotated[str, Path(min_length=1)]
+DocumentID = Annotated[str, Path(min_length=1, max_length=128)]
 
 
 def _route_template(request: Request) -> str | None:
@@ -136,7 +136,7 @@ async def sync_push(
 
 @app.get("/api/v1/sync/pull", response_model=SyncBatch, operation_id="syncPull")
 async def sync_pull(
-    cursor: str | None = None,
+    cursor: Annotated[str | None, Query(max_length=128)] = None,
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(session_scope),
 ) -> SyncBatch:
@@ -200,8 +200,14 @@ async def evidence_head(
 async def evidence_put(
     documentID: DocumentID,
     request: Request,
-    x_vitrial_item_id: Annotated[str, Header(alias="X-Vitrial-Item-ID", min_length=1)],
-    x_vitrial_filename: Annotated[str, Header(alias="X-Vitrial-Filename", min_length=1)],
+    x_vitrial_item_id: Annotated[
+        str,
+        Header(alias="X-Vitrial-Item-ID", min_length=1, max_length=128),
+    ],
+    x_vitrial_filename: Annotated[
+        str,
+        Header(alias="X-Vitrial-Filename", min_length=1, max_length=255),
+    ],
     x_content_sha256: Annotated[
         str,
         Header(alias="X-Content-SHA256", pattern=r"^[0-9a-fA-F]{64}$"),
