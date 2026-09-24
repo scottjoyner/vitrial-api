@@ -15,6 +15,8 @@ from app.sync_v2 import (
     SyncBatchV2,
     SyncRecordV2,
 )
+from app import sync_service
+from app.sync_service import MAX_SYNC_PULL_RESPONSE_BYTES, pull_page_accepts
 
 NOW = datetime.now(timezone.utc)
 
@@ -102,3 +104,44 @@ def test_v2_sync_batch_rejects_aggregate_payload_over_budget():
 
     with pytest.raises(ValidationError):
         SyncBatchV2(deviceID="device-1", records=records)
+
+
+
+def test_pull_page_rejects_record_after_public_record_count_ceiling():
+    records = [v1_record(index) for index in range(MAX_SYNC_RECORDS)]
+    assert pull_page_accepts(records, v1_record(MAX_SYNC_RECORDS), 999) is False
+
+
+def test_pull_page_rejects_next_record_before_aggregate_model_budget_is_exceeded():
+    payload_size = (MAX_SYNC_V1_BATCH_PAYLOAD_BYTES // 2) + 1
+    first = SyncRecord(
+        id="pull-large-1",
+        entityType="customer",
+        entityID="customer-pull-large-1",
+        updatedAt=NOW,
+        payload=b"x" * payload_size,
+        clientMutationID="mutation-pull-large-1",
+    )
+    second = SyncRecord(
+        id="pull-large-2",
+        entityType="customer",
+        entityID="customer-pull-large-2",
+        updatedAt=NOW,
+        payload=b"x" * payload_size,
+        clientMutationID="mutation-pull-large-2",
+    )
+
+    assert pull_page_accepts([], first, 1) is True
+    assert pull_page_accepts([first], second, 2) is False
+
+
+def test_pull_page_rejects_next_record_when_serialized_response_budget_is_exceeded(monkeypatch):
+    first = v1_record(1)
+    second = v1_record(2)
+    one_record_size = len(
+        SyncBatch(deviceID="server", cursor="seq:1", records=[first]).model_dump_json().encode("utf-8")
+    )
+    monkeypatch.setattr(sync_service, "MAX_SYNC_PULL_RESPONSE_BYTES", one_record_size + 1)
+
+    assert pull_page_accepts([], first, 1) is True
+    assert pull_page_accepts([first], second, 2) is False
