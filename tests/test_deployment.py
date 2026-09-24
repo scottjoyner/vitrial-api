@@ -130,6 +130,10 @@ def test_caddy_bounds_structured_sync_requests_before_proxying():
     assert "path /api/v1/sync/push /api/v2/sync/push" in caddyfile
     assert "request_body @sync_push" in caddyfile
     assert "max_size 4MB" in caddyfile
+    assert "path /api/v1/auth/pair /api/v1/auth/logout" in caddyfile
+    assert "request_body @small_auth_write" in caddyfile
+    assert "max_size 16KB" in caddyfile
+    assert 'Cache-Control "no-store"' in caddyfile
 
 
 def test_deploy_script_is_syntax_valid_and_verifies_runtime_release_identity():
