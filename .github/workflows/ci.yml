@@ -178,6 +178,7 @@ jobs:
       - name: Prove database persistence and S3 dependency recovery
         run: |
           COMPOSE="docker compose --env-file /tmp/vitrial-acceptance.env -f deploy/compose.acceptance.yml"
+          test "$(curl -ksS -o /dev/null -w '%{http_code}' https://localhost:8443/internal/admin/v1/bootstrap)" = "404"
           $COMPOSE exec -T api python scripts/probe_dependencies.py
           $COMPOSE exec -T postgres psql -U vitrial -d vitrial -v ON_ERROR_STOP=1 \
             -c "CREATE TABLE IF NOT EXISTS deployment_smoke (id integer primary key); INSERT INTO deployment_smoke (id) VALUES (1) ON CONFLICT DO NOTHING;"
