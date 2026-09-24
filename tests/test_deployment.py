@@ -117,6 +117,13 @@ def test_validator_rejects_group_readable_secret_file(tmp_path: Path):
     assert "chmod 600" in result.stdout
 
 
+def test_public_caddy_edge_blocks_internal_admin_control_plane():
+    for filename in ("Caddyfile", "Caddyfile.smoke"):
+        caddyfile = (ROOT / "deploy" / filename).read_text(encoding="utf-8")
+        assert "@internal_admin path /internal/admin/*" in caddyfile
+        assert "respond @internal_admin 404" in caddyfile
+
+
 def test_caddy_bounds_structured_sync_requests_before_proxying():
     caddyfile = (ROOT / "deploy" / "Caddyfile").read_text(encoding="utf-8")
     assert "method POST" in caddyfile
