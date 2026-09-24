@@ -31,7 +31,7 @@ def production_values() -> dict[str, str]:
     return {
         "API_HOST": "api.vitrial.invalid",
         "API_IMAGE": "ghcr.io/vitrial/api@sha256:" + "a" * 64,
-        "CADDY_IMAGE": "caddy:2-alpine",
+        "CADDY_IMAGE": "caddy@sha256:" + "c" * 64,
         "SERVICE_VERSION": "0.2.0",
         "DATABASE_URL": "postgresql+asyncpg://vitrial:strong-db-secret@db.internal.invalid:5432/vitrial",
         "S3_ENDPOINT_URL": "https://objects.internal.invalid",
@@ -61,6 +61,7 @@ def test_production_validator_rejects_local_persistence_mutable_api_and_insecure
     values = production_values()
     values.update({
         "API_IMAGE": "vitrial-api:latest",
+        "CADDY_IMAGE": "caddy:2-alpine",
         "DATABASE_URL": "postgresql+asyncpg://vitrial:strong-db-secret@localhost:5432/vitrial",
         "S3_ENDPOINT_URL": "http://localhost:9000",
     })
@@ -69,7 +70,8 @@ def test_production_validator_rejects_local_persistence_mutable_api_and_insecure
     assert result.returncode == 1
     payload = json.loads(result.stdout)
     joined = " | ".join(payload["errors"])
-    assert "sha256" in joined
+    assert "API_IMAGE must be pinned by sha256 digest" in joined
+    assert "CADDY_IMAGE must be pinned by sha256 digest" in joined
     assert "external persistent PostgreSQL" in joined
     assert "https://" in joined
 
