@@ -52,9 +52,11 @@ Rollback intentionally **does not automatically downgrade the database**. Databa
 
 ## Single-host acceptance topology
 
-`compose.acceptance.yml` exists to unblock physical two-user/two-device acceptance. It adds PostgreSQL and MinIO on private Docker networking with named persistent volumes. Neither data service publishes a host port. Caddy remains the only public edge.
+`compose.acceptance.yml` exists to validate application topology and the S3 protocol contract without pretending CI storage is production durability. It runs PostgreSQL on a named persistent volume plus an **ephemeral S3 test service** on private Docker networking. Neither data service publishes a host port. Caddy remains the only public edge.
 
-This topology is suitable for an acceptance environment or temporary staging host. It is not equivalent to managed production persistence because database/object data share the fate of one machine.
+The S3 test service is deliberately recreated from configuration and initialized through boto3. Its purpose is to prove the API operations Vitrial uses (bucket access, multipart upload, copy/head/get/delete and recovery behavior), not object durability. The acceptance restart check proves PostgreSQL persistence and that the API recovers after the S3 dependency restarts and the test bucket is recreated.
+
+Real staging/production promotion must separately prove the actual S3 provider's persistence/versioning/retention/restore behavior. Do not cite the CI emulator as durability evidence.
 
 For local/CI smoke tests `Caddyfile.smoke` serves `https://localhost` using Caddy's internal CA. Real device acceptance should use the normal `Caddyfile` and a publicly resolvable hostname so Caddy obtains a trusted certificate automatically.
 

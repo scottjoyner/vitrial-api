@@ -8,9 +8,9 @@ x-api-environment: &api-environment
   ADMIN_API_KEY_HASH: ${ADMIN_API_KEY_HASH:?ADMIN_API_KEY_HASH is required for acceptance provisioning}
   EVIDENCE_STORAGE_PROVIDER: s3
   EVIDENCE_GC_GRACE_SECONDS: ${EVIDENCE_GC_GRACE_SECONDS:-86400}
-  S3_ENDPOINT_URL: http://minio:9000
-  S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-  S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+  S3_ENDPOINT_URL: http://s3-test:5000
+  S3_ACCESS_KEY_ID: ${S3_TEST_ACCESS_KEY:?S3_TEST_ACCESS_KEY is required}
+  S3_SECRET_ACCESS_KEY: ${S3_TEST_SECRET_KEY:?S3_TEST_SECRET_KEY is required}
   S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required}
   S3_REGION: ${S3_REGION:-us-east-1}
   S3_PART_SIZE_BYTES: ${S3_PART_SIZE_BYTES:-5242880}
@@ -32,32 +32,53 @@ services:
       timeout: 5s
       retries: 20
 
-  minio:
-    image: ${MINIO_IMAGE:?MINIO_IMAGE is required}
-    command: server /data
+  # CI/acceptance S3 protocol emulator only. This service is deliberately
+  # ephemeral and is not evidence of production object-storage durability.
+  s3-test:
+    image: ${S3_TEST_IMAGE:?S3_TEST_IMAGE is required}
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MOTO_PORT: "5000"
+      AWS_ACCESS_KEY_ID: ${S3_TEST_ACCESS_KEY:?S3_TEST_ACCESS_KEY is required}
+      AWS_SECRET_ACCESS_KEY: ${S3_TEST_SECRET_KEY:?S3_TEST_SECRET_KEY is required}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
     restart: unless-stopped
     networks: [backend]
-    volumes:
-      - minio-data:/data
 
-  minio-init:
-    image: ${MINIO_MC_IMAGE:?MINIO_MC_IMAGE is required}
+  s3-init:
+    image: ${API_IMAGE:?API_IMAGE is required}
     depends_on:
-      minio:
+      s3-test:
         condition: service_started
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      S3_TEST_ACCESS_KEY: ${S3_TEST_ACCESS_KEY:?S3_TEST_ACCESS_KEY is required}
+      S3_TEST_SECRET_KEY: ${S3_TEST_SECRET_KEY:?S3_TEST_SECRET_KEY is required}
       S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required}
+      S3_REGION: ${S3_REGION:-us-east-1}
     networks: [backend]
-    entrypoint: ["/bin/sh", "-ec"]
+    entrypoint: ["python", "-c"]
     command:
       - |
-        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1; do sleep 1; done
-        mc mb --ignore-existing "local/$${S3_BUCKET}"
+        import os, time, boto3
+        from botocore.client import Config
+        client = boto3.client(
+            "s3",
+            endpoint_url="http://s3-test:5000",
+            aws_access_key_id=os.environ["S3_TEST_ACCESS_KEY"],
+            aws_secret_access_key=os.environ["S3_TEST_SECRET_KEY"],
+            region_name=os.environ.get("S3_REGION", "us-east-1"),
+            config=Config(s3={"addressing_style": "path"}),
+        )
+        for attempt in range(60):
+            try:
+                client.list_buckets()
+                break
+            except Exception:
+                if attempt == 59:
+                    raise
+                time.sleep(1)
+        bucket = os.environ["S3_BUCKET"]
+        if bucket not in {item["Name"] for item in client.list_buckets().get("Buckets", [])}:
+            client.create_bucket(Bucket=bucket)
     restart: "no"
 
   migrate:
@@ -82,7 +103,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
     restart: unless-stopped
     networks: [backend]
@@ -126,6 +147,5 @@ networks:
 
 volumes:
   postgres-data:
-  minio-data:
   caddy-data:
   caddy-config:
