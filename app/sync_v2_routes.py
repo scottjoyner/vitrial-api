@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, current_principal
@@ -39,7 +41,7 @@ async def sync_push_v2(
 
 @router.get("/sync/pull", response_model=SyncBatchV2, operation_id="syncPullV2")
 async def sync_pull_v2(
-    cursor: str | None = None,
+    cursor: Annotated[str | None, Query(max_length=128)] = None,
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(session_scope),
 ) -> SyncBatchV2:
