@@ -109,6 +109,14 @@ def test_validator_rejects_group_readable_secret_file(tmp_path: Path):
     assert "chmod 600" in result.stdout
 
 
+def test_caddy_bounds_structured_sync_requests_before_proxying():
+    caddyfile = (ROOT / "deploy" / "Caddyfile").read_text(encoding="utf-8")
+    assert "method POST" in caddyfile
+    assert "path /api/v1/sync/push /api/v2/sync/push" in caddyfile
+    assert "request_body @sync_push" in caddyfile
+    assert "max_size 4MB" in caddyfile
+
+
 def test_deploy_script_is_syntax_valid_and_verifies_runtime_release_identity():
     syntax = subprocess.run(
         ["bash", "-n", str(DEPLOY_SCRIPT)],
