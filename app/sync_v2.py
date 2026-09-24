@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, JsonValue, field_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
@@ -19,6 +19,7 @@ from app.schemas import (
 from app.sync_service import InvalidMutation, apply_push, decode_payload, pull_since
 
 MAX_SYNC_V2_PAYLOAD_BYTES = 1_500_000
+MAX_SYNC_V2_BATCH_PAYLOAD_BYTES = 1_500_000
 
 
 def _canonical_json_bytes(payload: dict[str, JsonValue]) -> bytes:
@@ -57,6 +58,15 @@ class SyncBatchV2(StrictModel):
     deviceID: str = Field(min_length=1, max_length=MAX_SYNC_IDENTIFIER_LENGTH)
     cursor: str | None = Field(default=None, max_length=MAX_SYNC_IDENTIFIER_LENGTH)
     records: list[SyncRecordV2] = Field(default_factory=list, max_length=MAX_SYNC_RECORDS)
+
+    @model_validator(mode="after")
+    def aggregate_payload_must_be_bounded(self) -> "SyncBatchV2":
+        total = sum(len(_canonical_json_bytes(record.payload)) for record in self.records)
+        if total > MAX_SYNC_V2_BATCH_PAYLOAD_BYTES:
+            raise ValueError(
+                f"aggregate sync payload exceeds {MAX_SYNC_V2_BATCH_PAYLOAD_BYTES} bytes"
+            )
+        return self
 
 
 class SyncResultV2(StrictModel):
