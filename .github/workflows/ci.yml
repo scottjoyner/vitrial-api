@@ -47,8 +47,8 @@ jobs:
       EVIDENCE_STORAGE_PROVIDER: s3
       EVIDENCE_GC_GRACE_SECONDS: "0"
       S3_ENDPOINT_URL: http://localhost:9000
-      S3_ACCESS_KEY_ID: minioadmin
-      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_ACCESS_KEY_ID: vitrials3secret
+      S3_SECRET_ACCESS_KEY: vitrials3secret
       S3_BUCKET: vitrial-evidence
       S3_REGION: us-east-1
       # Overridable per repository so the object-storage image can be changed
@@ -111,8 +111,8 @@ jobs:
           client = boto3.client(
               "s3",
               endpoint_url="http://localhost:9000",
-              aws_access_key_id="minioadmin",
-              aws_secret_access_key="minioadmin",
+              aws_access_key_id="vitrials3secret",
+              aws_secret_access_key="vitrials3secret",
               region_name="us-east-1",
               config=Config(s3={"addressing_style": "path"}),
           )
@@ -159,10 +159,9 @@ jobs:
           POSTGRES_DB=vitrial
           POSTGRES_USER=vitrial
           POSTGRES_PASSWORD=ci-postgres-secret-12345
-          MINIO_IMAGE=quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
-          MINIO_MC_IMAGE=quay.io/minio/mc:RELEASE.2025-02-08T19-14-21Z
-          MINIO_ROOT_USER=ci-minio-access-12345
-          MINIO_ROOT_PASSWORD=ci-minio-secret-12345
+          S3_IMAGE=${{ vars.S3_IMAGE || 'rustfs/rustfs:1.0.0' }}
+          S3_ROOT_USER=ci-s3-access-12345
+          S3_ROOT_PASSWORD=ci-s3-secret-12345
           HTTP_PORT=8080
           HTTPS_PORT=8443
           CADDYFILE_PATH=./Caddyfile.smoke
@@ -198,8 +197,8 @@ jobs:
           $COMPOSE exec -T api python scripts/probe_dependencies.py
           $COMPOSE exec -T postgres psql -U vitrial -d vitrial -v ON_ERROR_STOP=1 \
             -c "CREATE TABLE IF NOT EXISTS deployment_smoke (id integer primary key); INSERT INTO deployment_smoke (id) VALUES (1) ON CONFLICT DO NOTHING;"
-          $COMPOSE exec -T minio sh -ec 'printf persistent > /data/.vitrial-deployment-smoke'
-          $COMPOSE restart postgres minio api
+          $COMPOSE exec -T s3 sh -ec 'printf persistent > /data/.vitrial-deployment-smoke'
+          $COMPOSE restart postgres s3 api
           for attempt in $(seq 1 30); do
             if curl -kfsS https://localhost:8443/health >/dev/null; then
               break
@@ -207,7 +206,7 @@ jobs:
             sleep 2
           done
           test "$($COMPOSE exec -T postgres psql -U vitrial -d vitrial -Atc 'SELECT count(*) FROM deployment_smoke WHERE id = 1')" = "1"
-          test "$($COMPOSE exec -T minio sh -ec 'cat /data/.vitrial-deployment-smoke')" = "persistent"
+          test "$($COMPOSE exec -T s3 sh -ec 'cat /data/.vitrial-deployment-smoke')" = "persistent"
           $COMPOSE exec -T api python scripts/probe_dependencies.py --quiet
       - name: Tear down smoke deployment
         if: always()
