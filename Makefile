@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check beam-structure ubs branches
+.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check beam-structure ubs ubs-accept branches
 
 install:
 	python -m pip install -e '.[dev]'
@@ -107,3 +107,21 @@ ubs:
 # --no-merged / git cherry both lie on a squash-merge repo. Exit 1 if real work found.
 branches:
 	$(PYTHON) scripts/audit_branch_staleness.py
+
+# Accept the findings the last scan reported as KNOWN.
+#
+# `make ubs` writes ubs-history.json, which is what makes "new" mean "never seen
+# before" rather than "absent from the last run". It is deliberately NOT
+# auto-committed by the gate: accepting findings silently is the rebaseline the
+# gate exists to prevent, so acceptance is an act somebody performs on purpose.
+#
+# Run this only after deciding each new finding is a validated false positive or
+# an accepted debt -- never to make the gate green.
+ubs-accept:
+	@test -f ubs-history.json || { \
+		echo "no ubs-history.json; run 'make ubs' first"; exit 1; }
+	@echo "ubs-history.json now records these findings as known:"
+	@$(PYTHON) -c "import json;d=json.load(open('ubs-history.json'));print(len(d['fingerprints']),'fingerprints')"
+	@echo
+	@echo "Review the diff, then commit it yourself:"
+	@echo "  git diff ubs-history.json && git add ubs-history.json && git commit -m 'UBS: accept <n> validated findings as known'"

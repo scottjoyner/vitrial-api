@@ -13,12 +13,22 @@ build/
 *.egg-info/
 .DS_Store
 
-# UBS rapid bug gate: per-run artifact written by scripts/ubs_gate.sh.
-# Uploaded by .github/workflows/ubs.yml as a run artifact and read by nothing in
-# the tree, so it is untracked. It WAS tracked, which meant every scan rewrote a
-# 6,400-line committed file and left the tree dirty -- so a sibling running the
-# gate produced a diff that looked like work and was only a timestamp.
+# UBS rapid bug gate: per-run artifacts written by scripts/ubs_gate.sh.
+# Uploaded by .github/workflows/ubs.yml as run artifacts and read by nothing in
+# the tree, so they are untracked. ubs-findings.txt WAS tracked, which meant every
+# scan rewrote a 6,400-line committed file and left the tree dirty -- so a sibling
+# running the gate produced a diff that looked like work and was only a timestamp.
 ubs-findings.txt
+
+# The generated views over that run. ubs-findings.json and ubs-new.md are
+# rebuilt on every scan and are only ever consumed as run artifacts.
+#
+# ubs-history.json is deliberately NOT ignored. It is the accumulated fingerprint
+# set that makes "new" mean "never seen before" rather than "absent from the last
+# run", and accepting a finding is the act of committing the updated set. A gate
+# whose history is gitignored would forget everything on every fresh clone.
+ubs-findings.json
+ubs-new.md
 
 # BEAM build artifacts and the local container cache. _build and deps are
 # resolved inside beam/ by the umbrella's mix.exs; .cache/ holds the bind mounts

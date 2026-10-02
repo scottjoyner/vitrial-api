@@ -235,11 +235,17 @@ them is optional hygiene, not a blocker.
 ## W7 — production-foundation boxes not yet attempted
 
 Per #28, none of these are defects — they are unshipped commitments:
-- [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
-- [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
+- [x] **Graceful shutdown/drain** — `app/drain.py` + lifespan; `/ready` flips 503 on SIGTERM
+      while `/health` stays 200; `--timeout-graceful-shutdown 45` in the Dockerfile and
+      `stop_grace_period: 60s` in production compose (must exceed it, or Docker SIGKILLs
+      mid-upload); `deploy.sh` awaits the replaced container and fails on non-zero exit.
+      Proven by `tests/test_graceful_drain.py`, including two planted-defect controls.
+      Commit `04a612d`. This was the one item whose absence was a real defect.
 - [ ] Metrics endpoint: request rate/latency/status, auth failures, sync accepted/rejected,
-      DB pool saturation, S3 latency, GC backlog, page sizes.
-- [ ] Graceful shutdown/drain test with in-flight sync and evidence streams.
+      DB pool saturation, S3 latency, GC backlog, page sizes. Now unblocked by W6 —
+      rejections carry stable codes, so the counter has something stable to count.
+- [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
+- [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
 - [ ] W3 follow-up: acceptance assertion so a mis-set trust proxy fails fast.
 - [ ] `VITR-V005` follow-up: `jsonb` + GIN index migration (schema change on a pinned contract).
 

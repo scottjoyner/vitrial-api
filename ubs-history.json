@@ -1,0 +1,34 @@
+{
+  "comment": "Accumulated UBS finding fingerprints. A finding counts as KNOWN once it appears here, so 'new' means 'never seen before' rather than 'absent from the last run'. Fingerprints are rule+file+normalized code, never line numbers, so this survives reformatting and rebases. Delete an entry to make that finding new again -- that is the accept-a-known-finding action, and it is deliberately manual.",
+  "fingerprints": [
+    "1014e0c2a6a3a7cf",
+    "1cdff27257382e23",
+    "1d6b9670cd1b0020",
+    "21a02ab66eb0fb75",
+    "3835a7b33a563dae",
+    "3feacd9d555e4190",
+    "41c8ee0b9b53112e",
+    "572945675039141f",
+    "7fe43641774105ef",
+    "8ee6faeb437013d3",
+    "8f1046cf3d8b2256",
+    "9d2dc08989d4b465",
+    "9e01fd2c60126ea7",
+    "ab00a0d81b98fd64",
+    "ae8be1515c20f0ee",
+    "e432c6d5b3d22935",
+    "e8ef05c139bbe982"
+  ],
+  "last_totals": {
+    "critical": 16,
+    "failed_modules": [],
+    "files": 50,
+    "info": 328,
+    "project": "/home/nez/Projects/server-api",
+    "status": "ok",
+    "timestamp": "2026-10-02T22:18:35Z",
+    "type": "totals",
+    "warning": 3
+  },
+  "updated_at": null
+}

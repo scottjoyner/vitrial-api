@@ -58,10 +58,40 @@ jobs:
       - name: Scan + delta verdict
         run: bash scripts/ubs_gate.sh ubs-baseline.json
 
-      - name: Publish findings log
+      # Machine-readable, and the artifact an agent should actually read.
+      #
+      # ubs-findings.txt is the human log and stays at 7 days -- it is large,
+      # mostly the UBS banner, and nobody parses it. ubs-findings.json is the
+      # queryable one: every finding with rule, severity, file, line, the
+      # offending source line, a permalink pinned to this commit, and a stable
+      # fingerprint. 30 days because a finding is worth acting on long after the
+      # run that found it, and a 7-day artifact is usually gone by then.
+      #
+      # The gate also writes the NEW findings to $GITHUB_STEP_SUMMARY, so the run
+      # page itself states what broke without anyone downloading anything. That
+      # is the cheapest possible thing for a future agent to read.
+      #
+      # ubs-history.json is the accumulated fingerprint set. Uploaded, but NOT
+      # committed here, deliberately: auto-committing it would silently accept
+      # every finding the run saw, which is exactly the rebaseline this gate
+      # exists to prevent. Accepting a finding is a human committing the updated
+      # set -- see that file's own comment.
+      - name: Publish findings (queryable JSON + new-findings table + fingerprint set)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ubs-findings
+          name: ubs-findings-json
+          path: |
+            ubs-findings.json
+            ubs-new.md
+            ubs-history.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Publish human-readable findings log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubs-findings-log
           path: ubs-findings.txt
           retention-days: 7

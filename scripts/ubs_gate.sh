@@ -25,7 +25,8 @@ if [ ! -f "$BASELINE" ]; then echo "UBS gate: baseline $BASELINE missing"; exit 
 
 REPORT="$(mktemp /tmp/ubs-gate.XXXXXX.json)"
 LOG="$(mktemp /tmp/ubs-gate.XXXXXX.txt)"
-trap 'rm -f "$REPORT" "$LOG"' EXIT
+STREAM="$(mktemp /tmp/ubs-gate.XXXXXX.jsonl)"
+trap 'rm -f "$REPORT" "$LOG" "$STREAM"' EXIT
 
 : >ubs-findings.txt   # always present: CI uploads it as the run artifact
 # stdout stays human-readable (--new-only prints just the new findings and the Δ
@@ -42,6 +43,32 @@ esac
 
 # Show only the findings that are new vs baseline; keep them in the artifact log.
 if [ -s "$LOG" ]; then tee ubs-findings.txt <"$LOG"; fi
+
+# Second pass, for the per-finding stream only.
+#
+# `--output` mirrors whichever `--format` is selected, so the text run above
+# writes TEXT into --output, not JSONL (measured: the stream began with the
+# "Ignoring paths from .ubsignore" banner, and ubs_trace.py correctly refused to
+# parse it). Getting JSONL therefore means a jsonl-formatted invocation, and UBS
+# has no flag that emits two formats in one scan. The cost is one extra pass,
+# measured at ~7s against a gate that already runs in ~30s.
+#
+# This pass is NEVER the verdict. It exists only to produce something an agent
+# can read. The authoritative comparison is the JSON delta judged below, from the
+# first invocation. If this one fails, the job carries on and says so.
+"${UBS[@]}" . --only=python --ci --format=jsonl --output="$STREAM" >/dev/null 2>&1 || true
+
+# Fingerprint the findings against ubs-history.json so "new" means "never seen
+# before" rather than "absent from the last run", and emit ubs-findings.json /
+# ubs-new.md (the latter to $GITHUB_STEP_SUMMARY when running under Actions).
+#
+# NEVER let this change the verdict. Reporting only: a tracer failure must not
+# become a second, differently-computed gate.
+if [ -s "$STREAM" ]; then
+  python3 scripts/ubs_trace.py "$STREAM" || echo "UBS gate: tracer failed (reporting only; verdict below is authoritative)"
+else
+  echo "UBS gate: no per-finding stream emitted; skipping the tracer."
+fi
 
 python3 - "$REPORT" <<'PY'
 import json, sys

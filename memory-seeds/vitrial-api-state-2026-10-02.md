@@ -41,7 +41,26 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **311 passed, 1 skipped**.
+`make check` runs contract validation + guard lint + tests. Baseline: **315 passed, 1 skipped**.
+
+## HOME MOVED (2026-10-02)
+
+Work now happens in **`/home/nez/Projects/server-api`** (GitHub `astrix-group-accounts/server-api`),
+not `~/Projects/vitrial-api`. All six W1–W6 commits migrated with history intact, verified as
+ancestors of the new `main` (`48fc04f`). `~/Projects/vitrial-api` is a read-only source now.
+A BEAM/Elixir effort runs on the same repo by another agent; Python-only changes, commit
+your own files only (`git add <files>`, never `git add -A` — there is concurrent in-flight work).
+
+## Graceful drain landed (commit 04a612d)
+
+The one W7 item whose absence was a real defect. 100 MiB streamed uploads and org-locked
+pushes were being SIGKILLed by Docker's 10s default on every deploy. Fixed with a drain
+flag: `/ready` goes 503 on SIGTERM while `/health` stays 200, uvicorn gets a 45s graceful
+timeout, compose gets `stop_grace_period: 60s` (must EXCEED it), and `deploy.sh` awaits the
+replaced container and fails on non-zero exit. Negative controls planted and confirmed red.
+
+Durable tooling: venv `~/.venvs/vitrial-api`, PostgreSQL at `~/.pgdata/vitrial` port 5435.
+`/mnt/build-fast/tmp/opencode` is wiped between sessions — do not put anything load-bearing there.
 A parallel BEAM/Elixir effort also commits on `main`; my Python commits are all ancestors.
 
 ## W1–W6 all closed (2026-10-02)
