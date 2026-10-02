@@ -65,8 +65,13 @@ defmodule VitrialSync.Timestamp do
   defp iso_time(datetime) do
     base = "#{pad(datetime.hour, 2)}:#{pad(datetime.minute, 2)}:#{pad(datetime.second, 2)}"
 
+    # The zero test is on the VALUE, never on the precision. A `DateTime` parsed
+    # from "...T00:00:00.000000Z" carries `{0, 6}` -- value zero, precision six --
+    # so matching on the second element treats an explicitly-written zero
+    # fraction as a non-zero one and emits `.000000`, which isoformat() omits.
+    # Two spellings of the same instant would then fingerprint differently.
     case datetime.microsecond do
-      {_value, 0} ->
+      {0, _precision} ->
         base
 
       {value, _precision} ->

@@ -118,6 +118,22 @@ defmodule VitrialSync.CanonicalJSONTest do
       assert CanonicalJSON.encode(%{"s" => "a/b"}) == ~s({"s":"a/b"})
     end
 
+    test "every key in the short-escape table is an integer" do
+      # Regression. The quote and backslash entries were once written as the
+      # strings `"\""` and `"\\"` while the rest were character literals, so the
+      # table held mixed key types. `escape_char/1` is called with an integer --
+      # a character off a binary -- and `Map.fetch/2` never matches a string key,
+      # so both escapes were SILENTLY SKIPPED. Nothing raised; every string
+      # containing a quote or a backslash just fingerprinted differently from
+      # Python. The character literal `?"` cannot be used to avoid this: Elixir
+      # lexes it as the opening of a string literal, which is a parse error at
+      # the next `?:` on the line, reported at a column nowhere near the cause.
+      for {key, escaped} <- Map.to_list(short_escapes()) do
+        assert is_integer(key), "short-escape table key #{inspect(key)} is not an integer"
+        assert CanonicalJSON.encode(%{"s" => <<key>>}) == ~s({"s":"#{escaped}"})
+      end
+    end
+
     test "escaping applies to keys as well as values" do
       assert CanonicalJSON.encode(%{"a\"b" => 1}) == ~s({"a\\"b":1})
     end

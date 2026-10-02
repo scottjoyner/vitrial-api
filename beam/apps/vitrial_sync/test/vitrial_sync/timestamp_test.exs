@@ -30,6 +30,12 @@ defmodule VitrialSync.TimestampTest do
   describe "fractional seconds" do
     test "zero microseconds are omitted entirely" do
       assert Timestamp.normalize("2026-01-01T00:00:00.000000Z") == "2026-01-01T00:00:00+00:00"
+      # Spelled-out zero is the same instant as no fraction at all, and must
+      # render identically. This is the case that catches matching the PRECISION
+      # instead of the VALUE: a parsed ".000000" carries {0, 6}, and a test on
+      # the second element emits ".000000" where isoformat() omits it.
+      assert Timestamp.normalize("2026-01-01T00:00:00.000000Z") ==
+               Timestamp.normalize("2026-01-01T00:00:00Z")
     end
 
     test "non-zero microseconds are rendered as exactly six digits" do

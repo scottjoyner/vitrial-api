@@ -58,15 +58,36 @@ defmodule VitrialSync.CanonicalJSON do
 
   # The two mandatory escapes plus Python's short forms. `\/` is deliberately
   # absent: Python does not escape the solidus, and matching that is the point.
+  #
+  # EVERY key here is an integer, including the quote and the backslash. Writing
+  # those two as the strings `"\""` and `"\\"` compiles and looks correct, but
+  # `escape_char/1` is called with an integer -- a character off a binary -- so
+  # `Map.fetch(@short_escapes, char)` never matches a string key and both escapes
+  # are silently skipped. Every string containing a double quote or a backslash
+  # then fingerprints differently from Python, which is a wrong digest rather than
+  # an error. The character literal `?"` is not an option: Elixir's lexer reads
+  # it as a question mark followed by the OPENING of a string, so the rest of the
+  # line fails with "unexpected token: :" at a column nowhere near the cause.
   @short_escapes %{
-    ?\" => "\\\"",
-    ?\\ => "\\\\",
+    0x22 => "\\\"",
+    0x5C => "\\\\",
     ?\b => "\\b",
     ?\f => "\\f",
     ?\n => "\\n",
     ?\r => "\\r",
     ?\t => "\\t"
   }
+
+  @doc """
+  The short-escape table, exposed so its own key types can be tested.
+
+  Public because of how it went wrong once: a mixed-type table (integer keys for
+  the control characters, string keys for the quote and the backslash) compiles
+  cleanly, raises nothing, and silently skips both escapes -- see
+  `canonical_json_test.exs`.
+  """
+  @spec short_escapes() :: %{non_neg_integer() => String.t()}
+  def short_escapes, do: @short_escapes
 
   @doc """
   Encode `object` to canonical JSON bytes.
@@ -116,7 +137,7 @@ defmodule VitrialSync.CanonicalJSON do
     _ ->
       body =
         pairs
-        |> Enum.map(fn {key, value} -> [?\", escape(key), ?\": value] end)
+        |> Enum.map(fn {key, value} -> ["\"", escape(key), "\":", value] end)
         |> Enum.intersperse(?,)
 
       [?{, body, ?}] |> IO.iodata_to_binary()
@@ -124,7 +145,7 @@ defmodule VitrialSync.CanonicalJSON do
 end
 
   defp encode_value(value, _path) when is_binary(value) do
-    [?\", escape(value), ?\"]
+    ["\"", escape(value), "\""]
   end
 
   defp encode_value(value, _path) when is_integer(value) and value >= 0 do
