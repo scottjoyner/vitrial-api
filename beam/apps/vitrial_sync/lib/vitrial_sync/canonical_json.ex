@@ -33,12 +33,14 @@ defmodule VitrialSync.CanonicalJSON do
   """
 
   @typedoc """
-  The closed value shape the fingerprint admits.
+  Any JSON value.
 
-  A `nil` maps to JSON `null`, an integer to a bare decimal literal.
+  A `nil` maps to JSON `null`, `true`/`false` to the literals (NOT to `1`/`0`),
+  integers to bare decimals including negatives, and floats to Python's `repr`.
   """
-  @type scalar :: String.t() | non_neg_integer() | nil
-  @type object :: %{optional(String.t()) => scalar}
+  @type scalar :: String.t() | integer() | float() | boolean() | nil
+  @type value :: scalar | [value()] | %{optional(String.t()) => value()}
+  @type object :: %{optional(String.t()) => value()}
 
   defmodule Unsupported do
     @moduledoc """
@@ -99,7 +101,7 @@ defmodule VitrialSync.CanonicalJSON do
   """
   @spec encode(object()) :: binary()
   def encode(object) when is_map(object) do
-    encode_pairs(object)
+    encode_pairs(object, [])
   end
 
   @doc """
@@ -123,12 +125,12 @@ defmodule VitrialSync.CanonicalJSON do
     :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
   end
 
-  defp encode_pairs(object) do
+  defp encode_pairs(object, path) do
     # Sort on the raw key, not on the encoded fragment: after escaping, keys are
     # iolists and no longer comparable as strings.
     pairs =
       object
-      |> Enum.map(fn {key, value} -> {key, encode_value(value, [key])} end)
+      |> Enum.map(fn {key, value} -> {key, encode_value(value, path ++ [key])} end)
       |> Enum.sort_by(&elem(&1, 0))
 
     case pairs do
@@ -149,13 +151,68 @@ defmodule VitrialSync.CanonicalJSON do
     ["\"", escape(value), "\""]
   end
 
-  defp encode_value(value, _path) when is_integer(value) and value >= 0 do
+  # Booleans are matched before nil and integers so the literal is explicit.
+  # In Elixir `true`/`false` are atoms rather than integers so there is no
+  # overlap today -- but a digest that silently became `1`/`0` would be exactly
+  # the class of defect this module exists to prevent.
+  defp encode_value(true, _path), do: "true"
+  defp encode_value(false, _path), do: "false"
+  defp encode_value(nil, _path), do: "null"
+
+  defp encode_value(value, _path) when is_integer(value) do
     Integer.to_string(value)
   end
 
-  defp encode_value(nil, _path), do: "null"
+  defp encode_value(value, _path) when is_float(value) do
+    float(value)
+  end
+
+  defp encode_value([], _path), do: "[]"
+
+  defp encode_value(values, path) when is_list(values) do
+    body =
+      values
+      |> Enum.with_index()
+      |> Enum.map(fn {value, index} -> encode_value(value, path ++ [index]) end)
+      |> Enum.intersperse(?,)
+
+    ["[", body, "]"] |> IO.iodata_to_binary()
+  end
+
+  defp encode_value(value, path) when is_map(value) do
+    encode_pairs(value, path)
+  end
 
   defp encode_value(value, path), do: raise(Unsupported, value: value, path: path)
+
+  # Python renders floats with `repr`, which is the shortest string that
+  # round-trips -- the same algorithm Erlang's `:short` uses, and the two agree on
+  # every value tested. They differ only in scientific notation:
+  #
+  #     Erlang [:short]   Python repr
+  #     1.0e22            1e+22
+  #     1.0e-5            1e-05
+  #
+  # So: drop a trailing ".0" from an integral mantissa, and render the exponent
+  # with a mandatory sign and at least two digits. The magnitude at which Erlang
+  # switches to scientific notation already matches Python's.
+  defp float(value) do
+    case String.split(:erlang.float_to_binary(value, [:short]), "e") do
+      [fixed] ->
+        fixed
+
+      [mantissa, exponent] ->
+        mantissa =
+          if String.ends_with?(mantissa, ".0"),
+            do: String.trim_trailing(mantissa, ".0"),
+            else: mantissa
+
+        mantissa <> "e" <> python_exponent(exponent)
+    end
+  end
+
+  defp python_exponent("-" <> digits), do: "-" <> String.pad_leading(digits, 2, "0")
+  defp python_exponent(digits), do: "+" <> String.pad_leading(digits, 2, "0")
 
   defp escape(string) do
     # `::utf8` is load-bearing. Walking bytes would turn a single code point

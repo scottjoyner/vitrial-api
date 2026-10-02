@@ -53,30 +53,22 @@ defmodule VitrialSync.CanonicalJSONTest do
       assert CanonicalJSON.encode(%{"s" => ""}) == ~s({"s":""})
     end
 
-    test "a value outside the closed shape raises rather than being coerced" do
-      # Coercing a float or a map here would silently produce a digest that
-      # differs from Python's without anyone noticing until a replay is
-      # wrongly rejected. Failing loudly is the cheap outcome.
-      assert_raise CanonicalJSON.Unsupported, fn ->
-        CanonicalJSON.encode(%{"n" => 1.5})
-      end
-
-      assert_raise CanonicalJSON.Unsupported, fn ->
-        CanonicalJSON.encode(%{"n" => -1})
-      end
-
-      assert_raise CanonicalJSON.Unsupported, fn ->
-        CanonicalJSON.encode(%{"n" => %{"nested" => 1}})
-      end
-
-      assert_raise CanonicalJSON.Unsupported, fn ->
-        CanonicalJSON.encode(%{"n" => [1, 2]})
-      end
+    test "a value that is not JSON at all raises rather than being coerced" do
+      # Coercing a term here would silently produce a digest that differs from
+      # Python's without anyone noticing until a replay is wrongly rejected.
+      # Failing loudly is the cheap outcome.
+      #
+      # Floats, negative integers, nested maps and arrays used to be in this
+      # list; they are legitimate JSON and `VitrialSync.Page` encodes them for
+      # stored entity payloads. See CanonicalJSONValuesTest.
+      assert_raise CanonicalJSON.Unsupported, fn -> CanonicalJSON.encode(%{"n" => {:a, 1}}) end
+      assert_raise CanonicalJSON.Unsupported, fn -> CanonicalJSON.encode(%{"n" => :atom}) end
+      assert_raise CanonicalJSON.Unsupported, fn -> CanonicalJSON.encode(%{"n" => self()}) end
     end
 
     test "the error names the offending key" do
       assert_raise CanonicalJSON.Unsupported, ~r/entityID/, fn ->
-        CanonicalJSON.encode(%{"entityID" => 1.5})
+        CanonicalJSON.encode(%{"entityID" => {:a, 1}})
       end
     end
   end
