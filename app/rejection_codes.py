@@ -23,6 +23,13 @@ RejectionCode = Literal[
     "mutation_id_collision",
     "stale_revision",
     "idempotent_replay",
+    # The same clientMutationID came back with the same bytes, but the original
+    # attempt was REJECTED. Nothing replayed and the id is spent: a client must
+    # mint a new id to retry. Without this token the outcome is either reported
+    # as `idempotent_replay` (a false statement) or folded into
+    # `mutation_id_collision` (which implies different bytes, and there were
+    # none). See S-55a.
+    "rejected_mutation_id_reuse",
     # authority
     "authorization_rejected",
     "capability_missing",

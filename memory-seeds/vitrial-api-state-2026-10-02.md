@@ -30,6 +30,17 @@ running `ubs` to literally 0 means distorting `auth.py`'s `token_hash ==` lookup
 which would be a regression. Next session: treat any *new* class of warning as a real-fix
 prompt, and do not re-litigate the false-positive set.
 
+## W1–W6 all closed (2026-10-02)
+
+All six `VITR-Vxxx` defects are fixed and the full suite is green at 311 passed / 1 skipped.
+Commits: W1 `18a4198`, W2 `5f6178f`, W3 `d0e1d93`, W4 `33ccee4`, W5 `30b29ab`, W6 `257e725`.
+Remaining work is the #28 production-foundation boxes tracked as W7, not defects. Note the
+parallel BEAM pass also committed on this branch; my commits are all ancestors of HEAD.
+
+Environment note: the `/mnt/build-fast/tmp/opencode` scratch is wiped between turns. Durable
+tooling now lives at `~/.venvs/vitrial-api` and a PostgreSQL cluster under `~/.pgdata/vitrial`
+(port 5435). Run migrations before pytest or 44 tests fail for the wrong reason.
+
 ## Good first contribution — W1 (`VITR-V001` guard-layer dead rules), top of the tracker queue
 
 Dead guard prefixes: `request_size.py:79-82` has `/api/v1/sync/v2/push`, `/api/v1/admin`,

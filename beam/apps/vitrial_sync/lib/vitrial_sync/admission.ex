@@ -184,10 +184,12 @@ defmodule VitrialSync.Admission do
         }
 
       {:error, _reason} ->
-        # S-71: the reason is the exception class name. Reproduced verbatim,
-        # including its capitalisation, because this token is what the Python
-        # estate emits and dual-run compares them.
-        reject("InvalidMutation", context.current_server_revision)
+        # S-71: the reason is a token from the shared rejection vocabulary in
+        # `app/rejection_codes.py`. It used to be the Python exception class name,
+        # which meant a refactor that renamed a class silently renamed a token
+        # that clients and metrics key on. `InvalidMutation` maps to
+        # `invalid_mutation`, not to the class name.
+        reject("invalid_mutation", context.current_server_revision)
     end
   end
 

@@ -176,7 +176,7 @@ defmodule VitrialSync.JSONTest do
       assert JSON.decode(~s({"a")) == {:error, :unexpected_end}
       assert JSON.decode(~s({"a":1)) == {:error, :unexpected_end}
       assert JSON.decode("[1,") == {:error, :unexpected_end}
-      assert JSON.decode(~s('{"a": "unterminated)) == {:error, :unexpected_end}
+      assert JSON.decode("\"unterminated") == {:error, :unexpected_end}
     end
 
     test "a trailing comma is not permitted" do

@@ -101,11 +101,14 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | ID | Severity | Title | Status |
 |---|---|---|---|
 | `VITR-V001` | HIGH | V2 request size / aggregate ceiling missing; dead guard prefixes on three routes | **Fixed** in W1 (prefixes corrected, `SyncBatchV2` aggregate ceiling, guard lint in CI) |
-| `VITR-V002` | MED | Evidence header params unbounded while destination columns are bounded → 500 not 4xx | Open |
-| `VITR-V003` | HIGH | Auth rate limiter evadable via spoofed left-most `X-Forwarded-For` | Open |
-| `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | Open |
-| `VITR-V005` | MED | Evidence reference safety scan is O(all measurements + requirements) per delete | Open |
-| `VITR-V006` | MED | Rejection outcome is `reason=<exception class name>`, not a code — 183 decisions collapse to ~5 reasons | Open |
+| `VITR-V002` | MED | Evidence header params unbounded while destination columns are bounded → 500 not 4xx | **Fixed** (`5f6178f`) |
+| `VITR-V003` | HIGH | Auth rate limiter evadable via spoofed left-most `X-Forwarded-For` | **Fixed** (`d0e1d93`) |
+| `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | **Fixed** (`33ccee4`) |
+| `VITR-V005` | MED | Evidence reference safety scan is O(all measurements + requirements) per delete | **Fixed** (`30b29ab`) |
+| `VITR-V006` | MED | Rejection outcome is `reason=<exception class name>`, not a code | **Fixed** (`257e725`) |
+
+All six defects are closed. Remaining open work is #28 production-foundation boxes, not
+defects.
 
 ### `VITR-V001` — dead guard prefixes
 
@@ -188,22 +191,38 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - **Done when:** ✅ one manifest GET performs one seed check, not two.
 
 ### W5 — `VITR-V005` evidence safety scan O(N)
-- [ ] Replace the full-org `measurement`/`customer_requirement` payload scan in
-      `ownership.py:343` and `evidence_gc.py:42` with an indexed reference lookup (the same
-      prefetch discipline `pull_prefetch.py` uses).
-- **Done when:** evidence delete and GC recheck cost is independent of total org measurement count.
+- [x] Containment filter `_evidence_reference_filter` pushes the lookup into PostgreSQL
+      (`jsonb @>` against both `evidenceReferences` and `evidenceReferenceIDs`); delete and
+      GC no longer materialize every measurement payload in Python.
+- **Commit:** `30b29ab`. **Tests:** full suite green (311 passed).
+- **Done when:** ✅ the Python-side O(all measurements) scan is gone. Residual: the column
+      is `json`, not `jsonb`, so PostgreSQL still evaluates containment per row. A true
+      indexed lookup needs a `jsonb` column + GIN index — a schema change on a
+      client-pinned contract, deliberately left as a separate decision.
 
 ### W6 — `VITR-V006` rejection reasons
-- [ ] Introduce a stable rejection-code vocabulary; replace `reason=type(exc).__name__` at
-      `app/sync_service.py:368` with it.
-- [ ] Make `reason` consumable (aggregatable in logs, counted in a future metric).
-- **Done when:** the sync outcome stream distinguishes the distinct authz/lifecycle failure
-      classes rather than collapsing them to one token.
+- [x] `app/rejection_codes.py`: closed `RejectionCode` vocabulary + `rejection_code(exc)`
+      classifier; explicit per-site codes opt in via a `rejection_code` attribute.
+- [x] `sync_service.py` emits the code instead of `type(exc).__name__`.
+- [x] `tests/test_rejection_codes.py` pins that the code is stable across distinct messages.
+- **Commit:** `257e725`. **Tests:** suite green (311 passed, 1 skipped).
+- **Done when:** ✅ the sync outcome stream now carries aggregatable, refactor-stable codes.
 
 ### Smaller / hygiene
 - [ ] Close issue #30's checkbox (MinIO→RustFS already landed); reconcile #2/#28 in GitHub.
 - [ ] The four guard-prefix entries are a Rule-5 violation — after W1, add a lint rule so a
       matching-by-class failure fails, per `AGENTS.md` "measure, don't assert". (Done: W1 + guard lint)
+
+## W7 — production-foundation boxes not yet attempted
+
+Per #28, none of these are defects — they are unshipped commitments:
+- [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
+- [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
+- [ ] Metrics endpoint: request rate/latency/status, auth failures, sync accepted/rejected,
+      DB pool saturation, S3 latency, GC backlog, page sizes.
+- [ ] Graceful shutdown/drain test with in-flight sync and evidence streams.
+- [ ] W3 follow-up: acceptance assertion so a mis-set trust proxy fails fast.
+- [ ] `VITR-V005` follow-up: `jsonb` + GIN index migration (schema change on a pinned contract).
 
 ## UBS loop status — `review/vitrial-api-hardening`
 

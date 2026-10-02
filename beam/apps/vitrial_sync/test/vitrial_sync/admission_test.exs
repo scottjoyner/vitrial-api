@@ -363,9 +363,10 @@ defmodule VitrialSync.AdmissionTest do
           )
 
         assert outcome.status == :rejected
-        # S-71: the reason is the Python exception class name, capitalisation
-        # included, because dual-run compares these tokens.
-        assert outcome.reason == "InvalidMutation"
+        # S-71: the reason is a token from app/rejection_codes.py, not the Python
+        # class name. `InvalidMutation` maps to `invalid_mutation`, and dual-run
+        # compares these tokens literally.
+        assert outcome.reason == "invalid_mutation"
         assert outcome.writes_mutation_row?
       end
     end

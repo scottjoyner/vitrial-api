@@ -36,6 +36,9 @@ defmodule VitrialSync.RetryTest do
   describe "sqlstate_of/1" do
     defmodule FakeError do
       defexception [:orig]
+
+      @impl true
+      def message(%__MODULE__{orig: orig}), do: "fake db error #{inspect(orig)}"
     end
 
     test "reads sqlstate from the original driver error" do
