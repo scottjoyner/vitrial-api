@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -334,28 +335,53 @@ async def _ensure_item_delete_safe(
         raise AuthorizationRejected("Item cannot be deleted while sidecar/history records remain active")
 
 
+def _evidence_reference_filter(evidence_id: str):
+    """SQL predicate: does this payload's evidence-reference array contain `evidence_id`?
+
+    `measurement` carries `evidenceReferences`, `customer_requirement` carries
+    `evidenceReferenceIDs`. A jsonb `@>` test against an OBJECT containing that key and
+    a one-element array matches either shape without loading the row:
+    `{"evidenceReferences": ["<id>"]} @> payload`.
+
+    payload_json is a `json` column, not `jsonb`, so this cannot use a GIN index and
+    PostgreSQL still evaluates the containment per row. That is deliberate and is the
+    honest middle ground: it moves the O(all measurements) scan out of Python and out of
+    the process's memory, leaving only an engine-side scan. A true O(1) lookup needs a
+    `jsonb` column plus a GIN index, which is a schema change on a client-pinned
+    contract and is a separate decision (see VITR-V005 in the tracker).
+    """
+    from sqlalchemy import cast, literal, or_
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    def _contains(key: str):
+        return cast(SyncEntity.payload_json, JSONB).op("@>")(
+            cast(literal(json.dumps({key: [evidence_id]}, ensure_ascii=False)), JSONB)
+        )
+
+    return or_(
+        _contains("evidenceReferences"),
+        _contains("evidenceReferenceIDs"),
+    )
+
+
 async def _ensure_evidence_delete_safe(
     db: AsyncSession,
     principal: Principal,
     item_id: str,
     evidence_id: str,
 ) -> None:
-    entities = (
-        await db.scalars(
-            select(SyncEntity).where(
-                SyncEntity.organization_id == principal.organization_id,
-                SyncEntity.entity_type.in_(["measurement", "customer_requirement"]),
-                SyncEntity.deleted_at.is_(None),
-            )
+    referenced = await db.scalar(
+        select(SyncEntity.entity_id)
+        .where(
+            SyncEntity.organization_id == principal.organization_id,
+            SyncEntity.entity_type.in_(["measurement", "customer_requirement"]),
+            SyncEntity.deleted_at.is_(None),
+            _evidence_reference_filter(evidence_id),
         )
-    ).all()
-    for entity in entities:
-        payload = entity.payload_json or {}
-        if payload.get("itemID") != item_id:
-            continue
-        refs = payload.get("evidenceReferences") if entity.entity_type == "measurement" else payload.get("evidenceReferenceIDs")
-        if isinstance(refs, list) and evidence_id in refs:
-            raise AuthorizationRejected("Evidence cannot be deleted while referenced")
+        .limit(1)
+    )
+    if referenced is not None:
+        raise AuthorizationRejected("Evidence cannot be deleted while referenced")
 
 
 async def authorize_record(

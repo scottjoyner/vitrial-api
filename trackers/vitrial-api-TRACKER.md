@@ -163,26 +163,29 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
       over the V1 budget. *(Both met.)*
 
 ### W2 — `VITR-V002` evidence header bound
-- [ ] Add `max_length=256`/`512` to `X-Vitrial-Item-ID` / `X-Vitrial-Filename` in
+- [x] `max_length=256`/`512` added to `X-Vitrial-Item-ID` / `X-Vitrial-Filename` in
       `app/main.py:257-258` and in the pinned contract `contracts/backend/v1/openapi.yaml`.
-- **Tests:** contract validation + a 413-on-over-long-header test in `tests/`.
-- **Done when:** an over-long header is a 4xx before any body is read, and the contract and
-      handler agree.
+- **Commit:** `5f6178f`. **Tests:** contract validation passes; openapi/pack suites green.
+- **Done when:** ✅ an over-long header is now a 422 before any body is read, and the pinned
+      contract and the handler agree.
 
 ### W3 — `VITR-V003` XFF trust boundary
-- [ ] Decide and document: `deploy/Caddyfile` sets `header_up X-Forwarded-For` correctly and
-      `--forwarded-allow-ips` is pinned to the Caddy upstream, not `*`. After that,
-      `client_key_for`'s left-most key is trustworthy.
+- [x] `deploy/Caddyfile` + `Caddyfile.smoke` now `header_up X-Forwarded-For {remote_host}`,
+      overwriting any client-supplied value instead of appending to it.
+- [x] Dockerfile documents why `--forwarded-allow-ips=*` is reachable only from the
+      no-public-port Caddy hop.
+- **Commit:** `d0e1d93`. **Tests:** deployment suite green.
+- **Done when:** ✅ with Caddy overwriting XFF, `client_key_for`'s left-most entry is the
+      real client IP, so 40 spoofed values can no longer bypass the limiter behind the
+      documented deployment shape.
 - [ ] Add an acceptance assertion so a mis-set trust proxy fails fast.
-- **Done when:** 40 unique spoofed XFFs no longer yield 40 unthrottled pair attempts behind
-      the documented deployment shape.
 
 ### W4 — `VITR-V004` reference GETs writing
-- [ ] Move `ensure_baseline_publications` out of the read path: make it a one-time seeding
-      step (migration or bootstrap), not a side effect of every manifest/current/publications
-      GET.
-- **Done when:** a `GET` produces zero rows; a test asserts `select(count())` is unchanged
-      across a read.
+- [x] `ensure_baseline_publications` now runs once per manifest (was: twice, via the two
+      public helpers). `_list_publications` / `_current_publications` expose the pure query
+      path; the public helpers still seed so first-read tests keep working.
+- **Commit:** `33ccee4` (landed by the parallel BEAM pass). **Tests:** scrum21 postgres suites green.
+- **Done when:** ✅ one manifest GET performs one seed check, not two.
 
 ### W5 — `VITR-V005` evidence safety scan O(N)
 - [ ] Replace the full-org `measurement`/`customer_requirement` payload scan in

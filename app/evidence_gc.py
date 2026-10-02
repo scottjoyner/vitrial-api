@@ -39,22 +39,26 @@ async def queue_blob_gc(
 
 
 async def _is_referenced(db: AsyncSession, organization_id: str, document_id: str) -> bool:
-    entities = (
-        await db.scalars(
-            select(SyncEntity).where(
-                SyncEntity.organization_id == organization_id,
-                SyncEntity.entity_type.in_(["measurement", "customer_requirement"]),
-                SyncEntity.deleted_at.is_(None),
-            )
+    """Whether any live measurement/requirement still lists this evidence document.
+
+    Same containment predicate as `ownership._ensure_evidence_delete_safe`: the filter
+    runs in PostgreSQL so the collector does not materialize every measurement payload
+    in the process. See the ownership helper for why this is an engine-side scan and
+    not an indexed lookup.
+    """
+    from app.ownership import _evidence_reference_filter
+
+    referenced = await db.scalar(
+        select(SyncEntity.entity_id)
+        .where(
+            SyncEntity.organization_id == organization_id,
+            SyncEntity.entity_type.in_(["measurement", "customer_requirement"]),
+            SyncEntity.deleted_at.is_(None),
+            _evidence_reference_filter(document_id),
         )
-    ).all()
-    for entity in entities:
-        payload = entity.payload_json or {}
-        key = "evidenceReferences" if entity.entity_type == "measurement" else "evidenceReferenceIDs"
-        references = payload.get(key)
-        if isinstance(references, list) and document_id in references:
-            return True
-    return False
+        .limit(1)
+    )
+    return referenced is not None
 
 
 async def collect_due_evidence_gc(
