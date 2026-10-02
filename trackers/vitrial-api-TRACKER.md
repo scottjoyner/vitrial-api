@@ -213,6 +213,25 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - [ ] The four guard-prefix entries are a Rule-5 violation — after W1, add a lint rule so a
       matching-by-class failure fails, per `AGENTS.md` "measure, don't assert". (Done: W1 + guard lint)
 
+## Branch / pipeline hygiene (established 2026-10-02)
+
+The repo is integrated by **squash merge**, so three standard git checks all report false
+positives here — see the guardrails skill §9. Two repeatable gates now exist so the next
+agent does not re-derive this:
+
+- [x] `scripts/audit_branch_staleness.py` + `make branches` — content-based staleness audit.
+      Compares each touched file against `main`; only a *newer* branch that adds content
+      `main` lacks (or a file absent from `main`) is REAL-UNMERGED. Current verdict:
+      **109 SAFE-DELETE, 5 STALE-SNAPSHOT, 0 REAL-UNMERGED**.
+- [x] `scripts/ubs_gate.sh` + `ubs-baseline.json` + `.github/workflows/ubs.yml` + `make ubs` —
+      UBS delta gate. Fails on any NEW critical/warning vs the committed floor. The floor is
+      documented false positives, never a silent rebaseline.
+- [x] `make check` now runs `check_guard_prefixes.py` alongside the contract validator.
+
+Note: the audit found 5 STALE-SNAPSHOT branches (mostly `payment-settlement-contract` and
+an older `sync-pull-bounds`), all older than `main` and holding no work it lacks. Cleaning
+them is optional hygiene, not a blocker.
+
 ## W7 — production-foundation boxes not yet attempted
 
 Per #28, none of these are defects — they are unshipped commitments:

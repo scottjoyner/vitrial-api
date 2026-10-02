@@ -30,6 +30,20 @@ running `ubs` to literally 0 means distorting `auth.py`'s `token_hash ==` lookup
 which would be a regression. Next session: treat any *new* class of warning as a real-fix
 prompt, and do not re-litigate the false-positive set.
 
+## Pipeline gates + branch hygiene (established 2026-10-02)
+
+Three repeatable gates now exist so the next agent inherits the mechanism instead of
+re-deriving it:
+- `make ubs` — UBS delta gate vs committed `ubs-baseline.json` (floor 16c/3w = validated
+  false positives; never rebaseline to go green; scope noisy rules in `.ubsignore`).
+- `make branches` — content-based branch staleness. On this squash-merge repo
+  `git branch --no-merged` and `git cherry` both report false positives; this does not.
+  Exit 1 means real unmerged work. Current: 0 real.
+- `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
+
+`make check` runs contract validation + guard lint + tests. Baseline: **311 passed, 1 skipped**.
+A parallel BEAM/Elixir effort also commits on `main`; my Python commits are all ancestors.
+
 ## W1–W6 all closed (2026-10-02)
 
 All six `VITR-Vxxx` defects are fixed and the full suite is green at 311 passed / 1 skipped.

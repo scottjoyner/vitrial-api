@@ -40,9 +40,19 @@ import subprocess
 import sys
 
 
+# Bounded on purpose: an unbounded subprocess.run in a repo-maintenance script is
+# exactly what the UBS gate flags (py.security.subprocess-timeout), and a hung git
+# would hang the audit with no verdict.
+GIT_TIMEOUT_SECONDS = 30
+
+
 def git(*args: str) -> str:
     return subprocess.run(
-        ["git", *args], capture_output=True, text=True, check=False
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=GIT_TIMEOUT_SECONDS,
     ).stdout
 
 
@@ -66,22 +76,25 @@ def classify(branch: str, main: str = "main") -> dict:
     main_has = git("cat-file", "e", f"{main}:HEAD").strip()
     del main_has
     behind: list[str] = []
-    adds: list[str] = []
+    differs: list[str] = []
+    absent: list[str] = []
     for f in touched:
         exists = subprocess.run(
             ["git", "cat-file", "-e", f"{main}:{f}"],
             capture_output=True,
             check=False,
+            timeout=GIT_TIMEOUT_SECONDS,
         ).returncode == 0
         if not exists:
-            adds.append(f)
+            absent.append(f)
             continue
         same = subprocess.run(
             ["git", "diff", "--quiet", f"{main}:{f}", f"{branch}:{f}"],
             capture_output=True,
             check=False,
+            timeout=GIT_TIMEOUT_SECONDS,
         ).returncode == 0
-        (behind if same else adds).append(f)
+        (behind if same else differs).append(f)
     tip_date = git("log", "-1", "--format=%ad", "--date=short", branch).strip()
     main_date = git("log", "-1", "--format=%ad", "--date=short", main).strip()
     branch_is_newer = tip_date > main_date
@@ -134,8 +147,8 @@ def main() -> int:
     if real:
         print("\nbranches holding content main does NOT have:")
         for r in real:
-            print(f"  {r['branch']}  ({r['tip_date']})")
-            for f in r["differs_or_absent"]:
+            print(f"  {r['branch']}  (tip {r['tip_date']}, main {main_tip})")
+            for f in r["content_main_lacks"]:
                 print(f"      {f}")
     else:
         print("\nno branch holds content main lacks; all are merged snapshots or behind")

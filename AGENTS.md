@@ -28,7 +28,17 @@ Contract boundary: V1 is pinned to iOS client SHA `74822ac9`. Any change to
       collection because `tests/test_production_preflight.py` imports `scripts.*`).
 - [ ] Set `DATABASE_NULL_POOL=true POSTGRES_INTEGRATION=1`. A pooled engine + fresh-loop-per-test
       = "attached to a different loop" across ~20 tests.
-- [ ] Baseline to compare: **293 passed, 1 skipped** (S3 needs Docker).
+- [ ] Baseline to compare: **311 passed, 1 skipped** (S3 needs Docker).
+
+**Repeating the repo's own checks** (run these instead of re-deriving them):
+- [ ] `make ubs` — UBS bug gate: fails on any NEW critical/warning finding vs the
+      committed baseline `ubs-baseline.json`. The residual 16c/3w is the validated
+      false-positive floor, documented in the tracker under "UBS loop status". Never
+      rebaseline to make it green; scope a validated-noisy rule in `.ubsignore`.
+- [ ] `make branches` — content-based branch staleness audit. On this squash-merge
+      repo `git branch --no-merged` and `git cherry` both report false positives;
+      this script does not. Exit 1 means a branch really holds work main lacks.
+- [ ] `python scripts/check_guard_prefixes.py` — every declared guard prefix maps to a live route.
 
 **Rules that are already held — do not churn them:**
 - [ ] Ripgrep only, never grep.

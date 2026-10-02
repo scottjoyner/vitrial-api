@@ -1,0 +1,6426 @@
+ℹ Ignoring paths from /home/nez/Projects/vitrial-api/.ubsignore → requirements-lock.txt tests .pytest_cache *.egg-info migrations/versions
+ℹ Scan size after ignores: 0MB (limit 1000MB)
+ℹ All selected modules support contract v2; scanning source tree directly
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ██╗   ██╗██╗  ████████╗██╗███╗   ███╗ █████╗ ████████╗███████╗              ║
+║  ██║   ██║██║  ╚══██╔══╝██║████╗ ████║██╔══██╗╚══██╔══╝██╔════╝              ║
+║  ██║   ██║██║     ██║   ██║██╔████╔██║███████║   ██║   █████╗                ║
+║  ██║   ██║██║     ██║   ██║██║╚██╔╝██║██╔══██║   ██║   ██╔══╝                ║
+║  ╚██████╔╝███████╗██║   ██║██║ ╚═╝ ██║██║  ██║   ██║   ███████╗              ║
+║   ╚═════╝ ╚══════╝╚═╝   ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝              ║
+║                                                                              ║
+║  ██████╗ ██╗   ██╗ ██████╗         __       __                               ║
+║  ██╔══██╗██║   ██║██╔════╝         \ `-'"-'` /                               ║
+║  ██████╔╝██║   ██║██║  ███╗        / \_   _/ \                               ║
+║  ██╔══██╗██║   ██║██║   ██║        |  d\_/b  |                               ║
+║  ██████╔╝╚██████╔╝╚██████╔╝       .'\   V   /'.                              ║
+║  ╚═════╝  ╚═════╝  ╚═════╝        /   '-...-'   \                            ║
+║                                  | /         \ |                             ║
+║                                  \/\         /\/                             ║
+║                                  ==(||)---(||)==                             ║
+║                                                                              ║
+║  ███████╗  ██████╗   █████╗ ███╗   ██╗███╗   ██╗███████╗██████╗              ║
+║  ██╔════╝  ██╔═══╝  ██╔══██╗████╗  ██║████╗  ██║██╔════╝██╔══██╗             ║
+║  ███████╗  ██║      ███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝             ║
+║  ╚════██║  ██║      ██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗             ║
+║  ███████║  ██████╗  ██║  ██║██║ ╚████║██║ ╚████║███████╗██║  ██║             ║
+║  ╚══════╝  ╚═════╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝                  ║
+║                                                                              ║
+║   JS / TS • PYTHON • C / C++ • RUST • GO • JAVA • RUBY                       ║
+║   SWIFT • C# • ELIXIR                                                        ║
+║                    UBS: ULTIMATE BUG SCANNER • SARIF FUSION ☄️               ║
+║                                                                              ║
+║                                                                              ║
+║                     Night Owl QA                                             ║
+║                     “We see bugs before you do.”                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+UBS Meta-Runner v5.4.17  2026-10-02T18:02:52Z
+Project: /home/nez/Projects/vitrial-api
+Format:  text
+Detected: python
+Scanning python...
+Finished python (6s)
+
+──────── python ────────
+
+• ruff (lint)
+[
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 36,
+      "row": 175
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/admin.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 36,
+            "row": 175
+          },
+          "location": {
+            "column": 24,
+            "row": 175
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 24,
+      "row": 175
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 175,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 60,
+      "row": 219
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/admin.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 60,
+            "row": 219
+          },
+          "location": {
+            "column": 48,
+            "row": 219
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 48,
+      "row": 219
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 219,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 64,
+      "row": 14
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport hashlib\nfrom dataclasses import dataclass\nfrom datetime import datetime, timezone\n\nfrom fastapi import Depends, HTTPException\nfrom fastapi.security import HTTPAuthorizationCredentials, HTTPBearer\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.db import session_scope\nfrom app.models import AuthSession, Membership, Organization, User\nfrom app.observability import bind_principal, log_event\nfrom app.schemas import AuthorizationProfile, AuthorizationRole\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 16
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 71,
+      "row": 38
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth.py",
+    "fix": null,
+    "location": {
+      "column": 56,
+      "row": 38
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 38,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 39
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 39
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 39,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 36,
+      "row": 44
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 36,
+            "row": 44
+          },
+          "location": {
+            "column": 24,
+            "row": 44
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 24,
+      "row": 44
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 44,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 33
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth_session_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 33
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 33,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 45
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth_session_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 45
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 45,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 46
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth_session_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 46
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 46,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 60,
+      "row": 53
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth_session_routes.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 3
+          },
+          "location": {
+            "column": 1,
+            "row": 3
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 60,
+            "row": 53
+          },
+          "location": {
+            "column": 48,
+            "row": 53
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 48,
+      "row": 53
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 53,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 73
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/auth_session_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 73
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 73,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/db.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from collections.abc import AsyncIterator\n\nfrom sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine\nfrom sqlalchemy.pool import NullPool\n\nfrom app.settings import settings\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 8
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 41,
+      "row": 15
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/delivery_execution.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nfrom decimal import Decimal, InvalidOperation\n\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.auth import Principal\nfrom app.delivery_installation import (\n    DeliveryInstallationRejected,\n    validate_installation_evidence_authority,\n    validate_installation_handoff,\n)\nfrom app.delivery_production import (\n    DeliveryProductionRejected,\n    validate_production_handoff,\n)\nfrom app.models import CanonicalProject, CanonicalProjectChild, SyncEntity\nfrom app.ownership import EffectiveScope\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 18
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 57,
+      "row": 11
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/evidence_gc.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom datetime import datetime, timedelta, timezone\n\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.models import (\n    CanonicalItemChild,\n    EvidenceBlob,\n    EvidenceObjectGC,\n    Organization,\n    SyncEntity,\n)\nfrom app.settings import settings\nfrom app.storage import StorageError, store_for_provider\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 14
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 45,
+      "row": 35
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/evidence_gc.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 45,
+            "row": 35
+          },
+          "location": {
+            "column": 33,
+            "row": 35
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 33,
+      "row": 35
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 35,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 46,
+      "row": 71
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/evidence_gc.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 46,
+            "row": 71
+          },
+          "location": {
+            "column": 34,
+            "row": 71
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 34,
+      "row": 71
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 71,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "SIM114",
+    "end_location": {
+      "column": 42,
+      "row": 215
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/lifecycle.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": " or state == \"rejected\"",
+          "end_location": {
+            "column": 34,
+            "row": 212
+          },
+          "location": {
+            "column": 34,
+            "row": 212
+          }
+        },
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 216
+          },
+          "location": {
+            "column": 1,
+            "row": 214
+          }
+        }
+      ],
+      "message": "Combine `if` branches"
+    },
+    "location": {
+      "column": 13,
+      "row": 212
+    },
+    "message": "Combine `if` branches using logical `or` operator",
+    "name": "if-with-same-arms",
+    "noqa_row": 212,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/if-with-same-arms"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 85,
+      "row": 294
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/lifecycle.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 293
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "name": "collapsible-if",
+    "noqa_row": 293,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 56,
+      "row": 44
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport logging\nimport time\nfrom typing import Annotated\n\nfrom fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response\nfrom fastapi.responses import JSONResponse, StreamingResponse\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.admin import (\n    AdminBootstrapRequest,\n    AdminBootstrapResponse,\n    AdminSessionRevokeRequest,\n    AdminSessionRevokeResponse,\n    bootstrap_identity,\n    require_admin_key,\n    revoke_session,\n)\nfrom app.auth import Principal, current_principal, profile_for\nfrom app.auth_session_routes import router as auth_session_router\nfrom app.db import session_scope\nfrom app.evidence import put_blob\nfrom app.models import EvidenceBlob\nfrom app.observability import (\n    begin_request,\n    bind_request_metadata,\n    end_request,\n    log_event,\n    request_id_for_header,\n)\nfrom app.ownership import AuthorizationRejected, require_item_access\nfrom app.rate_limit import (\n    client_key_for,\n    limiter_for,\n    path_is_throttled,\n)\nfrom app.readiness import collect_dependency_readiness\nfrom app.reference_routes import router as reference_router\nfrom app.request_size import RequestSizeLimitMiddleware\nfrom app.schemas import (\n    AuthorizationProfile,\n    HealthResponse,\n    ReadinessResponse,\n    SyncBatch,\n    SyncResult,\n    VersionResponse,\n)\nfrom app.settings import settings\nfrom app.storage import StorageError, store_for_provider\nfrom app.sync_service import InvalidMutation, apply_push, pull_since\nfrom app.sync_v2_routes import router as sync_v2_router\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 46
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 118
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 118
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 118,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 169
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 169
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 169,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 170
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 170
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 170,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 178
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 178
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 178,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 179
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 179
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 179,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 192
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 192
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 192,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 193
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 193
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 193,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 224
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 224
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 224,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 225
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 225
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 225,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 263
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 263
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 263,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 264
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 264
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 264,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 304
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 304
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 304,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 305
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 305
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 305,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 332
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 332
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 332,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 347
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/main.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 347
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 347,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 66,
+      "row": 9
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/models.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport uuid\nfrom datetime import datetime\n\nfrom sqlalchemy import (\n    JSON,\n    BigInteger,\n    Boolean,\n    DateTime,\n    ForeignKey,\n    ForeignKeyConstraint,\n    Integer,\n    String,\n    UniqueConstraint,\n    func,\n)\nfrom sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 12
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "PIE810",
+    "end_location": {
+      "column": 38,
+      "row": 148
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/observability.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "compact in _SENSITIVE_KEYS or compact.endswith((\"token\", \"password\", \"secret\"))",
+          "end_location": {
+            "column": 38,
+            "row": 148
+          },
+          "location": {
+            "column": 9,
+            "row": 145
+          }
+        }
+      ],
+      "message": "Merge into a single `endswith` call"
+    },
+    "location": {
+      "column": 9,
+      "row": 145
+    },
+    "message": "Call `endswith` once with a `tuple`",
+    "name": "multiple-starts-ends-with",
+    "noqa_row": 145,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/multiple-starts-ends-with"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 51,
+      "row": 169
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/observability.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 11
+          },
+          "location": {
+            "column": 1,
+            "row": 11
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 51,
+            "row": 169
+          },
+          "location": {
+            "column": 39,
+            "row": 169
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 39,
+      "row": 169
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 169,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP037",
+    "end_location": {
+      "column": 70,
+      "row": 36
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/ownership.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "EffectiveScope",
+          "end_location": {
+            "column": 70,
+            "row": 36
+          },
+          "location": {
+            "column": 54,
+            "row": 36
+          }
+        }
+      ],
+      "message": "Remove quotes"
+    },
+    "location": {
+      "column": 54,
+      "row": 36
+    },
+    "message": "Remove quotes from type annotation",
+    "name": "quoted-annotation",
+    "noqa_row": 36,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/quoted-annotation"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 36,
+      "row": 80
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/pairing.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 36,
+            "row": 80
+          },
+          "location": {
+            "column": 24,
+            "row": 80
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 24,
+      "row": 80
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 80,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 36,
+      "row": 119
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/pairing.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 36,
+            "row": 119
+          },
+          "location": {
+            "column": 24,
+            "row": 119
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 24,
+      "row": 119
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 119,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 2,
+      "row": 55
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/pull_prefetch.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nfrom dataclasses import dataclass, field\n\nfrom sqlalchemy import select, tuple_\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.auth import Principal\nfrom app.delivery_execution import DELIVERY_ENTITY_TYPE\nfrom app.models import (\n    CanonicalCustomer,\n    CanonicalItem,\n    CanonicalItemChild,\n    CanonicalProject,\n    CanonicalProjectChild,\n    CanonicalProjectSector,\n    SyncChangeLog,\n    SyncEntity,\n)\nfrom app.ownership import (\n    ITEM_CHILD_TYPES,\n    PROJECT_CHILD_TYPES,\n    EffectiveScope,\n)\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 57
+          },
+          "location": {
+            "column": 1,
+            "row": 32
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 32
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 32,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 64
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/readiness.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 64
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 64,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 69
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/readiness.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 69
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 69,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 67,
+      "row": 125
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_data.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 67,
+            "row": 125
+          },
+          "location": {
+            "column": 55,
+            "row": 125
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 55,
+      "row": 125
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 125,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 79,
+      "row": 126
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_data.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 79,
+            "row": 126
+          },
+          "location": {
+            "column": 67,
+            "row": 126
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 67,
+      "row": 126
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 126,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 43,
+      "row": 517
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_data.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 43,
+            "row": 517
+          },
+          "location": {
+            "column": 31,
+            "row": 517
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 31,
+      "row": 517
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 517,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 28,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_models.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nfrom datetime import datetime\n\nfrom sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint, func\nfrom sqlalchemy.orm import Mapped, mapped_column\n\nfrom app.models import Base\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 11
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 35
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 35
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 35,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 36
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 36
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 36,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 47
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 27,
+      "row": 47
+    },
+    "message": "Do not perform function call `Query` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 47,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 48
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 48
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 48,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 49
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 49
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 49,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 55,
+      "row": 60
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 60
+    },
+    "message": "Do not perform function call `Query` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 60,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 61
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 61
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 61,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 62
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 62
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 62,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 74
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 74
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 74,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 75
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 75
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 75,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 91
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 91
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 91,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 92
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/reference_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 92
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 92,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 67,
+      "row": 4
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/schemas.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nfrom datetime import datetime\nfrom typing import Literal\n\nfrom pydantic import BaseModel, ConfigDict, Field, model_validator\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP037",
+    "end_location": {
+      "column": 63,
+      "row": 88
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/schemas.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "SyncBatch",
+          "end_location": {
+            "column": 63,
+            "row": 88
+          },
+          "location": {
+            "column": 52,
+            "row": 88
+          }
+        }
+      ],
+      "message": "Remove quotes"
+    },
+    "location": {
+      "column": 52,
+      "row": 88
+    },
+    "message": "Remove quotes from type annotation",
+    "name": "quoted-annotation",
+    "noqa_row": 88,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/quoted-annotation"
+  },
+  {
+    "cell": null,
+    "code": "S110",
+    "end_location": {
+      "column": 25,
+      "row": 240
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/storage.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 239
+    },
+    "message": "`try`-`except`-`pass` detected, consider logging the exception",
+    "name": "try-except-pass",
+    "noqa_row": 239,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/try-except-pass"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 33,
+      "row": 239
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/storage.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 239
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 239,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "S110",
+    "end_location": {
+      "column": 25,
+      "row": 245
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/storage.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 244
+    },
+    "message": "`try`-`except`-`pass` detected, consider logging the exception",
+    "name": "try-except-pass",
+    "noqa_row": 244,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/try-except-pass"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 33,
+      "row": 244
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/storage.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 244
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 244,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 2,
+      "row": 41
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_service.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport base64\nimport json\nimport logging\n\nfrom sqlalchemy import func, select\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DELIVERY_ENTITY_TYPE,\n    DeliveryExecutionRejected,\n    apply_delivery_execution_ownership,\n    authorize_delivery_execution,\n)\nfrom app.evidence_gc import queue_blob_gc\nfrom app.idempotency import SyncMutationFingerprint, request_fingerprint\nfrom app.lifecycle import LifecycleRejected, validate_lifecycle_mutation\nfrom app.models import (\n    CanonicalItemChild,\n    EvidenceBlob,\n    Organization,\n    SyncChangeLog,\n    SyncEntity,\n    SyncMutation,\n)\nfrom app.observability import correlation_ref, log_event\nfrom app.ownership import (\n    AuthorizationRejected,\n    EffectiveScope,\n    apply_ownership_plan,\n    authorize_record,\n    mutation_sort_key,\n)\nfrom app.pull_prefetch import (\n    load_page_context,\n    resolve_delivery_visible,\n    resolve_visible,\n)\nfrom app.rejection_codes import rejection_code\nfrom app.schemas import (\n    MAX_SYNC_RECORDS,\n    MAX_SYNC_V1_BATCH_PAYLOAD_BYTES,\n    SyncBatch,\n    SyncRecord,\n    SyncResult,\n)\nfrom app.transient_retry import run_with_transient_retry, sqlstate_of\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 43
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 25,
+      "row": 89
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_service.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 89
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 89,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "TRY004",
+    "end_location": {
+      "column": 75,
+      "row": 92
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_service.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 92
+    },
+    "message": "Prefer `TypeError` exception for invalid type",
+    "name": "type-check-without-type-error",
+    "noqa_row": 92,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/type-check-without-type-error"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 85,
+      "row": 20
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_v2.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport json\nfrom datetime import datetime\nfrom typing import Literal\n\nfrom pydantic import Field, JsonValue, field_validator, model_validator\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.auth import Principal\nfrom app.schemas import (\n    MAX_SYNC_IDENTIFIER_LENGTH,\n    MAX_SYNC_RECORDS,\n    MAX_SYNC_V1_BATCH_PAYLOAD_BYTES,\n    EntityType,\n    StrictModel,\n    SyncBatch,\n    SyncRecord,\n)\nfrom app.sync_service import InvalidMutation, apply_push, decode_payload, pull_since\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 22
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP037",
+    "end_location": {
+      "column": 65,
+      "row": 63
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_v2.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "SyncBatchV2",
+          "end_location": {
+            "column": 65,
+            "row": 63
+          },
+          "location": {
+            "column": 52,
+            "row": 63
+          }
+        }
+      ],
+      "message": "Remove quotes"
+    },
+    "location": {
+      "column": 52,
+      "row": 63
+    },
+    "message": "Remove quotes from type annotation",
+    "name": "quoted-annotation",
+    "noqa_row": 63,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/quoted-annotation"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 29
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_v2_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 29
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 29,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 30
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_v2_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 30
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 30,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 54,
+      "row": 43
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_v2_routes.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 43
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 43,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "B008",
+    "end_location": {
+      "column": 46,
+      "row": 44
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/sync_v2_routes.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 44
+    },
+    "message": "Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
+    "name": "function-call-in-default-argument",
+    "noqa_row": 44,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/function-call-in-default-argument"
+  },
+  {
+    "cell": null,
+    "code": "UP035",
+    "end_location": {
+      "column": 48,
+      "row": 56
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/transient_retry.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from typing import TypeVar\nfrom collections.abc import Awaitable, Callable",
+          "end_location": {
+            "column": 48,
+            "row": 56
+          },
+          "location": {
+            "column": 1,
+            "row": 56
+          }
+        }
+      ],
+      "message": "Import from `collections.abc`"
+    },
+    "location": {
+      "column": 1,
+      "row": 56
+    },
+    "message": "Import from `collections.abc` instead: `Awaitable`, `Callable`",
+    "name": "deprecated-import",
+    "noqa_row": 56,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/deprecated-import"
+  },
+  {
+    "cell": null,
+    "code": "S110",
+    "end_location": {
+      "column": 13,
+      "row": 111
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/transient_retry.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 110
+    },
+    "message": "`try`-`except`-`pass` detected, consider logging the exception",
+    "name": "try-except-pass",
+    "noqa_row": 110,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/try-except-pass"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 110
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/transient_retry.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 110
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 110,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "UP047",
+    "end_location": {
+      "column": 2,
+      "row": 123
+    },
+    "filename": "/home/nez/Projects/vitrial-api/app/transient_retry.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "[T]",
+          "end_location": {
+            "column": 35,
+            "row": 114
+          },
+          "location": {
+            "column": 35,
+            "row": 114
+          }
+        }
+      ],
+      "message": "Use type parameters"
+    },
+    "location": {
+      "column": 11,
+      "row": 114
+    },
+    "message": "Generic function `run_with_transient_retry` should use type parameters",
+    "name": "non-pep695-generic-function",
+    "noqa_row": 114,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/non-pep695-generic-function"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/env.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport asyncio\n\nfrom alembic import context\nfrom sqlalchemy import pool\nfrom sqlalchemy.ext.asyncio import async_engine_from_config\n\nfrom app.models import Base\nfrom app.settings import settings\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 7
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0001_initial.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 6
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 6,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 7
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0002_canonical_ownership.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 6
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 6,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 7
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0003_canonical_child_ownership.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 6
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 6,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0004_sync_mutation_fingerprint.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 7
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 7,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0005_evidence_object_storage.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 7
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 7,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0006_reference_publications.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 7
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 7,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 24,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/migrations/versions/0007_pairing_grants.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import sqlalchemy as sa\nfrom alembic import op\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 7
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 7,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 11,
+      "row": 40
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport argparse\nimport json\nimport subprocess\nimport sys\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 43
+          },
+          "location": {
+            "column": 1,
+            "row": 35
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 35
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 35,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 11,
+      "row": 40
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 41
+          },
+          "location": {
+            "column": 1,
+            "row": 40
+          }
+        }
+      ],
+      "message": "Remove unused import: `sys`"
+    },
+    "location": {
+      "column": 8,
+      "row": 40
+    },
+    "message": "`sys` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 40,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "PIE810",
+    "end_location": {
+      "column": 66,
+      "row": 66
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "line.startswith((\"origin/\", \"fork/\"))",
+          "end_location": {
+            "column": 66,
+            "row": 66
+          },
+          "location": {
+            "column": 12,
+            "row": 66
+          }
+        }
+      ],
+      "message": "Merge into a single `startswith` call"
+    },
+    "location": {
+      "column": 12,
+      "row": 66
+    },
+    "message": "Call `startswith` once with a `tuple`",
+    "name": "multiple-starts-ends-with",
+    "noqa_row": 66,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/multiple-starts-ends-with"
+  },
+  {
+    "cell": null,
+    "code": "EXE001",
+    "end_location": {
+      "column": 23,
+      "row": 1
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_delivery_two_user_acceptance.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Shebang is present but file is not executable",
+    "name": "shebang-not-executable",
+    "noqa_row": 8,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/shebang-not-executable"
+  },
+  {
+    "cell": null,
+    "code": "EXE001",
+    "end_location": {
+      "column": 23,
+      "row": 1
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Shebang is present but file is not executable",
+    "name": "shebang-not-executable",
+    "noqa_row": 13,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/shebang-not-executable"
+  },
+  {
+    "cell": null,
+    "code": "TRY004",
+    "end_location": {
+      "column": 82,
+      "row": 98
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 98
+    },
+    "message": "Prefer `TypeError` exception for invalid type",
+    "name": "type-check-without-type-error",
+    "noqa_row": 98,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/type-check-without-type-error"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 43,
+      "row": 179
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 24
+          },
+          "location": {
+            "column": 1,
+            "row": 24
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 43,
+            "row": 179
+          },
+          "location": {
+            "column": 31,
+            "row": 179
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 31,
+      "row": 179
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 179,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "TRY004",
+    "end_location": {
+      "column": 71,
+      "row": 243
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 243
+    },
+    "message": "Prefer `TypeError` exception for invalid type",
+    "name": "type-check-without-type-error",
+    "noqa_row": 243,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/type-check-without-type-error"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 259
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 259
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 259,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 38,
+      "row": 268
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 24
+          },
+          "location": {
+            "column": 1,
+            "row": 24
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 38,
+            "row": 268
+          },
+          "location": {
+            "column": 26,
+            "row": 268
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 26,
+      "row": 268
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 268,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 51,
+      "row": 412
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 24
+          },
+          "location": {
+            "column": 1,
+            "row": 24
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 51,
+            "row": 412
+          },
+          "location": {
+            "column": 39,
+            "row": 412
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 39,
+      "row": 412
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 412,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "EXE001",
+    "end_location": {
+      "column": 23,
+      "row": 1
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Shebang is present but file is not executable",
+    "name": "shebang-not-executable",
+    "noqa_row": 9,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/shebang-not-executable"
+  },
+  {
+    "cell": null,
+    "code": "EXE001",
+    "end_location": {
+      "column": 23,
+      "row": 1
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/ensure_evidence_bucket.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Shebang is present but file is not executable",
+    "name": "shebang-not-executable",
+    "noqa_row": 11,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/shebang-not-executable"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 28
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/probe_dependencies.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 28
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 28,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "EXE001",
+    "end_location": {
+      "column": 23,
+      "row": 1
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/probe_evidence_durability.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Shebang is present but file is not executable",
+    "name": "shebang-not-executable",
+    "noqa_row": 14,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/shebang-not-executable"
+  },
+  {
+    "cell": null,
+    "code": "RUF100",
+    "end_location": {
+      "column": 47,
+      "row": 63
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/probe_evidence_durability.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 81,
+            "row": 63
+          },
+          "location": {
+            "column": 31,
+            "row": 63
+          }
+        }
+      ],
+      "message": "Remove unused `noqa` directive"
+    },
+    "location": {
+      "column": 33,
+      "row": 63
+    },
+    "message": "Unused `noqa` directive (unused: `BLE001`)",
+    "name": "unused-noqa",
+    "noqa_row": 63,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-noqa"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 120
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/probe_production_preflight.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 120
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 120,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 144
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/probe_production_preflight.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 144
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 144,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "EXE001",
+    "end_location": {
+      "column": 23,
+      "row": 1
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/validate_backend_contract.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Shebang is present but file is not executable",
+    "name": "shebang-not-executable",
+    "noqa_row": 2,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/shebang-not-executable"
+  },
+  {
+    "cell": null,
+    "code": "FURB162",
+    "end_location": {
+      "column": 67,
+      "row": 47
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/validate_backend_contract.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 67,
+            "row": 47
+          },
+          "location": {
+            "column": 44,
+            "row": 47
+          }
+        }
+      ],
+      "message": "Remove `.replace()` call"
+    },
+    "location": {
+      "column": 39,
+      "row": 47
+    },
+    "message": "Unnecessary timezone replacement with zero offset",
+    "name": "fromisoformat-replace-z",
+    "noqa_row": 47,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/fromisoformat-replace-z"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 60
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/validate_backend_contract.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 60
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 60,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 46
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/validate_deployment.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 46
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 46,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "BLE001",
+    "end_location": {
+      "column": 21,
+      "row": 157
+    },
+    "filename": "/home/nez/Projects/vitrial-api/scripts/validate_deployment.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 157
+    },
+    "message": "Do not catch blind exception: `Exception`",
+    "name": "blind-except",
+    "noqa_row": 157,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/blind-except"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 25,
+      "row": 2
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_app_surface.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from fastapi.testclient import TestClient\n\nfrom app.main import app\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 40,
+      "row": 22
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_audit_parent_tombstone.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import base64\nimport json\nimport os\nfrom datetime import datetime, timezone\n\nimport pytest\nfrom sqlalchemy import delete, select\n\nfrom app.auth import Principal\nfrom app.db import SessionFactory\nfrom app.models import (\n    CanonicalCustomer,\n    CanonicalItem,\n    CanonicalItemChild,\n    CanonicalProject,\n    CanonicalProjectSector,\n    Organization,\n    SyncEntity,\n    SyncMutation,\n)\nfrom app.schemas import SyncBatch\nfrom app.sync_service import apply_push\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 25
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 49,
+      "row": 100
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_audit_parent_tombstone.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 49,
+            "row": 100
+          },
+          "location": {
+            "column": 37,
+            "row": 100
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 37,
+      "row": 100
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 100,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 25,
+      "row": 5
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_bootstrap_delivery_two_user_acceptance.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport importlib.util\nimport sys\nfrom pathlib import Path\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 8
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 14,
+      "row": 9
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_bootstrap_two_user_acceptance.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport base64\nimport importlib.util\nimport json\nimport stat\nfrom pathlib import Path\n\nimport pytest\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 12
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 68,
+      "row": 4
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_contract_pack.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import base64\nimport json\nfrom pathlib import Path\n\nfrom app.schemas import AuthorizationProfile, SyncBatch, SyncResult\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "PLW1510",
+    "end_location": {
+      "column": 28,
+      "row": 50
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_contract_vocabulary_drift.py",
+    "fix": {
+      "applicability": "displayonly",
+      "edits": [
+        {
+          "content": "check=False, ",
+          "end_location": {
+            "column": 9,
+            "row": 52
+          },
+          "location": {
+            "column": 9,
+            "row": 52
+          }
+        }
+      ],
+      "message": "Add explicit `check=False`"
+    },
+    "location": {
+      "column": 14,
+      "row": 50
+    },
+    "message": "`subprocess.run` without explicit `check` argument",
+    "name": "subprocess-run-without-check",
+    "noqa_row": 50,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/subprocess-run-without-check"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 98,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_closeout_policy.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport pytest\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DeliveryExecutionRejected,\n    validate_delivery_execution_payload,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 69,
+      "row": 216
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_ownership.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import UTC\n",
+          "end_location": {
+            "column": 1,
+            "row": 17
+          },
+          "location": {
+            "column": 1,
+            "row": 17
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 69,
+            "row": 216
+          },
+          "location": {
+            "column": 57,
+            "row": 216
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 57,
+      "row": 216
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 216,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 64,
+      "row": 294
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_ownership.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import UTC\n",
+          "end_location": {
+            "column": 1,
+            "row": 17
+          },
+          "location": {
+            "column": 1,
+            "row": 17
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 64,
+            "row": 294
+          },
+          "location": {
+            "column": 52,
+            "row": 294
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 52,
+      "row": 294
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 294,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 98,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_policy.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport pytest\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DeliveryExecutionRejected,\n    validate_delivery_execution_payload,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 52,
+      "row": 28
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport base64\nimport json\nimport os\nfrom datetime import datetime, timezone\n\nimport pytest\nfrom sqlalchemy import delete, text\n\nfrom app.auth import Principal\nfrom app.db import SessionFactory\nfrom app.delivery_execution import delivery_execution_is_visible\nfrom app.idempotency import SyncMutationFingerprint\nfrom app.models import (\n    CanonicalCustomer,\n    CanonicalItem,\n    CanonicalItemChild,\n    CanonicalProject,\n    CanonicalProjectChild,\n    CanonicalProjectSector,\n    Organization,\n    SyncChangeLog,\n    SyncEntity,\n    SyncMutation,\n)\nfrom app.schemas import SyncBatch\nfrom app.sync_service import apply_push, pull_since\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 30
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 45,
+      "row": 189
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 45,
+            "row": 189
+          },
+          "location": {
+            "column": 33,
+            "row": 189
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 33,
+      "row": 189
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 189,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 72,
+      "row": 300
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 72,
+            "row": 300
+          },
+          "location": {
+            "column": 60,
+            "row": 300
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 60,
+      "row": 300
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 300,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 73,
+      "row": 367
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 73,
+            "row": 367
+          },
+          "location": {
+            "column": 61,
+            "row": 367
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 61,
+      "row": 367
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 367,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 73,
+      "row": 420
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 73,
+            "row": 420
+          },
+          "location": {
+            "column": 61,
+            "row": 420
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 61,
+      "row": 420
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 420,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 72,
+      "row": 436
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_execution_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 72,
+            "row": 436
+          },
+          "location": {
+            "column": 60,
+            "row": 436
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 60,
+      "row": 436
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 436,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 57,
+      "row": 8
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_installation_policy.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport pytest\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DeliveryExecutionRejected,\n    validate_delivery_execution_payload,\n)\nfrom app.delivery_installation import (\n    DeliveryInstallationRejected,\n    validate_installation_evidence_authority,\n)\nfrom app.models import CanonicalItem, CanonicalItemChild\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 11
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 98,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_materials_policy.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport pytest\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DeliveryExecutionRejected,\n    validate_delivery_execution_payload,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 98,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_procurement_policy.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport pytest\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DeliveryExecutionRejected,\n    validate_delivery_execution_payload,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 98,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_delivery_production_policy.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport pytest\n\nfrom app.auth import Principal\nfrom app.delivery_execution import (\n    DeliveryExecutionRejected,\n    validate_delivery_execution_payload,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "RUF100",
+    "end_location": {
+      "column": 63,
+      "row": 20
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_ensure_evidence_bucket.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 63,
+            "row": 20
+          },
+          "location": {
+            "column": 49,
+            "row": 20
+          }
+        }
+      ],
+      "message": "Remove unused `noqa` directive"
+    },
+    "location": {
+      "column": 51,
+      "row": 20
+    },
+    "message": "Unused `noqa` directive (non-enabled: `E402`)",
+    "name": "unused-noqa",
+    "noqa_row": 20,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-noqa"
+  },
+  {
+    "cell": null,
+    "code": "RUF100",
+    "end_location": {
+      "column": 64,
+      "row": 32
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_ensure_evidence_bucket.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 83,
+            "row": 32
+          },
+          "location": {
+            "column": 50,
+            "row": 32
+          }
+        }
+      ],
+      "message": "Remove unused `noqa` directive"
+    },
+    "location": {
+      "column": 52,
+      "row": 32
+    },
+    "message": "Unused `noqa` directive (non-enabled: `N803`)",
+    "name": "unused-noqa",
+    "noqa_row": 32,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-noqa"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 45,
+      "row": 143
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_idempotency_collision.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 45,
+            "row": 143
+          },
+          "location": {
+            "column": 33,
+            "row": 143
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 33,
+      "row": 143
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 143,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 36,
+      "row": 175
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_postgres_integration.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 36,
+            "row": 175
+          },
+          "location": {
+            "column": 24,
+            "row": 175
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 24,
+      "row": 175
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 175,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 55,
+      "row": 201
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_postgres_integration.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 55,
+            "row": 201
+          },
+          "location": {
+            "column": 43,
+            "row": 201
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 43,
+      "row": 201
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 201,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 49,
+      "row": 227
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_postgres_integration.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 49,
+            "row": 227
+          },
+          "location": {
+            "column": 37,
+            "row": 227
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 37,
+      "row": 227
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 227,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 53,
+      "row": 329
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_postgres_integration.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 53,
+            "row": 329
+          },
+          "location": {
+            "column": 41,
+            "row": 329
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 41,
+      "row": 329
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 329,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 53,
+      "row": 335
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_postgres_integration.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 53,
+            "row": 335
+          },
+          "location": {
+            "column": 41,
+            "row": 335
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 41,
+      "row": 335
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 335,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 66,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_production_preflight.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport subprocess\nfrom pathlib import Path\n\nfrom scripts.probe_production_preflight import Snapshot, evaluate\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "C408",
+    "end_location": {
+      "column": 6,
+      "row": 70
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_prefetch_equivalence.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "{\n        \"user_id\": \"user-equiv\",\n        \"organization_id\": ORG,\n        \"membership_id\": \"membership-equiv\",\n        \"session_id\": \"session-equiv\",\n        \"authorization_revision\": 1,\n        \"capabilities\": frozenset({\"sync\"}),\n        \"customer_ids\": frozenset(),\n        \"project_ids\": frozenset(),\n        \"all_customers\": True,\n        \"all_projects\": True,\n    }",
+          "end_location": {
+            "column": 6,
+            "row": 70
+          },
+          "location": {
+            "column": 12,
+            "row": 59
+          }
+        }
+      ],
+      "message": "Rewrite as a literal"
+    },
+    "location": {
+      "column": 12,
+      "row": 59
+    },
+    "message": "Unnecessary `dict()` call (rewrite as a literal)",
+    "name": "unnecessary-collection-call",
+    "noqa_row": 59,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unnecessary-collection-call"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 61,
+      "row": 276
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_prefetch_equivalence.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import UTC\n",
+          "end_location": {
+            "column": 1,
+            "row": 29
+          },
+          "location": {
+            "column": 1,
+            "row": 29
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 61,
+            "row": 276
+          },
+          "location": {
+            "column": 49,
+            "row": 276
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 49,
+      "row": 276
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 276,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 68,
+      "row": 392
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_prefetch_equivalence.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app.models import CanonicalProject",
+          "end_location": {
+            "column": 68,
+            "row": 392
+          },
+          "location": {
+            "column": 5,
+            "row": 392
+          }
+        }
+      ],
+      "message": "Remove unused import: `app.models.CanonicalProjectSector`"
+    },
+    "location": {
+      "column": 46,
+      "row": 392
+    },
+    "message": "`app.models.CanonicalProjectSector` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 392,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 10,
+      "row": 47
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_prefetch_measured_baseline.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 48
+          },
+          "location": {
+            "column": 1,
+            "row": 47
+          }
+        }
+      ],
+      "message": "Remove unused import: `os`"
+    },
+    "location": {
+      "column": 8,
+      "row": 47
+    },
+    "message": "`os` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 47,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 14,
+      "row": 49
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_prefetch_measured_baseline.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 50
+          },
+          "location": {
+            "column": 1,
+            "row": 49
+          }
+        }
+      ],
+      "message": "Remove unused import: `pytest`"
+    },
+    "location": {
+      "column": 8,
+      "row": 49
+    },
+    "message": "`pytest` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 49,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 76,
+      "row": 147
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_query_cost_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 40
+          },
+          "location": {
+            "column": 1,
+            "row": 40
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 76,
+            "row": 147
+          },
+          "location": {
+            "column": 64,
+            "row": 147
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 64,
+      "row": 147
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 147,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 55,
+      "row": 52
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_scale_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 28
+          },
+          "location": {
+            "column": 1,
+            "row": 28
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 55,
+            "row": 52
+          },
+          "location": {
+            "column": 43,
+            "row": 52
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 43,
+      "row": 52
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 52,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 55,
+      "row": 63
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_pull_visibility_matrix_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 47
+          },
+          "location": {
+            "column": 1,
+            "row": 47
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 55,
+            "row": 63
+          },
+          "location": {
+            "column": 43,
+            "row": 63
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 43,
+      "row": 63
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 63,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 43,
+      "row": 32
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_concurrency_measure_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from sqlalchemy import delete, event",
+          "end_location": {
+            "column": 51,
+            "row": 32
+          },
+          "location": {
+            "column": 1,
+            "row": 32
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 39,
+      "row": 32
+    },
+    "message": "`sqlalchemy.func` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 32,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 51,
+      "row": 32
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_concurrency_measure_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from sqlalchemy import delete, event",
+          "end_location": {
+            "column": 51,
+            "row": 32
+          },
+          "location": {
+            "column": 1,
+            "row": 32
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 45,
+      "row": 32
+    },
+    "message": "`sqlalchemy.select` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 32,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 55,
+      "row": 54
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_concurrency_measure_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 29
+          },
+          "location": {
+            "column": 1,
+            "row": 29
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 55,
+            "row": 54
+          },
+          "location": {
+            "column": 43,
+            "row": 54
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 43,
+      "row": 54
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 54,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 69
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_preread_deferred.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport datetime\nimport os\n\nimport pytest\nfrom sqlalchemy import delete, func, select, text\n\nfrom app.db import SessionFactory\nfrom app.idempotency import SyncMutationFingerprint\nfrom app.models import SyncChangeLog, SyncEntity, SyncMutation\nfrom app.schemas import SyncBatch\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 71
+          },
+          "location": {
+            "column": 1,
+            "row": 57
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 57
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 57,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 42,
+      "row": 64
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_preread_deferred.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from sqlalchemy import func, select",
+          "end_location": {
+            "column": 42,
+            "row": 64
+          },
+          "location": {
+            "column": 1,
+            "row": 64
+          }
+        }
+      ],
+      "message": "Remove unused import: `sqlalchemy.text`"
+    },
+    "location": {
+      "column": 38,
+      "row": 64
+    },
+    "message": "`sqlalchemy.text` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 64,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 90,
+      "row": 233
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_preread_deferred.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import datetime",
+          "end_location": {
+            "column": 16,
+            "row": 59
+          },
+          "location": {
+            "column": 1,
+            "row": 59
+          }
+        },
+        {
+          "content": "datetime.UTC",
+          "end_location": {
+            "column": 90,
+            "row": 233
+          },
+          "location": {
+            "column": 69,
+            "row": 233
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 69,
+      "row": 233
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 233,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 30,
+      "row": 17
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_query_cost_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 18
+          },
+          "location": {
+            "column": 1,
+            "row": 17
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 22,
+      "row": 17
+    },
+    "message": "`datetime.datetime` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 17,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 40,
+      "row": 17
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_push_query_cost_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 18
+          },
+          "location": {
+            "column": 1,
+            "row": 17
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 32,
+      "row": 17
+    },
+    "message": "`datetime.timezone` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 17,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 2,
+      "row": 27
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_rate_limit.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport os\nfrom datetime import datetime, timezone\n\nimport pytest\nfrom httpx import ASGITransport, AsyncClient\n\nfrom app.main import app\nfrom app.pairing import PairingExchangeResponse\nfrom app.rate_limit import (\n    DEFAULT_LIMIT,\n    DEFAULT_WINDOW_SECONDS,\n    SlidingWindowLimiter,\n    client_key_for,\n    limiter_for,\n    path_is_throttled,\n    reset_limiter_for_tests,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 30
+          },
+          "location": {
+            "column": 1,
+            "row": 8
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 8
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 8,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 10,
+      "row": 10
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_rate_limit.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 11
+          },
+          "location": {
+            "column": 1,
+            "row": 10
+          }
+        }
+      ],
+      "message": "Remove unused import: `os`"
+    },
+    "location": {
+      "column": 8,
+      "row": 10
+    },
+    "message": "`os` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 10,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 63,
+      "row": 155
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_rate_limit.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 13
+          },
+          "location": {
+            "column": 1,
+            "row": 13
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 63,
+            "row": 155
+          },
+          "location": {
+            "column": 51,
+            "row": 155
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 51,
+      "row": 155
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 155,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 14,
+      "row": 5
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_rejection_codes.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 5
+          }
+        }
+      ],
+      "message": "Remove unused import: `pytest`"
+    },
+    "location": {
+      "column": 8,
+      "row": 5
+    },
+    "message": "`pytest` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 5,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 6
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_release_version.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport tomllib\nfrom pathlib import Path\n\nfrom app.settings import Settings\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 1,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 32,
+      "row": 9
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_bounds.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 1
+          },
+          "location": {
+            "column": 1,
+            "row": 1
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 32,
+            "row": 9
+          },
+          "location": {
+            "column": 20,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 20,
+      "row": 9
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 9,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 40,
+      "row": 25
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport json\n\nimport pytest\nfrom httpx import ASGITransport, AsyncClient\n\nimport app.request_size as request_size\nfrom app.main import app\nfrom app.request_size import (\n    DEFAULT_PATH_LIMITS,\n    RequestSizeLimitMiddleware,\n    RequestTooLarge,\n    _env_suffix,\n    declared_length,\n    limit_for_path,\n    limits,\n)\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 27
+          },
+          "location": {
+            "column": 1,
+            "row": 8
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 8
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 8,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 31,
+      "row": 18
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app.request_size import (\n    DEFAULT_PATH_LIMITS,\n    _env_suffix,\n    declared_length,\n    limit_for_path,\n    limits,\n)",
+          "end_location": {
+            "column": 2,
+            "row": 24
+          },
+          "location": {
+            "column": 1,
+            "row": 16
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 5,
+      "row": 18
+    },
+    "message": "`app.request_size.RequestSizeLimitMiddleware` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 18,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 20,
+      "row": 19
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app.request_size import (\n    DEFAULT_PATH_LIMITS,\n    _env_suffix,\n    declared_length,\n    limit_for_path,\n    limits,\n)",
+          "end_location": {
+            "column": 2,
+            "row": 24
+          },
+          "location": {
+            "column": 1,
+            "row": 16
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 5,
+      "row": 19
+    },
+    "message": "`app.request_size.RequestTooLarge` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 19,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "PLR0402",
+    "end_location": {
+      "column": 40,
+      "row": 25
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app import request_size",
+          "end_location": {
+            "column": 40,
+            "row": 25
+          },
+          "location": {
+            "column": 1,
+            "row": 25
+          }
+        }
+      ],
+      "message": "Replace with `from app import request_size`"
+    },
+    "location": {
+      "column": 8,
+      "row": 25
+    },
+    "message": "Use `from app import request_size` in lieu of alias",
+    "name": "manual-from-import",
+    "noqa_row": 25,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/manual-from-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 40,
+      "row": 25
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 26
+          },
+          "location": {
+            "column": 1,
+            "row": 25
+          }
+        }
+      ],
+      "message": "Remove unused import: `app.request_size`"
+    },
+    "location": {
+      "column": 28,
+      "row": 25
+    },
+    "message": "`app.request_size` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 25,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 10,
+      "row": 182
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 13,
+            "row": 182
+          },
+          "location": {
+            "column": 5,
+            "row": 182
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `limit`"
+    },
+    "location": {
+      "column": 5,
+      "row": 182
+    },
+    "message": "Local variable `limit` is assigned to but never used",
+    "name": "unused-variable",
+    "noqa_row": 182,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 63,
+      "row": 251
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_request_size.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import UTC\n",
+          "end_location": {
+            "column": 1,
+            "row": 26
+          },
+          "location": {
+            "column": 1,
+            "row": 26
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 63,
+            "row": 251
+          },
+          "location": {
+            "column": 51,
+            "row": 251
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 51,
+      "row": 251
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 251,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 14,
+      "row": 22
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_run_evidence_gc_script.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 23
+          },
+          "location": {
+            "column": 1,
+            "row": 22
+          }
+        }
+      ],
+      "message": "Remove unused import: `pytest`"
+    },
+    "location": {
+      "column": 8,
+      "row": 22
+    },
+    "message": "`pytest` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 22,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 57,
+      "row": 143
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_s3_evidence_integration.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 3
+          },
+          "location": {
+            "column": 1,
+            "row": 3
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 57,
+            "row": 143
+          },
+          "location": {
+            "column": 45,
+            "row": 143
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 45,
+      "row": 143
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 143,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 40,
+      "row": 113
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_scrum21_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 40,
+            "row": 113
+          },
+          "location": {
+            "column": 28,
+            "row": 113
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 28,
+      "row": 113
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 113,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 40,
+      "row": 175
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_scrum21_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 40,
+            "row": 175
+          },
+          "location": {
+            "column": 28,
+            "row": 175
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 28,
+      "row": 175
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 175,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 50,
+      "row": 81
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_scrum21_release_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 50,
+            "row": 81
+          },
+          "location": {
+            "column": 38,
+            "row": 81
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 38,
+      "row": 81
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 81,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 47,
+      "row": 192
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_scrum21_release_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timedelta, timezone, UTC",
+          "end_location": {
+            "column": 51,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 47,
+            "row": 192
+          },
+          "location": {
+            "column": 35,
+            "row": 192
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 35,
+      "row": 192
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 192,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 46,
+      "row": 24
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_soft_delete_visibility_probe.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 25
+          },
+          "location": {
+            "column": 1,
+            "row": 24
+          }
+        }
+      ],
+      "message": "Remove unused import: `app.pull_prefetch.resolve_visible`"
+    },
+    "location": {
+      "column": 31,
+      "row": 24
+    },
+    "message": "`app.pull_prefetch.resolve_visible` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 24,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 75,
+      "row": 27
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_soft_delete_visibility_probe.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import datetime",
+          "end_location": {
+            "column": 16,
+            "row": 17
+          },
+          "location": {
+            "column": 1,
+            "row": 17
+          }
+        },
+        {
+          "content": "datetime.UTC",
+          "end_location": {
+            "column": 75,
+            "row": 27
+          },
+          "location": {
+            "column": 54,
+            "row": 27
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 54,
+      "row": 27
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 27,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 15,
+      "row": 39
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_chunking_contract.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app.schemas import (\n    MAX_SYNC_RECORDS,\n    MAX_SYNC_V1_BATCH_PAYLOAD_BYTES,\n    MAX_SYNC_V1_WIRE_PAYLOAD_BYTES,\n    SyncBatch,\n)",
+          "end_location": {
+            "column": 2,
+            "row": 40
+          },
+          "location": {
+            "column": 1,
+            "row": 34
+          }
+        }
+      ],
+      "message": "Remove unused import: `app.schemas.SyncRecord`"
+    },
+    "location": {
+      "column": 5,
+      "row": 39
+    },
+    "message": "`app.schemas.SyncRecord` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 39,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 49,
+      "row": 145
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_concurrency.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 7
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 49,
+            "row": 145
+          },
+          "location": {
+            "column": 37,
+            "row": 145
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 37,
+      "row": 145
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 145,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 2,
+      "row": 31
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_bounds.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from __future__ import annotations\n\nimport base64\n\nimport pytest\nfrom pydantic import ValidationError\n\nfrom app.auth import Principal\nfrom app.schemas import (\n    MAX_SYNC_RECORDS,\n    MAX_SYNC_V1_BATCH_PAYLOAD_BYTES,\n    SyncBatch,\n    SyncRecord,\n)\nfrom app.sync_service import (\n    MAX_CURSOR_DIGITS,\n    MAX_CURSOR_SEQUENCE,\n    MAX_SYNC_PULL_RESPONSE_BYTES,\n    MAX_SYNC_PULL_SCAN_CHANGES,\n    InvalidMutation,\n    pull_page_accepts,\n    pull_since,\n)\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 34
+          },
+          "location": {
+            "column": 1,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 9
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "name": "unsorted-imports",
+    "noqa_row": 9,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "PLR0402",
+    "end_location": {
+      "column": 44,
+      "row": 150
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_bounds.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app import sync_service",
+          "end_location": {
+            "column": 44,
+            "row": 150
+          },
+          "location": {
+            "column": 5,
+            "row": 150
+          }
+        }
+      ],
+      "message": "Replace with `from app import sync_service`"
+    },
+    "location": {
+      "column": 12,
+      "row": 150
+    },
+    "message": "Use `from app import sync_service` in lieu of alias",
+    "name": "manual-from-import",
+    "noqa_row": 150,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/manual-from-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 71,
+      "row": 97
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_cursor_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 22
+          },
+          "location": {
+            "column": 1,
+            "row": 22
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 71,
+            "row": 97
+          },
+          "location": {
+            "column": 59,
+            "row": 97
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 59,
+      "row": 97
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 97,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 71,
+      "row": 107
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_cursor_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 22
+          },
+          "location": {
+            "column": 1,
+            "row": 22
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 71,
+            "row": 107
+          },
+          "location": {
+            "column": 59,
+            "row": 107
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 59,
+      "row": 107
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 107,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "PLR0402",
+    "end_location": {
+      "column": 44,
+      "row": 146
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_cursor_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from app import sync_service",
+          "end_location": {
+            "column": 44,
+            "row": 146
+          },
+          "location": {
+            "column": 5,
+            "row": 146
+          }
+        }
+      ],
+      "message": "Replace with `from app import sync_service`"
+    },
+    "location": {
+      "column": 12,
+      "row": 146
+    },
+    "message": "Use `from app import sync_service` in lieu of alias",
+    "name": "manual-from-import",
+    "noqa_row": 146,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/manual-from-import"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 71,
+      "row": 202
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_cursor_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 22
+          },
+          "location": {
+            "column": 1,
+            "row": 22
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 71,
+            "row": 202
+          },
+          "location": {
+            "column": 59,
+            "row": 202
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 59,
+      "row": 202
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 202,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "UP017",
+    "end_location": {
+      "column": 75,
+      "row": 239
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_sync_pull_cursor_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import datetime, timezone, UTC",
+          "end_location": {
+            "column": 40,
+            "row": 22
+          },
+          "location": {
+            "column": 1,
+            "row": 22
+          }
+        },
+        {
+          "content": "UTC",
+          "end_location": {
+            "column": 75,
+            "row": 239
+          },
+          "location": {
+            "column": 63,
+            "row": 239
+          }
+        }
+      ],
+      "message": "Convert to `datetime.UTC` alias"
+    },
+    "location": {
+      "column": 63,
+      "row": 239
+    },
+    "message": "Use `datetime.UTC` alias",
+    "name": "datetime-timezone-utc",
+    "noqa_row": 239,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+  },
+  {
+    "cell": null,
+    "code": "RUF012",
+    "end_location": {
+      "column": 23,
+      "row": 273
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_transient_retry.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 273
+    },
+    "message": "Mutable default value for class attribute",
+    "name": "mutable-class-default",
+    "noqa_row": 273,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/mutable-class-default"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 15,
+      "row": 26
+    },
+    "filename": "/home/nez/Projects/vitrial-api/tests/test_transient_retry_postgres.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 27
+          },
+          "location": {
+            "column": 1,
+            "row": 26
+          }
+        }
+      ],
+      "message": "Remove unused import: `asyncio`"
+    },
+    "location": {
+      "column": 8,
+      "row": 26
+    },
+    "message": "`asyncio` imported but unused",
+    "name": "unused-import",
+    "noqa_row": 26,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  }
+]  ℹ Info (187 found)
+    Ruff emitted findings
+    Review ruff output above
+
+• bandit (security)
+Run started:2026-10-02 18:02:59.343595+00:00
+
+Test results:
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /home/nez/Projects/vitrial-api/app/storage.py:239:16
+238	                    )
+239	                except Exception:
+240	                    pass
+241	            else:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /home/nez/Projects/vitrial-api/app/storage.py:244:16
+243	                    await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=staging)
+244	                except Exception:
+245	                    pass
+246	            raise StorageError(str(exc)) from exc
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /home/nez/Projects/vitrial-api/app/transient_retry.py:110:4
+109	        await db.rollback()
+110	    except Exception:  # pragma: no cover - defensive
+111	        pass
+112	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:39:0
+38	import json
+39	import subprocess
+40	import sys
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b607_start_process_with_partial_path.html
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:50:11
+49	def git(*args: str) -> str:
+50	    return subprocess.run(
+51	        ["git", *args],
+52	        capture_output=True,
+53	        text=True,
+54	        check=False,
+55	        timeout=GIT_TIMEOUT_SECONDS,
+56	    ).stdout
+57	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:50:11
+49	def git(*args: str) -> str:
+50	    return subprocess.run(
+51	        ["git", *args],
+52	        capture_output=True,
+53	        text=True,
+54	        check=False,
+55	        timeout=GIT_TIMEOUT_SECONDS,
+56	    ).stdout
+57	
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b607_start_process_with_partial_path.html
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:82:17
+81	    for f in touched:
+82	        exists = subprocess.run(
+83	            ["git", "cat-file", "-e", f"{main}:{f}"],
+84	            capture_output=True,
+85	            check=False,
+86	            timeout=GIT_TIMEOUT_SECONDS,
+87	        ).returncode == 0
+88	        if not exists:
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:82:17
+81	    for f in touched:
+82	        exists = subprocess.run(
+83	            ["git", "cat-file", "-e", f"{main}:{f}"],
+84	            capture_output=True,
+85	            check=False,
+86	            timeout=GIT_TIMEOUT_SECONDS,
+87	        ).returncode == 0
+88	        if not exists:
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b607_start_process_with_partial_path.html
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:91:15
+90	            continue
+91	        same = subprocess.run(
+92	            ["git", "diff", "--quiet", f"{main}:{f}", f"{branch}:{f}"],
+93	            capture_output=True,
+94	            check=False,
+95	            timeout=GIT_TIMEOUT_SECONDS,
+96	        ).returncode == 0
+97	        (behind if same else differs).append(f)
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:91:15
+90	            continue
+91	        same = subprocess.run(
+92	            ["git", "diff", "--quiet", f"{main}:{f}", f"{branch}:{f}"],
+93	            capture_output=True,
+94	            check=False,
+95	            timeout=GIT_TIMEOUT_SECONDS,
+96	        ).returncode == 0
+97	        (behind if same else differs).append(f)
+
+--------------------------------------------------
+>> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.
+   Severity: Medium   Confidence: High
+   CWE: CWE-22 (https://cwe.mitre.org/data/definitions/22.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen
+   Location: /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:85:13
+84	    try:
+85	        with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response:
+86	            raw = response.read()
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 8010
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 10
+		Medium: 1
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 0
+		High: 11
+Files skipped (0):
+  ℹ Info (0 found)
+    Bandit scan completed
+    See output above
+
+• pip-audit (dependencies)
+No known vulnerabilities found
+  ℹ Info (0 found)
+    pip-audit ran against pyproject.toml
+    Review advisories above
+UBS module: python (contract v2) — /home/nez/Projects/vitrial-api
+Files scanned: 46
+
+5. ASYNC/AWAIT PITFALLS
+[info] await inside loops — for event in outcome_events: (9 found) — py.async.await-in-loop
+    /home/nez/Projects/vitrial-api/app/sync_service.py:439  await inside loops — for event in outcome_events: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/sync_service.py#L439)
+    /home/nez/Projects/vitrial-api/app/storage.py:120  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L120)
+    /home/nez/Projects/vitrial-api/app/storage.py:189  await inside loops — while len(buffer) >= self.part_size: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L189)
+    /home/nez/Projects/vitrial-api/app/storage.py:269  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L269)
+    /home/nez/Projects/vitrial-api/app/request_size.py:211  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/request_size.py#L211)
+[warning] Blocking calls inside async functions — async def stream(self, key: str) -> AsyncIterator[bytes]: (1 found) — py.async.blocking-call
+    /home/nez/Projects/vitrial-api/app/storage.py:115  Blocking calls inside async functions — async def stream(self, key: str) -> AsyncIterator[bytes]: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L115)
+[info] Async functions found — async def collect_snapshot() -> Snapshot: (109 found) — py.async.census
+    /home/nez/Projects/vitrial-api/scripts/probe_production_preflight.py:71  Async functions found — async def collect_snapshot() -> Snapshot: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/probe_production_preflight.py#L71)
+    /home/nez/Projects/vitrial-api/scripts/probe_production_preflight.py:141  Async functions found — async def run() -> int: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/probe_production_preflight.py#L141)
+    /home/nez/Projects/vitrial-api/scripts/probe_dependencies.py:12  Async functions found — async def run_probe() -> dict[str, str]: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/probe_dependencies.py#L12)
+    /home/nez/Projects/vitrial-api/scripts/gc_evidence.py:11  Async functions found — async def run(limit: int, execute: bool) -> int: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/gc_evidence.py#L11)
+    /home/nez/Projects/vitrial-api/migrations/env.py:24  Async functions found — async def run_async_migrations(): (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/migrations/env.py#L24)
+
+7. SECURITY VULNERABILITIES
+[critical] Request-controlled value reaches HTTP response header — response.headers["X-Request-ID"] = request_id (2 found) — py.security.header-injection
+    /home/nez/Projects/vitrial-api/app/main.py:85  Request-controlled value reaches HTTP response header — response.headers["X-Request-ID"] = request_id (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/main.py#L85)
+    /home/nez/Projects/vitrial-api/app/main.py:280  Request-controlled value reaches HTTP response header — return Response(status_code=201, headers={"X-Content-SHA256": model.sha256}) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/main.py#L280)
+[critical] Request-controlled LDAP filter or DN reaches directory sink — db.add(model) (7 found) — py.security.ldap-injection
+    /home/nez/Projects/vitrial-api/app/reference_data.py:406  Request-controlled LDAP filter or DN reaches directory sink — db.add(model) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/reference_data.py#L406)
+    /home/nez/Projects/vitrial-api/app/pairing.py:93  Request-controlled LDAP filter or DN reaches directory sink — db.add(grant) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/pairing.py#L93)
+    /home/nez/Projects/vitrial-api/app/pairing.py:154  Request-controlled LDAP filter or DN reaches directory sink — db.add(auth_session) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/pairing.py#L154)
+    /home/nez/Projects/vitrial-api/app/admin.py:110  Request-controlled LDAP filter or DN reaches directory sink — db.add(organization) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/admin.py#L110)
+    /home/nez/Projects/vitrial-api/app/admin.py:126  Request-controlled LDAP filter or DN reaches directory sink — db.add(user) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/admin.py#L126)
+[critical] Secret, signature, or token compared with ==/!= (7 found) — python.ctcompare.secret_eq
+    app/lifecycle.py:78  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/lifecycle.py#L78)
+    app/delivery_production.py:53  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_production.py#L53)
+    app/delivery_installation.py:56  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_installation.py#L56)
+    app/delivery_execution.py:162  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_execution.py#L162)
+    app/delivery_execution.py:196  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_execution.py#L196)
+
+8. FUNCTION & SCOPE ISSUES
+[info] Nested functions - verify closures and lifetimes — def payload_must_be_bounded(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]: (18 found) — py.functions.nested-defs
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:48  Nested functions - verify closures and lifetimes — def payload_must_be_bounded(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/sync_v2.py#L48)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:63  Nested functions - verify closures and lifetimes — def aggregate_payload_must_be_bounded(self) -> "SyncBatchV2": (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/sync_v2.py#L63)
+    /home/nez/Projects/vitrial-api/app/storage.py:65  Nested functions - verify closures and lifetimes — def __init__(self, root: Path): (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L65)
+    /home/nez/Projects/vitrial-api/app/storage.py:68  Nested functions - verify closures and lifetimes — def _path(self, key: str) -> Path: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L68)
+    /home/nez/Projects/vitrial-api/app/storage.py:133  Nested functions - verify closures and lifetimes — def __init__(self): (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L133)
+
+10. CONTROL FLOW GOTCHAS
+[info] Possible unreachable code after return — return subprocess.run( (156 found) — py.control-flow.unreachable-code
+    /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:50  Possible unreachable code after return — return subprocess.run( (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/audit_branch_staleness.py#L50)
+    /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:74  Possible unreachable code after return — return {"branch": branch, "verdict": "NO-COMMON-ANCESTOR", "adds": [], "behind": []} (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/audit_branch_staleness.py#L74)
+    /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:114  Possible unreachable code after return — return { (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/audit_branch_staleness.py#L114)
+    /home/nez/Projects/vitrial-api/scripts/validate_deployment.py:45  Possible unreachable code after return — return parsed.hostname (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/validate_deployment.py#L45)
+    /home/nez/Projects/vitrial-api/scripts/validate_deployment.py:164  Possible unreachable code after return — return 1 (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/validate_deployment.py#L164)
+
+16. I/O & RESOURCE SAFETY
+[warning] open() calls missing 'with' — fd = os.open(path, flags, 0o600) (1 found) — py.io.open-missing-with
+    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:254  open() calls missing 'with' — fd = os.open(path, flags, 0o600) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/bootstrap_two_user_acceptance.py#L254)
+[info] open() missing encoding — with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response: (4 found) — py.io.open-no-encoding
+    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:85  open() missing encoding — with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/bootstrap_two_user_acceptance.py#L85)
+    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:254  open() missing encoding — fd = os.open(path, flags, 0o600) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/bootstrap_two_user_acceptance.py#L254)
+    /home/nez/Projects/vitrial-api/app/storage.py:96  open() missing encoding — with temporary.open("wb") as handle: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L96)
+    /home/nez/Projects/vitrial-api/app/storage.py:119  open() missing encoding — with path.open("rb") as handle: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L119)
+
+17. TYPING STRICTNESS
+[info] Frequent 'Any' usage — def bind_principal(principal: Any) -> None: (3 found) — py.typing.any-usage
+    /home/nez/Projects/vitrial-api/app/observability.py:135  Frequent 'Any' usage — def bind_principal(principal: Any) -> None: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L135)
+    /home/nez/Projects/vitrial-api/app/observability.py:152  Frequent 'Any' usage — def redact(value: Any, *, key: str | None = None) -> Any: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L152)
+    /home/nez/Projects/vitrial-api/app/observability.py:202  Frequent 'Any' usage — def log_event(event: str, *, level: int = logging.INFO, **fields: Any) -> None: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L202)
+
+18. PYTHON I/O & MODULE USAGE
+[info] Dynamic imports present — sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1])) (3 found) — py.modules.dynamic-import
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:16  Dynamic imports present — sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1])) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L16)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:20  Dynamic imports present — app_module = importlib.import_module("app.main") (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L20)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:32  Dynamic imports present — module = importlib.import_module(mod_name) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L32)
+
+AST-GREP RULE PACK FINDINGS
+ast-grep rule-pack summary
+[info] py.any-typing: Use precise types; 'Any' weakens type guarantees (6 found) — py.any-typing
+    /home/nez/Projects/vitrial-api/app/observability.py:12  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L12)
+    /home/nez/Projects/vitrial-api/app/observability.py:135  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L135)
+    /home/nez/Projects/vitrial-api/app/observability.py:152  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L152)
+    /home/nez/Projects/vitrial-api/app/observability.py:152  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L152)
+    /home/nez/Projects/vitrial-api/app/observability.py:168  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L168)
+[info] py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (3 found) — py.importlib-dynamic
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:16  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L16)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:20  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L20)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:32  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L32)
+[warning] py.json-load-no-try: json.load() without try/except crashes on malformed JSON or empty files (1 found) — py.json-load-no-try
+    /home/nez/Projects/vitrial-api/scripts/validate_backend_contract.py:36  py.json-load-no-try: json.load() without try/except crashes on malformed JSON or empty files (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/validate_backend_contract.py#L36)
+[info] py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (2 found) — py.logging-exception-no-exc-info
+    /home/nez/Projects/vitrial-api/app/observability.py:188  py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L188)
+    /home/nez/Projects/vitrial-api/app/observability.py:196  py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L196)
+good: All tracked resource acquisitions have matching cleanups
+good: No 'is' literal comparisons
+Critical issues: 16
+Warning issues: 3
+Info items: 313
+Report generated: 2026-10-02T18:02:58Z
+1. NONE / DEFENSIVE PROGRAMMING
+2. NUMERIC / ARITHMETIC PITFALLS
+3. COLLECTION SAFETY
+4. COMPARISON & TYPE CHECKING TRAPS
+6. ERROR HANDLING ANTI-PATTERNS
+9. PARSING & TYPE CONVERSION BUGS
+11. DEBUGGING & PRODUCTION CODE
+12. PERFORMANCE & MEMORY
+13. VARIABLE & SCOPE
+14. CODE QUALITY MARKERS
+15. REGEX & STRING SAFETY
+19. RESOURCE LIFECYCLE CORRELATION
+20. UV-POWERED EXTRA ANALYZERS
+21. DEPRECATIONS & PY3.13 MIGRATIONS
+22. PACKAGING & CONFIG HYGIENE
+23. NOTEBOOK HYGIENE
+
+Summary Statistics:
+Files scanned: 46
+Critical issues: 16
+Warning issues: 3
+Info items: 500
+
+──────── Combined Summary ────────
+Files: 46
+Critical: 16
+Warning: 3
+Info: 500
+Δ vs baseline (ubs-baseline.json): critical +0, warning +0, info +12
+Shareable summary written (critical=16, warning=3, info=500)

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check
+.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check ubs branches
 
 install:
 	python -m pip install -e '.[dev]'
@@ -66,4 +66,16 @@ run:
 check:
 	$(PYTHON) -m compileall -q app migrations tests
 	$(PYTHON) scripts/validate_backend_contract.py
+	$(PYTHON) scripts/check_guard_prefixes.py
 	$(MAKE) test
+
+# UBS bug gate: fail on any NEW critical/warning finding vs the committed baseline.
+# Same verdict as CI (.github/workflows/ubs.yml). See trackers/vitrial-api-TRACKER.md
+# "UBS loop status" for why the baseline is a defined floor and not a silent rebaseline.
+ubs:
+	bash scripts/ubs_gate.sh ubs-baseline.json
+
+# Are any branches holding work main does not have? Content-based, because
+# --no-merged / git cherry both lie on a squash-merge repo. Exit 1 if real work found.
+branches:
+	$(PYTHON) scripts/audit_branch_staleness.py
