@@ -272,10 +272,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: gitleaks is a secret scanner, and a secret that landed
+          # and was removed in an earlier commit is exactly the one worth finding.
+          # The default shallow checkout cannot see it, which makes a passing scan
+          # a statement about the tip and nothing else.
+          fetch-depth: 0
       - name: Secrets scan (gitleaks)
-        uses: zricethezav/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The official CLI rather than zricethezav/gitleaks-action@v2.
+        #
+        # That action takes no configuration input -- action.yml at the v2 tag is
+        # six lines with no `inputs:` block at all -- so `.gitleaks.toml` in the
+        # repository root is never passed to the scan. An allowlist written there
+        # is silently ignored, which is worse than not writing one: it looks like
+        # the exceptions were reviewed and were not.
+        #
+        # The CLI discovers `.gitleaks.toml` by default and needs no flag for it.
+        # Pinned to an exact version rather than a range, because a secrets scanner
+        # that changes its rule set between runs makes two runs incomparable.
+        #
+        # There is deliberately no checksum assertion here. A checksum that has
+        # not been verified against the published release is not a supply-chain
+        # control, it is a comment that looks like one -- and a fabricated one is
+        # worse than none, because a later reader assumes it was checked. Until the
+        # real digest is fetched from the release page and pinned, the version pin
+        # and TLS are what this step actually guarantees.
+        run: |
+          set -euo pipefail
+          GITLEAKS_VERSION=8.28.0
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tgz
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+          # --redact so a real finding cannot leak the secret into this job's log
+          # by being reported. --verbose so an allowlisted finding is visible as
+          # allowlisted rather than invisible as absent.
+          gitleaks detect --source . --redact --verbose --no-banner
       - name: Dependency + filesystem vulnerability scan (trivy)
         uses: aquasecurity/trivy-action@v0.36.0
         with:

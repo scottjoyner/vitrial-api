@@ -40,14 +40,15 @@ defmodule VitrialSync.CanonicalJSON do
   @type scalar :: String.t() | non_neg_integer() | nil
   @type object :: %{optional(String.t()) => scalar}
 
-  @doc """
-  Raised when a value falls outside the closed shape above.
-
-  This is a bug in the caller, not a bad request: the fingerprint's inputs are
-  built from an already-validated record, so anything unexpected means the record
-  and this module have drifted apart.
-  """
   defmodule Unsupported do
+    @moduledoc """
+    Raised when a value falls outside the closed shape above.
+
+    This is a bug in the caller, not a bad request: the fingerprint's inputs are
+    built from an already-validated record, so anything unexpected means the
+    record and this module have drifted apart.
+    """
+
     defexception [:value, :path]
 
     @impl true
