@@ -19,6 +19,8 @@ from app.admin import (
 from app.auth import Principal, current_principal, profile_for
 from app.auth_session_routes import router as auth_session_router
 from app.db import session_scope
+from app.drain import drain_state
+from app.drain import lifespan as drain_lifespan
 from app.evidence import put_blob
 from app.models import EvidenceBlob
 from app.request_size import RequestSizeLimitMiddleware
@@ -43,7 +45,11 @@ from app.storage import StorageError, store_for_provider
 from app.sync_service import InvalidMutation, apply_push, pull_since
 from app.sync_v2_routes import router as sync_v2_router
 
-app = FastAPI(title="Vitrial Connected Operations API", version=settings.service_version)
+app = FastAPI(
+    title="Vitrial Connected Operations API",
+    version=settings.service_version,
+    lifespan=drain_lifespan,
+)
 app.include_router(auth_session_router)
 app.include_router(reference_router)
 app.include_router(sync_v2_router)
@@ -148,6 +154,20 @@ async def health() -> HealthResponse:
 
 @app.get("/ready", response_model=ReadinessResponse, include_in_schema=False)
 async def ready(response: Response) -> ReadinessResponse:
+    # Draining is a readiness fact, not a dependency fact: the database and object
+    # store may both be perfectly healthy while this instance must receive no new
+    # work. Report it as not-ready so the edge stops routing here while in-flight
+    # requests finish. Dependencies are still probed and still reported, so an
+    # operator can tell "draining on purpose" from "draining because broken".
+    if drain_state.draining:
+        readiness = await collect_dependency_readiness()
+        response.status_code = 503
+        return ReadinessResponse(
+            status="not-ready",
+            serviceVersion=settings.service_version,
+            database=readiness.database,
+            objectStorage=readiness.object_storage,
+        )
     readiness = await collect_dependency_readiness()
     if readiness.status != "ready":
         response.status_code = 503

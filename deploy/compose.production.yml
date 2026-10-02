@@ -70,6 +70,11 @@ services:
       nofile:
         soft: 4096
         hard: 4096
+    # Drain budget. Must EXCEED the uvicorn --timeout-graceful-shutdown (45s) set in the
+    # Dockerfile, or Docker SIGKILLs the container while uvicorn is still waiting for an
+    # in-flight evidence upload to finish. Stopping is graceful: SIGTERM, the server
+    # drains and exits on its own, and this window is then never reached.
+    stop_grace_period: 60s
     healthcheck:
       test: ["CMD", "python", "scripts/probe_dependencies.py", "--quiet"]
       interval: 30s

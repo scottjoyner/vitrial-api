@@ -49,7 +49,32 @@ echo "==> applying database migrations before application replacement"
 compose run --rm migrate
 
 echo "==> starting API and TLS edge"
+# `up -d` waits for the new container to start, which for a REPLACEMENT means the old one
+# was stopped first. That stop is graceful: SIGTERM, then uvicorn drains in-flight
+# requests (evidence uploads can be 100 MiB) up to --timeout-graceful-shutdown (45s),
+# bounded by stop_grace_period (60s) so Docker does not SIGKILL first.
+#
+# Waiting for the old container to actually exit is the part that matters: without it
+# the new container can accept traffic while the old one is still draining, and the two
+# overlap on the same organization locks. `up -d --wait` would conflate "started" with
+# "healthy", so the exit is awaited explicitly and the grace budget is enforced here
+# rather than trusted.
+PREVIOUS_API_ID="$(compose ps -q api 2>/dev/null || true)"
 compose up -d --no-deps api
+if [[ -n "$PREVIOUS_API_ID" ]]; then
+  echo "==> waiting for the previous API container to finish draining"
+  if ! docker wait "$PREVIOUS_API_ID" >/dev/null 2>&1; then
+    echo "previous API container did not exit cleanly; inspect before continuing" >&2
+    exit 1
+  fi
+  # Non-zero exit from the drained container means uvicorn hit its graceful timeout, i.e.
+  # a request was cut off. That is not a healthy deploy and must not be reported as one.
+  PREVIOUS_EXIT="$(docker inspect --format '{{.State.ExitCode}}' "$PREVIOUS_API_ID" 2>/dev/null || echo 0)"
+  if [[ "$PREVIOUS_EXIT" != "0" ]]; then
+    echo "previous API container exited $PREVIOUS_EXIT during drain; in-flight requests may have been cut" >&2
+    exit 1
+  fi
+fi
 compose up -d caddy
 
 echo "==> verifying running API container image identity"

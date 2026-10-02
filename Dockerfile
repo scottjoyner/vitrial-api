@@ -36,6 +36,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 # worker count is therefore a change to the database's connection ceiling, not a
 # tuning knob, and is out of scope here.
 #
+# --timeout-graceful-shutdown is the drain budget. On SIGTERM uvicorn stops accepting
+# new connections and waits for in-flight requests; this bounds that wait. It is set
+# well below Docker's stop grace (deploy/compose.production.yml `stop_grace_period`)
+# so the server finishes its own drain first and exits 0, rather than being SIGKILLed
+# mid-upload. Deploys must therefore wait for the container to actually exit.
+# 45s comfortably covers a 100 MiB evidence upload on the slowest link the ceiling
+# (evidence_max_bytes) is sized for.
+#
 # --limit-max-requests is the more tempting of the two and still wrong at one replica:
 # uvicorn recycles the only worker, Caddy takes ~45s to notice via health_uri
 # (3 consecutive failures at health_interval 15s), and every request in that window is
@@ -43,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 # deploy/compose.production.yml, which kills the container on genuine runaway rather
 # than on a schedule. Add worker recycling only together with a second api replica,
 # so the drain is invisible.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*", "--timeout-graceful-shutdown", "45"]
