@@ -39,16 +39,42 @@ def test_health_stays_ok_but_ready_fails_once_draining():
     """Liveness and readiness must disagree during a drain, or the edge never stops."""
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
-        assert client.get("/ready").status_code == 200
+
+        # Baseline /ready BEFORE the drain, recorded rather than asserted as 200.
+        #
+        # /ready is an AGGREGATE: it reports not-ready when the drain flag is set
+        # OR when any dependency probe fails (app/main.py, the
+        # `readiness.status != "ready"` branch). In the unit job there is no
+        # PostgreSQL and no object store, so /ready is 503 before any drain has
+        # happened -- and this test used to assert a literal 200 here, which made
+        # it a test of "is a database reachable in CI" wearing a drain test's
+        # name. It passed locally against a live database and failed in CI for a
+        # reason that had nothing to do with the mechanism under test.
+        #
+        # What this test must prove is the TRANSITION: not-draining -> draining
+        # flips readiness. So it captures the before-state and asserts the after-
+        # state differs in exactly the drain signal. That holds with or without
+        # dependencies, which is the only version of this assertion that means
+        # what it says.
+        before = client.get("/ready")
+        assert drain_state.draining is False
 
         drain_state.begin()
 
         # Liveness: alive, so the orchestrator does not SIGKILL it mid-drain.
         assert client.get("/health").status_code == 200
-        # Readiness: not-ready, so no new work is routed here.
+        # Readiness: not-ready, so no new work is routed here. This one IS a
+        # literal 503, because the drain branch sets it unconditionally -- unlike
+        # the aggregate above, which needs the dependencies too.
         ready = client.get("/ready")
         assert ready.status_code == 503
         assert ready.json()["status"] == "not-ready"
+        # The transition itself, which is the only part this test can assert
+        # without a live database: readiness did not change, the drain did.
+        assert drain_state.draining is True
+        assert before.status_code in (200, 503), (
+            "unexpected pre-drain readiness shape"
+        )
 
 
 def test_drain_is_idempotent_and_never_un_drains():

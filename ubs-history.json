@@ -23,10 +23,10 @@
     "critical": 16,
     "failed_modules": [],
     "files": 50,
-    "info": 328,
+    "info": 327,
     "project": "/home/nez/Projects/server-api",
     "status": "ok",
-    "timestamp": "2026-10-02T22:18:35Z",
+    "timestamp": "2026-10-02T22:20:06Z",
     "type": "totals",
     "warning": 3
   },
