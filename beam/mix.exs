@@ -3,10 +3,19 @@ defmodule Beam.MixProject do
 
   # Umbrella root for the Vitrial BEAM services.
   #
-  # Shared _build/deps/mix.lock live at the repository root (one level up) so a
-  # single dependency set and a single lockfile govern every service app. This
-  # is deliberate: the project doctrine is minimal dependency surface, and one
-  # resolved set is easier to audit for CVEs than eight independent ones.
+  # One lockfile governs every service app, and in a Mix umbrella that is
+  # automatic: children carry no lockfile of their own, they read the umbrella
+  # root's `beam/mix.lock`. The doctrine here is minimal dependency surface, and
+  # one resolved set is far easier to audit for CVEs than eight independent ones.
+  #
+  # build_path/deps_path/lockfile are therefore left at their Mix defaults, which
+  # resolve inside `beam/`. An earlier revision pointed them at the repository
+  # root (`../_build`, `../deps`, `../mix.lock`). That puts the whole BEAM build
+  # tree and every fetched dependency next to `app/`, `tests/` and `migrations/`,
+  # inside a repository whose root .gitignore covers none of them -- so
+  # `mix deps.get` leaves an untracked, unreviewable dependency tree in the
+  # Python project, and a repo-root search sweeps hex package sources into every
+  # result. Same single-lockfile property, contained estate.
 
   def project do
     [
@@ -16,9 +25,6 @@ defmodule Beam.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       apps_path: "apps",
-      build_path: "../_build",
-      deps_path: "../deps",
-      lockfile: "../mix.lock",
       elixirc_paths: ["lib"],
       test_elixirc_paths: ["test"],
       dialyzer: [plt_add_apps: [:mix]]

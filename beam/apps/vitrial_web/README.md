@@ -1,21 +1,8 @@
 # VitrialWeb
 
-**TODO: Add description**
+The HTTP boundary.
 
-## Installation
+  Routing, body admission, authentication hand-off, and the health surface.
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `vitrial_web` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:vitrial_web, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/vitrial_web>.
-
+  Body size is bounded at the edge as well as in the service, because a body is
+  read before any service-layer code runs.

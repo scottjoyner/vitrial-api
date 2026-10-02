@@ -1,17 +1,30 @@
 defmodule VitrialSync.MixProject do
   use Mix.Project
 
+  # Sync engine: bounded push/pull pages, cursor discipline, clientMutationID idempotency.
+  #
+  # The four path keys below are what make this app a member of the umbrella rather
+  # than a project that happens to sit under apps/. They redirect _build, deps,
+  # config and mix.lock to the umbrella root, which is why there is exactly one
+  # resolved dependency set and one lockfile for all eight apps instead of eight
+  # independently auditable ones. `mix new` writes them when the parent is an
+  # umbrella; they are repeated here because dropping them silently reverts this
+  # app to a private _build and a private mix.lock.
+
   def project do
     [
       app: :vitrial_sync,
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
+      build_path: "../../_build",
+      config_path: "../../config/config.exs",
+      deps_path: "../../deps",
+      lockfile: "../../mix.lock",
       deps: deps()
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -19,11 +32,12 @@ defmodule VitrialSync.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      # Empty by design. Dependencies are admitted one at a time, with the specific
+      # need written down, so that the exposure window of any third-party code and
+      # its transitive CVE surface is a decision on the record rather than a side
+      # effect of scaffolding.
     ]
   end
 end

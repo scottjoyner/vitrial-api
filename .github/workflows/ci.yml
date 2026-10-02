@@ -150,6 +150,123 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -t vitrial-api:ci .
 
+  beam:
+    name: BEAM umbrella (compile + format + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ready for when the first hex dependency lands. With zero deps this is a
+      # no-op today; once cowboy/epgsql are admitted, an uncached _build turns every
+      # push into a full cold compile of OTP-level artifacts.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .cache/mix-deps
+            .cache/mix-build
+            .cache/hex
+            .cache/rebar3
+          key: beam-${{ runner.os }}-${{ hashFiles('beam/mix.lock', 'beam/mix.exs', 'beam/apps/*/mix.exs') }}
+          restore-keys: |
+            beam-${{ runner.os }}-
+
+      # Toolchain, not host. The build runs inside the same pinned image the release
+      # image is cut from, so a compile that passes here is a compile that passes on
+      # the runner that produces artifacts. Installing Erlang/Elixir onto an
+      # ubuntu-latest runner via setup-beam or apt would let the two drift silently.
+      #
+      # Versions are current as of 2026-10-02: Elixir 1.20.4 / OTP erts 29.1.1. The
+      # `beam/` umbrella requires `elixir: "~> 1.19"`; this is the newest release on
+      # that constraint, deliberately three OTP majors ahead of the estate's
+      # ci/beam-compat:v1 image (OTP 27.3.4.2), which is the version this code will
+      # NOT be allowed to compile against.
+      #
+      # `-slim` rather than the default variant: the memory cap below is only
+      # meaningful if the image does not ship a desktop environment's worth of
+      # resident memory before the BEAM starts.
+      - name: Resolve toolchain versions (and fail on drift)
+        run: |
+          set -euo pipefail
+          docker run --rm --memory=3g --memory-swap=6g \
+            -v "$PWD/beam:/work" -w /work \
+            "$BEAM_IMAGE" sh -lc '
+              set -euo pipefail
+              elixir --version
+              erl -noshell -eval "io:format(\"~s~n\",[erlang:system_info(otp_release)]), halt()."
+            '
+        env:
+          BEAM_IMAGE: hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim
+
+      # One job, not a batch matrix. loom-platform needs `validate:elixir-batch`
+      # (4 x ~8 apps, per-batch _build slices, --memory=3g) because 33 umbrella apps
+      # with heavy dependencies OOM-killed the BEAM in a single 6 GB container
+      # (#20). This umbrella is 8 apps with ZERO hex dependencies, so peak compile
+      # memory is nowhere near a cap and a matrix would buy nothing but wall-clock.
+      #
+      # The batch structure is the escalation path, not the starting point. Add it
+      # when the first real dependencies land (cowboy/epgsql per
+      # DEPENDENCY-DOCTRINE.md), at which point copy loom's job shape verbatim:
+      # parallel.matrix over BATCH_INDEX, a per-batch _build mount, and
+      # `mix compile --warnings-as-errors ${ELIXIR_APPS}`. Doing it now would be
+      # scaffolding for a problem this repository does not have.
+      #
+      # What is kept from loom's job, because it applies at any scale: the container
+      # memory cap, the `_build`/`deps` bind mounts (so the host runner cache is
+      # populated and reused), and propagating the container exit code rather than
+      # letting a non-zero `docker run` be swallowed by a pipeline.
+      - name: Compile, format-check and test the umbrella
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/hex .cache/rebar3 .cache/mix-deps .cache/mix-build
+          set +e
+          docker run --rm --network=host \
+            --memory=3g --memory-swap=6g \
+            -v "$PWD/beam:/work" \
+            -v "$PWD/.cache/mix-deps:/work/deps" \
+            -v "$PWD/.cache/mix-build:/work/_build" \
+            -v "$PWD/.cache/hex:/root/.hex" \
+            -v "$PWD/.cache/rebar3:/root/.rebar3" \
+            -w /work "$BEAM_IMAGE" sh -lc '
+              set -euo pipefail
+              mix local.hex --force --if-missing
+              mix local.rebar --force --if-missing
+              mix deps.get
+              mix compile --warnings-as-errors
+              mix format --check-formatted
+              mix test
+            ' 2>&1 | tee .ci-beam.log
+          DOCKER_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ "$DOCKER_EXIT" -ne 0 ]; then
+            echo "ERROR: BEAM container exited ${DOCKER_EXIT}."
+            exit "$DOCKER_EXIT"
+          fi
+        env:
+          BEAM_IMAGE: hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim
+
+      # Run on the host, not in the container: only /work (beam/) is bind-mounted,
+      # so the container cannot see the repository's git dir. A lockfile that moved
+      # means the resolved dependency set floated, which is the entire CVE surface
+      # this repository keeps collapsed into one committed file.
+      - name: Fail if the resolved dependency set drifted
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- beam/mix.lock; then
+            echo "ERROR: beam/mix.lock changed during the build."
+            echo "The dependency set is not pinned. Diff:"
+            git diff -- beam/mix.lock
+            exit 1
+          fi
+          echo "mix.lock unchanged; dependency set is pinned."
+
+      - name: Publish compile log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beam-compile-log
+          path: .ci-beam.log
+          retention-days: 7
+
   security:
     name: Security (deps, secrets, image)
     runs-on: ubuntu-latest

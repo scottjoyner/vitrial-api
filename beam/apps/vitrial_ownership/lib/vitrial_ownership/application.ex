@@ -1,20 +1,18 @@
 defmodule VitrialOwnership.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
+  @moduledoc """
+  Supervision root for vitrial ownership.
+
+  The child list is empty, and canonical ownership resolution is a pure function of server state.
+
+  no pool, no cache, nothing to restart. The next slice adds a read-through of canonical
+  ownership rows, and that read is the first thing here with a failure mode worth a
+  supervisor.
+  """
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # Starts a worker by calling: VitrialOwnership.Worker.start_link(arg)
-      # {VitrialOwnership.Worker, arg}
-    ]
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: VitrialOwnership.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link([], strategy: :one_for_one, name: VitrialOwnership.Supervisor)
   end
 end

@@ -1,21 +1,8 @@
 # VitrialReference
 
-**TODO: Add description**
+Reference data and published manifests.
 
-## Installation
+  Versioned and published rather than fetched live, so a client and a server
+  disagree loudly instead of one silently rendering what the other cannot see.
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `vitrial_reference` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:vitrial_reference, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/vitrial_reference>.
-
+  Reads are pure. A manifest GET does not write.

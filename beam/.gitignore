@@ -1,9 +1,9 @@
 # Build artifacts and dependency sources.
 #
-# build_path / deps_path are redirected to the repository root (one level up) by
-# the umbrella root's mix.exs, so these are ignored here and the real ones are
-# ignored by the repository's root .gitignore. Both are listed so the tree is
-# correct no matter which directory mix is invoked from.
+# The umbrella root leaves build_path/deps_path at their Mix defaults, so all of
+# this is contained inside beam/ and the Python repository root is never touched.
+# Leading-slash and bare forms are both listed so the tree is correct no matter
+# which directory mix is invoked from.
 _build/
 /_build
 deps/
@@ -14,6 +14,11 @@ cover/
 /cover
 /tmp
 /tmp/
+
+# NOTE: mix.lock is deliberately NOT ignored. It is the single resolved dependency
+# set for all eight apps and has to be committed -- an uncommitted lockfile is an
+# unreviewable dependency surface, which is exactly what this repository's
+# dependency doctrine exists to prevent.
 
 # Erlang/OTP build products
 *.beam

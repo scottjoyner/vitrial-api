@@ -1,20 +1,19 @@
 defmodule VitrialAuth.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
+  @moduledoc """
+  Supervision root for vitrial auth.
+
+  The child list is empty, and pairing and session verification are pure functions over stored hashes.
+
+  there is no session cache to expire and no key to rotate, so there is no state to
+  supervise. An in-memory revocation list, if one is ever needed, is what makes
+  this app supervise something -- and it should arrive with an explicit reason for
+  evicting.
+  """
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # Starts a worker by calling: VitrialAuth.Worker.start_link(arg)
-      # {VitrialAuth.Worker, arg}
-    ]
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: VitrialAuth.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link([], strategy: :one_for_one, name: VitrialAuth.Supervisor)
   end
 end

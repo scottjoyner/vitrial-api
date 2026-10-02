@@ -1,21 +1,18 @@
 # VitrialSync
 
-**TODO: Add description**
+The sync engine.
 
-## Installation
+  Push and pull, and the rules that decide what a mutation means.
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `vitrial_sync` to your list of dependencies in `mix.exs`:
+  Built so far, all pure computation with no database:
 
-```elixir
-def deps do
-  [
-    {:vitrial_sync, "~> 0.1.0"}
-  ]
-end
-```
+    * `VitrialSync.Cursor` -- pull cursors, bounded to the `BIGINT` range that
+      `SyncChangeLog.sequence` occupies
+    * `VitrialSync.Fingerprint` -- request identity for a `clientMutationID`
+    * `VitrialSync.CanonicalJSON` -- the byte-exact encoding the fingerprint hashes
+    * `VitrialSync.Timestamp` -- ISO-8601 rendering identical to Python's
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/vitrial_sync>.
-
+  `VitrialSync.Fingerprint` reproduces `app/idempotency.py` byte for byte. That
+  parity is the entire point of the module and is pinned to digests produced by
+  running the Python implementation, not to a re-reading of it. See
+  `test/vitrial_sync/fingerprint_test.exs` for the regeneration recipe.

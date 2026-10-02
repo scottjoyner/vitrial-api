@@ -1,21 +1,8 @@
 # VitrialOwnership
 
-**TODO: Add description**
+Canonical ownership and capability resolution.
 
-## Installation
+  Roles are informational; explicit capabilities are authority.
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `vitrial_ownership` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:vitrial_ownership, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/vitrial_ownership>.
-
+  Ownership resolves from server state. A record naming its own parent is a claim
+  to be checked, not a fact to be trusted.

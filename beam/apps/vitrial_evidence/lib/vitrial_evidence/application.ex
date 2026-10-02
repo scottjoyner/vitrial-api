@@ -1,20 +1,18 @@
 defmodule VitrialEvidence.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
+  @moduledoc """
+  Supervision root for vitrial evidence.
+
+  The child list is empty, and the evidence pipeline is a stream, not a process.
+
+  multipart uploads are handled by the HTTP boundary, and the collector is a
+  scheduled job. The first supervised child this app gets is the pool that owns
+  S3 connections, and it arrives with the pool.
+  """
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # Starts a worker by calling: VitrialEvidence.Worker.start_link(arg)
-      # {VitrialEvidence.Worker, arg}
-    ]
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: VitrialEvidence.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link([], strategy: :one_for_one, name: VitrialEvidence.Supervisor)
   end
 end

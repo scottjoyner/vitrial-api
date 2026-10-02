@@ -1,20 +1,18 @@
 defmodule VitrialLifecycle.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
+  @moduledoc """
+  Supervision root for vitrial lifecycle.
+
+  The child list is empty, and lifecycle transitions are pure functions over (state, event).
+
+  lifecycle state is a column on the record, not process state. Nothing here needs a
+  supervisor, and a GenServer that merely held the enum would add a process whose
+  death means nothing.
+  """
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # Starts a worker by calling: VitrialLifecycle.Worker.start_link(arg)
-      # {VitrialLifecycle.Worker, arg}
-    ]
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: VitrialLifecycle.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link([], strategy: :one_for_one, name: VitrialLifecycle.Supervisor)
   end
 end
