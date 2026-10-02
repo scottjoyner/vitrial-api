@@ -67,3 +67,13 @@ check:
 	$(PYTHON) -m compileall -q app migrations tests
 	$(PYTHON) scripts/validate_backend_contract.py
 	$(MAKE) test
+
+# UBS rapid bug gate — the same verdict CI enforces, locally, in seconds.
+#
+# Fails on any NEW critical/warning finding versus the committed baseline
+# (ubs-baseline.json); the baseline's residual findings are the documented
+# false-positive floor (see trackers/vitrial-api-TRACKER.md "UBS loop status").
+# A scan that cannot run is a failure, not a pass — see scripts/ubs_gate.sh.
+.PHONY: ubs
+ubs:
+	bash scripts/ubs_gate.sh ubs-baseline.json
