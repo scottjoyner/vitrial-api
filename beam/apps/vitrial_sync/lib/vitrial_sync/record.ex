@@ -142,7 +142,8 @@ defmodule VitrialSync.Record do
   matches or does not. Raises on an unparseable timestamp, as `Timestamp` does.
   """
   @spec normalized_updated_at(t()) :: String.t()
-  def normalized_updated_at(%__MODULE__{updated_at: updated_at}), do: Timestamp.normalize(updated_at)
+  def normalized_updated_at(%__MODULE__{updated_at: updated_at}),
+    do: Timestamp.normalize(updated_at)
 
   defp required_identifier(attrs, key) do
     case fetch(attrs, key) do
@@ -174,6 +175,7 @@ defmodule VitrialSync.Record do
   defp bounded_optional_identifier(value), do: {:ok, value}
 
   defp bounded_identifier(""), do: {:error, :empty_identifier}
+
   defp bounded_identifier(value) when byte_size(value) > @max_identifier_length,
     do: {:error, :identifier_too_long}
 

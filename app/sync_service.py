@@ -24,6 +24,7 @@ from app.pull_prefetch import (
     resolve_delivery_visible,
     resolve_visible,
 )
+from app.rejection_codes import rejection_code
 from app.ownership import (
     AuthorizationRejected,
     EffectiveScope,
@@ -387,7 +388,7 @@ async def _apply_push_once(db: AsyncSession, principal: Principal, batch: SyncBa
                 batch,
                 record,
                 status="rejected",
-                reason=type(exc).__name__,
+                reason=rejection_code(exc),
                 result_revision=current_revision,
             ))
             continue

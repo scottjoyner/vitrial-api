@@ -106,7 +106,8 @@ defmodule VitrialSync.Retry do
 
   def transient?(@statement_timeout, opts), do: Keyword.get(opts, :include_timeout, false)
 
-  def transient?(sqlstate, _opts) when is_binary(sqlstate), do: MapSet.member?(@transient, sqlstate)
+  def transient?(sqlstate, _opts) when is_binary(sqlstate),
+    do: MapSet.member?(@transient, sqlstate)
 
   @doc """
   The delay before retry number `attempt`, in milliseconds.

@@ -65,7 +65,8 @@ defmodule VitrialSync.Payload do
       iex> {:error, {:invalid_payload, :not_a_json_object}} = VitrialSync.Payload.decode("WzEsIDJd")
       :ok
   """
-  @spec decode(binary()) :: {:ok, t()} | {:error, {:invalid_payload, :not_a_json_object} | JSON.error_reason()}
+  @spec decode(binary()) ::
+          {:ok, t()} | {:error, {:invalid_payload, :not_a_json_object} | JSON.error_reason()}
   def decode(raw) when is_binary(raw) do
     case strict_base64(raw) do
       {:ok, decoded} ->

@@ -98,7 +98,12 @@ defmodule VitrialSync.Admission do
           required(:current_server_revision) => non_neg_integer() | nil
         }
 
-  @empty_context %{prior: nil, prior_fingerprint: nil, entity_exists: false, current_server_revision: nil}
+  @empty_context %{
+    prior: nil,
+    prior_fingerprint: nil,
+    entity_exists: false,
+    current_server_revision: nil
+  }
 
   @doc "A context for a record with no prior mutation and no stored entity."
   @spec empty_context() :: context()
@@ -211,8 +216,9 @@ defmodule VitrialSync.Admission do
   replays of every mutation ever recorded.
   """
   @spec same_request?(Record.t(), prior(), context()) :: boolean()
-  def same_request?(%Record{} = record, _prior, %{prior_fingerprint: fingerprint}) when is_binary(fingerprint),
-    do: Fingerprint.of(Record.mutation(record)) == fingerprint
+  def same_request?(%Record{} = record, _prior, %{prior_fingerprint: fingerprint})
+      when is_binary(fingerprint),
+      do: Fingerprint.of(Record.mutation(record)) == fingerprint
 
   def same_request?(%Record{} = record, prior, %{prior_fingerprint: nil}) do
     record.entity_type == prior.entity_type and record.entity_id == prior.entity_id and

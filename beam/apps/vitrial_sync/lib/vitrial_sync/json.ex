@@ -128,7 +128,8 @@ defmodule VitrialSync.JSON do
   rather than a guard at the call site so that the requirement has one
   implementation instead of one per caller.
   """
-  @spec decode_object(binary()) :: {:ok, %{optional(String.t()) => value()}} | {:error, error_reason()}
+  @spec decode_object(binary()) ::
+          {:ok, %{optional(String.t()) => value()}} | {:error, error_reason()}
   def decode_object(bytes) when is_binary(bytes) do
     case decode(bytes) do
       {:ok, object} when is_map(object) -> {:ok, object}
@@ -150,15 +151,21 @@ defmodule VitrialSync.JSON do
   defp strip_bom(bytes), do: {:ok, bytes}
 
   defp transcode(bytes, family, endian) do
-    {:ok, :unicode.characters_to_binary(bytes, {family, endian}, :utf8)}
+    # :unicode.characters_to_binary/3 returns a BINARY on success, not {:ok, _}.
+    # On failure it returns {:incomplete, converted, rest} or {:error, converted,
+    # rest} -- both of which carry a PARTIAL conversion, so taking the converted
+    # prefix would decode a document the client never sent.
+    case :unicode.characters_to_binary(bytes, {family, endian}, :utf8) do
+      utf8 when is_binary(utf8) -> {:ok, utf8}
+      {:incomplete, _converted, _rest} -> {:error, :invalid_encoding}
+      {:error, _converted, _rest} -> {:error, :invalid_encoding}
+    end
   rescue
     # A BOM that promises an encoding the bytes do not honour is malformed input,
     # and letting Erlang raise out of a payload decode would escape as a crash
-    # rather than as a rejected record. Both failure modes are covered: a badarg
-    # from a truncated unit, and UnicodeConversionError from a byte that is not
-    # valid in the declared encoding at all.
+    # rather than as a rejected record. A badarg from a truncated code unit is the
+    # case that reaches here.
     ArgumentError -> {:error, :invalid_encoding}
-    UnicodeConversionError -> {:error, :invalid_encoding}
   end
 
   # -- values ------------------------------------------------------------------
@@ -266,6 +273,7 @@ defmodule VitrialSync.JSON do
 
   defp parse_string(<<0x22, rest::binary>>, acc),
     do: {:ok, acc |> Enum.reverse() |> IO.iodata_to_binary(), rest}
+
   defp parse_string(<<?\\, rest::binary>>, acc), do: parse_escape(rest, acc)
 
   defp parse_string(<<char::utf8, rest::binary>>, acc) when char >= 0x20,
@@ -346,7 +354,9 @@ defmodule VitrialSync.JSON do
 
     case rest do
       # A leading zero admits no further digits: "01" is two tokens, not a number.
-      <<?0, more::binary>> -> parse_number_tail(sign <> "0", more)
+      <<?0, more::binary>> ->
+        parse_number_tail(sign <> "0", more)
+
       <<digit, _more::binary>> when digit >= ?1 and digit <= ?9 ->
         {digits, more} = take_digits(rest, [])
         parse_number_tail(sign <> digits, more)
@@ -369,8 +379,9 @@ defmodule VitrialSync.JSON do
     end
   end
 
-  defp parse_number_tail(literal, <<marker, _rest::binary>> = rest) when marker === ?e or marker === ?E,
-    do: parse_exponent(literal, rest)
+  defp parse_number_tail(literal, <<marker, _rest::binary>> = rest)
+       when marker === ?e or marker === ?E,
+       do: parse_exponent(literal, rest)
 
   defp parse_number_tail(literal, rest), do: finish_number(literal, rest)
 

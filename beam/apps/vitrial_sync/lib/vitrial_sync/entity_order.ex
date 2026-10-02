@@ -66,10 +66,12 @@ defmodule VitrialSync.EntityOrder do
 
   @doc "The order assigned to an entity type; #{@unknown_order} for anything unknown."
   @spec order_for(entity_type()) :: non_neg_integer()
-  def order_for(entity_type) when is_binary(entity_type), do: Map.get(@entity_order, entity_type, @unknown_order)
+  def order_for(entity_type) when is_binary(entity_type),
+    do: Map.get(@entity_order, entity_type, @unknown_order)
 
   @doc "The order assigned to an entity type, as a `{:ok, _}` / `{:error, _}` pair."
-  @spec known_order_for(entity_type()) :: {:ok, non_neg_integer()} | {:error, :unknown_entity_type}
+  @spec known_order_for(entity_type()) ::
+          {:ok, non_neg_integer()} | {:error, :unknown_entity_type}
   def known_order_for(entity_type) when is_binary(entity_type) do
     case Map.fetch(@entity_order, entity_type) do
       {:ok, order} -> {:ok, order}
@@ -79,7 +81,8 @@ defmodule VitrialSync.EntityOrder do
 
   @doc "The `EntityType` literal list from `app/schemas.py`, in processing order."
   @spec entity_types() :: [entity_type()]
-  def entity_types, do: @entity_order |> Map.keys() |> Enum.sort_by(&Map.fetch!(@entity_order, &1))
+  def entity_types,
+    do: @entity_order |> Map.keys() |> Enum.sort_by(&Map.fetch!(@entity_order, &1))
 
   @doc """
   The sort key for one record: its parent's order, then its client's index.
@@ -88,8 +91,9 @@ defmodule VitrialSync.EntityOrder do
   `sort/1` and by any caller that needs to explain an ordering decision.
   """
   @spec sort_key(entity_type(), non_neg_integer()) :: {non_neg_integer(), non_neg_integer()}
-  def sort_key(entity_type, original_index) when is_integer(original_index) and original_index >= 0,
-    do: {order_for(entity_type), original_index}
+  def sort_key(entity_type, original_index)
+      when is_integer(original_index) and original_index >= 0,
+      do: {order_for(entity_type), original_index}
 
   @doc """
   Order `{index, record}` pairs for processing, keeping the original index attached.
