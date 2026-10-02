@@ -40,7 +40,9 @@ defmodule VitrialSync.TimestampTest do
 
     test "non-zero microseconds are rendered as exactly six digits" do
       assert Timestamp.normalize("2026-12-31T23:59:59.5Z") == "2026-12-31T23:59:59.500000+00:00"
-      assert Timestamp.normalize("2026-12-31T23:59:59.5Z") == Timestamp.normalize("2026-12-31T23:59:59.500000Z")
+
+      assert Timestamp.normalize("2026-12-31T23:59:59.5Z") ==
+               Timestamp.normalize("2026-12-31T23:59:59.500000Z")
     end
 
     test "a short fractional part is padded, not truncated to a different value" do

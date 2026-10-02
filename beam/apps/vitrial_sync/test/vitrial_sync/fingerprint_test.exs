@@ -37,58 +37,67 @@ defmodule VitrialSync.FingerprintTest do
     end
 
     test "a revision-zero create with a JSON payload" do
-      m = mutation(%{entity_type: "customer", entity_id: "customer-0001", base_server_revision: 0,
-                     payload: ~s({"a":1})})
+      m =
+        mutation(%{
+          entity_type: "customer",
+          entity_id: "customer-0001",
+          base_server_revision: 0,
+          payload: ~s({"a":1})
+        })
 
       assert Fingerprint.of(m) ==
                "7b5c07b4a322fd2a52bae7fbb15019a5487f92531ae2ea785ccdb3d9c2d124e4"
     end
 
     test "a delete: same instant in updatedAt and deletedAt, all 256 byte values" do
-      m = mutation(%{
-        entity_id: "item-2",
-        base_server_revision: 7,
-        updated_at: "2026-06-15T12:30:45Z",
-        deleted_at: "2026-06-15T12:30:45Z",
-        payload: :binary.list(0..255)
-      })
+      m =
+        mutation(%{
+          entity_id: "item-2",
+          base_server_revision: 7,
+          updated_at: "2026-06-15T12:30:45Z",
+          deleted_at: "2026-06-15T12:30:45Z",
+          payload: :binary.list(0..255)
+        })
 
       assert Fingerprint.of(m) ==
                "33dcf2089a8bb2a8a0aac4fd8397269d788ddb05e948953005c50ac2bbe21cf8"
     end
 
     test "sub-second precision survives as exactly six fractional digits" do
-      m = mutation(%{
-        entity_type: "delivery_execution",
-        entity_id: "de-9",
-        base_server_revision: 12_345,
-        updated_at: "2026-12-31T23:59:59.500000Z",
-        payload: <<0xFF, 0xFE>>
-      })
+      m =
+        mutation(%{
+          entity_type: "delivery_execution",
+          entity_id: "de-9",
+          base_server_revision: 12_345,
+          updated_at: "2026-12-31T23:59:59.500000Z",
+          payload: <<0xFF, 0xFE>>
+        })
 
       assert Fingerprint.of(m) ==
                "a98e9f54564bd8f1a613ef3871a99ec081718ff2f96c85122e658b186053e6b7"
     end
 
     test "quotes, backslashes and control characters in an identifier are escaped" do
-      m = mutation(%{
-        entity_id: ~s(quote"and\\slash),
-        base_server_revision: 1,
-        updated_at: "2026-03-04T05:06:07Z",
-        payload: <<0x00, 0x1F, ?\n, ?\t>>
-      })
+      m =
+        mutation(%{
+          entity_id: ~s(quote"and\\slash),
+          base_server_revision: 1,
+          updated_at: "2026-03-04T05:06:07Z",
+          payload: <<0x00, 0x1F, ?\n, ?\t>>
+        })
 
       assert Fingerprint.of(m) ==
                "be27f78890819f19fa1c8cbdd4f613d75f30123b4a2dc9f58e914999ffb09065"
     end
 
     test "non-ASCII is escaped as \\uXXXX, matching ensure_ascii" do
-      m = mutation(%{
-        entity_id: "unicode-é中文",
-        base_server_revision: 1,
-        updated_at: "2026-03-04T05:06:07+00:00",
-        payload: "x"
-      })
+      m =
+        mutation(%{
+          entity_id: "unicode-é中文",
+          base_server_revision: 1,
+          updated_at: "2026-03-04T05:06:07+00:00",
+          payload: "x"
+        })
 
       assert Fingerprint.of(m) ==
                "140fa96ceed24d5e5482cbf02f2b08fe4354f68e9b648168662fbe56bb666a07"
@@ -98,12 +107,13 @@ defmodule VitrialSync.FingerprintTest do
       # 05:06:07 at -05:00 IS 10:06:07 UTC. Python's isoformat() renders the
       # datetime it parsed, which is UTC -- so the offset style a client uses must
       # not change the fingerprint, or the same instant looks like two mutations.
-      m = mutation(%{
-        entity_id: "offset",
-        base_server_revision: 1,
-        updated_at: "2026-03-04T05:06:07-05:00",
-        payload: "x"
-      })
+      m =
+        mutation(%{
+          entity_id: "offset",
+          base_server_revision: 1,
+          updated_at: "2026-03-04T05:06:07-05:00",
+          payload: "x"
+        })
 
       assert Fingerprint.of(m) ==
                "8a9c98f71b7e66f58a3775cd3b7751fc77a631ce147683f77be38f0d6b9d0298"

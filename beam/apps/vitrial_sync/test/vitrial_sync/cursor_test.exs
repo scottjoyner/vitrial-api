@@ -55,7 +55,8 @@ defmodule VitrialSync.CursorTest do
     test "a padded in-range value is still refused, not normalised" do
       # Silently stripping leading zeros would let a caller send a cursor whose
       # text does not match any position it claims.
-      assert {:error, %{reason: :too_wide}} = Cursor.decode("seq:" <> String.duplicate("0", 40) <> "1")
+      assert {:error, %{reason: :too_wide}} =
+               Cursor.decode("seq:" <> String.duplicate("0", 40) <> "1")
     end
   end
 

@@ -29,7 +29,7 @@ defmodule VitrialSync.Cursor do
   """
 
   @prefix "seq:"
-  @max_sequence 2**63 - 1
+  @max_sequence 2 ** 63 - 1
   @max_digits 19
 
   @typedoc "A decoded cursor position: a change-log sequence in `[0, 2^63 - 1]`."
@@ -132,7 +132,8 @@ defmodule VitrialSync.Cursor do
   round-trips through `decode/1` unchanged.
   """
   @spec encode(t()) :: String.t()
-  def encode(position) when is_integer(position) and position >= 0 and position <= @max_sequence do
+  def encode(position)
+      when is_integer(position) and position >= 0 and position <= @max_sequence do
     @prefix <> Integer.to_string(position)
   end
 

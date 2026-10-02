@@ -124,26 +124,26 @@ defmodule VitrialSync.CanonicalJSON do
   end
 
   defp encode_pairs(object) do
-  # Sort on the raw key, not on the encoded fragment: after escaping, keys are
-  # iolists and no longer comparable as strings.
-  pairs =
-    object
-    |> Enum.map(fn {key, value} -> {key, encode_value(value, [key])} end)
-    |> Enum.sort_by(&elem(&1, 0))
+    # Sort on the raw key, not on the encoded fragment: after escaping, keys are
+    # iolists and no longer comparable as strings.
+    pairs =
+      object
+      |> Enum.map(fn {key, value} -> {key, encode_value(value, [key])} end)
+      |> Enum.sort_by(&elem(&1, 0))
 
-  case pairs do
-    [] ->
-      "{}"
+    case pairs do
+      [] ->
+        "{}"
 
-    _ ->
-      body =
-        pairs
-        |> Enum.map(fn {key, value} -> ["\"", escape(key), "\":", value] end)
-        |> Enum.intersperse(?,)
+      _ ->
+        body =
+          pairs
+          |> Enum.map(fn {key, value} -> ["\"", escape(key), "\":", value] end)
+          |> Enum.intersperse(?,)
 
-      [?{, body, ?}] |> IO.iodata_to_binary()
+        [?{, body, ?}] |> IO.iodata_to_binary()
+    end
   end
-end
 
   defp encode_value(value, _path) when is_binary(value) do
     ["\"", escape(value), "\""]
@@ -170,6 +170,7 @@ end
 
   defp escape_char(char) when char > 0xFFFF do
     offset = char - 0x10000
+
     escape_unit(0xD800 + Bitwise.bsr(offset, 10)) <>
       escape_unit(0xDC00 + Bitwise.band(offset, 0x3FF))
   end
@@ -188,6 +189,7 @@ end
   end
 
   defp escape_unit(code_unit) do
-    "\\u" <> (code_unit |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0"))
+    "\\u" <>
+      (code_unit |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0"))
   end
 end

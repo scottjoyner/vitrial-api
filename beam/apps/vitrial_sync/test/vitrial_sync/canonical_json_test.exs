@@ -143,7 +143,8 @@ defmodule VitrialSync.CanonicalJSONTest do
     test "digest of an object equals sha256 of its encoding" do
       object = %{"a" => 1, "b" => "x"}
 
-      assert CanonicalJSON.digest(object) == CanonicalJSON.sha256_hex(CanonicalJSON.encode(object))
+      assert CanonicalJSON.digest(object) ==
+               CanonicalJSON.sha256_hex(CanonicalJSON.encode(object))
     end
 
     test "the digest is lowercase hex of the right width" do
