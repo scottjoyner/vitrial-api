@@ -59,7 +59,7 @@ defmodule VitrialSync.CanonicalJSON do
   # The two mandatory escapes plus Python's short forms. `\/` is deliberately
   # absent: Python does not escape the solidus, and matching that is the point.
   @short_escapes %{
-    ?" => "\\\"",
+    ?\" => "\\\"",
     ?\\ => "\\\\",
     ?\b => "\\b",
     ?\f => "\\f",
@@ -116,7 +116,7 @@ defmodule VitrialSync.CanonicalJSON do
     _ ->
       body =
         pairs
-        |> Enum.map(fn {key, value} -> [?", escape(key), ?": value] end)
+        |> Enum.map(fn {key, value} -> [?\", escape(key), ?\": value] end)
         |> Enum.intersperse(?,)
 
       [?{, body, ?}] |> IO.iodata_to_binary()
@@ -124,7 +124,7 @@ defmodule VitrialSync.CanonicalJSON do
 end
 
   defp encode_value(value, _path) when is_binary(value) do
-    [?", escape(value), ?"]
+    [?\", escape(value), ?\"]
   end
 
   defp encode_value(value, _path) when is_integer(value) and value >= 0 do

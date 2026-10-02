@@ -1,0 +1,29 @@
+# Gitleaks configuration.
+#
+# The scan itself is not relaxed. One path is allowlisted, and only because every
+# finding in it is a string the repository invented on purpose.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Test fixtures. These are fake credentials, written into a temporary file by the
+test and asserted against by scripts/validate_deployment.py.
+
+They trip `generic-api-key` because they are high-entropy strings in variables
+named like secrets -- which is precisely the shape the rule exists to catch. That
+is the correct behaviour for the rule and the wrong outcome for the file: the
+values are literals in a test, not credentials for anything.
+
+Scoped to this one path rather than to a fingerprint, because fingerprints are
+pinned to a commit and go stale the moment the line moves. Scoped to the rule as
+well as the path, so a real AWS-shaped key committed to a test file would still
+fail the build.
+
+The way to remove this entry is to stop writing invented credentials in the
+repository: generate them at run time into the temp directory, where gitleaks
+does not scan.
+"""
+paths = ['''^tests/test_deployment\.py$''']
+rules = ["generic-api-key"]
