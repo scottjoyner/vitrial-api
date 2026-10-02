@@ -50,14 +50,20 @@ defmodule VitrialSync.FingerprintTest do
     end
 
     test "a delete: same instant in updatedAt and deletedAt, all 256 byte values" do
+      # Every byte value, so the payload cannot be valid UTF-8. That is the case
+      # that catches an encoder walking bytes instead of code points, and the case
+      # where the digest has to come from Python rather than from a re-reading of
+      # it -- the golden value below was produced by app/idempotency.py.
       m =
         mutation(%{
           entity_id: "item-2",
           base_server_revision: 7,
           updated_at: "2026-06-15T12:30:45Z",
           deleted_at: "2026-06-15T12:30:45Z",
-          payload: :binary.list(0..255)
+          payload: Enum.into(0..255, <<>>, fn byte -> <<byte>> end)
         })
+
+      assert byte_size(m.payload) == 256
 
       assert Fingerprint.of(m) ==
                "33dcf2089a8bb2a8a0aac4fd8397269d788ddb05e948953005c50ac2bbe21cf8"

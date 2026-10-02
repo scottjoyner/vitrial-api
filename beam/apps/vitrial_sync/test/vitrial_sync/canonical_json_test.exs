@@ -128,7 +128,7 @@ defmodule VitrialSync.CanonicalJSONTest do
       # Python. The character literal `?"` cannot be used to avoid this: Elixir
       # lexes it as the opening of a string literal, which is a parse error at
       # the next `?:` on the line, reported at a column nowhere near the cause.
-      for {key, escaped} <- Map.to_list(short_escapes()) do
+      for {key, escaped} <- Map.to_list(CanonicalJSON.short_escapes()) do
         assert is_integer(key), "short-escape table key #{inspect(key)} is not an integer"
         assert CanonicalJSON.encode(%{"s" => <<key>>}) == ~s({"s":"#{escaped}"})
       end

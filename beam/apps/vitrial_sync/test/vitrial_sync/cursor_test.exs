@@ -34,7 +34,9 @@ defmodule VitrialSync.CursorTest do
     end
 
     test "the declared digit width is the width of the ceiling" do
-      assert Cursor.max_digits() == length(Integer.to_string(Cursor.max_sequence()))
+      # byte_size, not length: the ceiling renders to a binary, and length/1 on a
+      # binary raises rather than counting characters.
+      assert Cursor.max_digits() == byte_size(Integer.to_string(Cursor.max_sequence()))
     end
   end
 
