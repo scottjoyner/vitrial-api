@@ -13,5 +13,16 @@ build/
 *.egg-info/
 .DS_Store
 
-# UBS rapid bug gate: per-run artifact written by scripts/ubs_gate.sh
+# UBS rapid bug gate: per-run artifact written by scripts/ubs_gate.sh.
+# Uploaded by .github/workflows/ubs.yml as a run artifact and read by nothing in
+# the tree, so it is untracked. It WAS tracked, which meant every scan rewrote a
+# 6,400-line committed file and left the tree dirty -- so a sibling running the
+# gate produced a diff that looked like work and was only a timestamp.
 ubs-findings.txt
+
+# BEAM build artifacts and the local container cache. _build and deps are
+# resolved inside beam/ by the umbrella's mix.exs; .cache/ holds the bind mounts
+# the BEAM CI job reuses between runs.
+beam/_build/
+beam/deps/
+.cache/

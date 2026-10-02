@@ -1,8 +1,9 @@
-# vitrial-api
+# server-api
 
 Server authority for the Vitrial iOS configurator. FastAPI + PostgreSQL 17 + S3-compatible
-evidence storage. Read `README.md` for the stack, endpoints, and security invariants, and
-`deploy/README.md` for deploy/rollback/acceptance.
+evidence storage, with a BEAM/Elixir port under `beam/`. Read `README.md` for the stack,
+endpoints, and security invariants, `deploy/README.md` for deploy/rollback/acceptance, and
+`MIGRATION.md` for where this tree came from.
 
 ## Where agents look — in order
 
@@ -39,6 +40,38 @@ Contract boundary: V1 is pinned to iOS client SHA `74822ac9`. Any change to
       repo `git branch --no-merged` and `git cherry` both report false positives;
       this script does not. Exit 1 means a branch really holds work main lacks.
 - [ ] `python scripts/check_guard_prefixes.py` — every declared guard prefix maps to a live route.
+- [ ] `make beam-structure` — no undeclared `mix new` app, and no lib module that nothing
+      calls and nothing tests. Both are pure-stdlib Python, so they run in about a second;
+      run them before you push rather than discovering them in CI.
+
+## Do not leave scaffolding or dead code behind
+
+The umbrella under `beam/` has eight apps and seven of them are still empty. That is a
+deliberate, recorded state, and two guards keep it from decaying. Both fail in **both**
+directions, which is what makes them trustworthy.
+
+**Never `mix new` an app and leave it empty.** An undeclared scaffold fails CI. Either
+build it, or add a line to `beam/apps/PLANNED_APPS.txt`:
+
+    # <app> -- <commit> -- <what it is for>
+
+One sentence of intent instead of a directory of empty promises. And when an app does get
+built, **delete its line** — a registry that only grows is a to-do list pretending to be a
+status board, and the guard will fail CI asking you to.
+
+A long, confident `@moduledoc` is not implementation. `mix new` writes two modules per app
+and the guard counts anything beyond them, so prose cannot make an app look built.
+
+**Never leave a module that nothing calls.** `mix compile --warnings-as-errors` catches an
+unused *variable*; it cannot catch an unused *module*, because an unreferenced module is a
+perfectly valid compilation unit that happens to do nothing. That is the expensive kind of
+dead code — it reads as finished, and the next reader assumes something depends on it.
+`scripts/check_beam_orphans.py` builds the reachability graph from source and fails on a
+`lib/` module that no caller reaches and no test names. Wire it up, delete it, or record
+why it is waiting in `beam/apps/ORPHAN_EXEMPT.txt` with a real reason.
+
+A module with a test counts as specified and needs no exemption — that is what makes the
+guard usable while the port is being built bottom-up.
 
 **Rules that are already held — do not churn them:**
 - [ ] Ripgrep only, never grep.

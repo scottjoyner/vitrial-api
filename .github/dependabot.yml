@@ -1,0 +1,81 @@
+# Dependabot: three ecosystems, because this repository has three.
+#
+# The Python lock is the security-critical one. requirements-lock.txt pins the
+# full transitive closure and CI installs it with `--no-deps`, then runs
+# `pip check` -- so a range in pyproject.toml that floats is caught in CI rather
+# than silently resolved. Dependabot here proposes a bump; it does not apply one
+# unattended, because an unattended bump would rewrite the lock and break the
+# `pip check` guarantee the CI job depends on.
+#
+# The BEAM umbrella has ZERO hex dependencies by doctrine (see
+# beam/mix.exs), so there is deliberately no hex ecosystem entry. When the first
+# hex package is admitted, add it here in the same commit that admits it -- a
+# dependency added without a dependabot entry is one nothing will ever update.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    # The lock is the reviewed artifact. Dependabot updates it; the reviewer
+    # reads the diff of pinned versions, which is the only place a supply-chain
+    # change is legible.
+    commit-message:
+      prefix: "deps(python)"
+    groups:
+      # Security patches for one package are usually several CVEs, and splitting
+      # them across five PRs buries the one that matters. Patch and minor bumps
+      # group; a major stays alone because it is the one that can break the suite.
+      patch:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+      minor:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "deps(docker)"
+    groups:
+      base-images:
+        patterns:
+          - "*"

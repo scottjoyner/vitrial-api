@@ -1,0 +1,25 @@
+# Planned umbrella applications
+#
+# Every app under beam/apps/ that is still a `mix new` scaffold is listed here,
+# with the commit that created it and one sentence on what it is for. An app that
+# is NOT listed here and is still a scaffold fails CI (scripts/check_beam_scaffold.py).
+#
+# The entry stops being true the moment the app has a real module or a real test,
+# and at that point CI fails asking for the line to be deleted. So this file
+# describes the present tense, not an intention: every line here is a claim that
+# this app has nothing in it yet, and that claim is re-checked on every push.
+#
+# To declare a new scaffold, add a line in the form:
+#
+#     # <app> -- <commit> -- <what it is for>
+#
+# Do that instead of leaving the directory undeclared. An undeclared scaffold is
+# indistinguishable, to the next reader, from an app someone abandoned halfway.
+
+# vitrial_auth -- 0b89421 -- Device pairing and session authority. Access tokens stored only as SHA-256 hashes, so a database disclosure yields hashes rather than bearer tokens. Rate limiting is in-process, which is correct for the single-replica deployment and wrong the moment a second replica exists; deploy/env.production.example says so at the setting.
+# vitrial_delivery -- 0b89421 -- Delivery execution as an explicit state machine. It is the one entity type whose visibility probe checks deleted_at at every hop, unlike the generic types where a soft-deleted record stays visible with deletedAt set.
+# vitrial_evidence -- 0b89421 -- Evidence blob storage and garbage collection. Blobs are streamed and size-bounded while in flight; the evidence PUT route deliberately has no middleware byte ceiling, which is why evidence_max_bytes exists.
+# vitrial_lifecycle -- 0b89421 -- Item lifecycle transitions: configuration finalize and reopen, readiness change and override, blocker management. This is where the push pipeline's later admission steps live.
+# vitrial_ownership -- 0b89421 -- Record ownership and authorization. Note app/ownership.py:726 carries a duplicate delivery-policy block that is unreachable; authorize_record is only called on the else branch (VITR-V006, filed).
+# vitrial_reference -- 0b89421 -- Reference data and the evidence-reference containment filter. On the Python side this is the jsonb @> pushdown, so delete and GC no longer materialize every measurement payload in Python.
+# vitrial_web -- 0b89421 -- The HTTP edge. NOT inert: beam/config/{config,dev,prod,test}.exs already configure VitrialWeb.Endpoint with a Cowboy listener bound at the listener rather than in the supervision tree.

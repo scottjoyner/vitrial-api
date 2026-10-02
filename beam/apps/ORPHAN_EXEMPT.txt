@@ -1,0 +1,16 @@
+# Orphan exemptions
+#
+# A module under beam/apps/*/lib/ that nothing calls and no test names is dead
+# code: it compiles clean, it reads as finished, and nothing depends on it.
+# scripts/check_beam_orphans.py fails CI on that state.
+#
+# Add a module here ONLY when "nothing calls it yet" is the honest answer -- a
+# vertical being built bottom-up, where the test exists but the caller is the
+# next step. Give the reason, not the plan; a line that says "TODO" has recorded
+# nothing.
+#
+# Note the second clause of the guard: a module with a test is already
+# "specified" and needs no exemption. This file is for the narrower case of a
+# module that is deliberately unwired AND untested.
+#
+# Format: '# Module.Name -- <reason>'

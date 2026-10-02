@@ -28,6 +28,23 @@ jobs:
       - run: python scripts/validate_backend_contract.py
       - name: Guard-prefix lint (no declared guard maps to a dead route)
         run: python scripts/check_guard_prefixes.py
+      # Structural guards on the BEAM umbrella. Both are pure-stdlib Python and
+      # read only source, so they belong in this job rather than the BEAM one:
+      # no toolchain needed, about a second to run, and a scaffold or a dead
+      # module then fails a push in seconds instead of after a container image
+      # pull and a full umbrella compile.
+      #
+      # Unused *variables* are the BEAM job's job -- `mix compile
+      # --warnings-as-errors` fails on them, which was verified by injecting one
+      # rather than assumed. These two cover the shapes the compiler cannot see:
+      # an app that is entirely intention, and a module that is entirely
+      # documentation. Both are enforced in BOTH directions -- adding an
+      # undeclared scaffold fails, and so does leaving a declared one in place
+      # after the app is built.
+      - name: BEAM scaffold registry (no undeclared `mix new` app)
+        run: python scripts/check_beam_scaffold.py
+      - name: BEAM orphan sweep (no lib module that nothing calls and nothing tests)
+        run: python scripts/check_beam_orphans.py
       - run: python -m pytest -q
 
   postgres:

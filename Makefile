@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check ubs branches
+.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check beam-structure ubs branches
 
 install:
 	python -m pip install -e '.[dev]'
@@ -68,6 +68,31 @@ check:
 	$(PYTHON) scripts/validate_backend_contract.py
 	$(PYTHON) scripts/check_guard_prefixes.py
 	$(MAKE) test
+	$(MAKE) beam-structure
+
+# Structural guards on the BEAM umbrella. Both run on the host with no Elixir
+# toolchain, which is the point: they must be cheap enough to run on every save,
+# not only in a container on CI.
+#
+# They are also both directionally enforced -- they fail on drift in either
+# direction, not just on something new appearing. A guard that only ever adds
+# findings is a to-do list; a guard that also fires when something is cleaned up
+# is a status board.
+#
+#   check_beam_scaffold.py  an app that is a `mix new` scaffold must be declared
+#                            in beam/apps/PLANNED_APPS.txt, and a declared app
+#                            that has since been built must have its line removed
+#   check_beam_orphans.py    a lib module that nothing calls and no test names is
+#                            dead code; wire it, delete it, or exempt it with a
+#                            reason
+#
+# Unused *variables* are already covered by `mix compile --warnings-as-errors` in
+# the BEAM CI job. These two cover the shapes the compiler cannot see: an app
+# that is all intention, and a module that is all documentation.
+.PHONY: beam-structure
+beam-structure:
+	$(PYTHON) scripts/check_beam_scaffold.py
+	$(PYTHON) scripts/check_beam_orphans.py
 
 # UBS rapid bug gate — the same verdict CI enforces, locally, in seconds.
 #
