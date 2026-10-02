@@ -1,6 +1,12 @@
 https://localhost {
     tls internal
     encode zstd gzip
+    # Same edge body ceiling as deploy/Caddyfile. This is the only Caddyfile that is
+    # ever actually booted, so an edge limit that existed only in the production file
+    # would never be exercised by anything.
+    request_body {
+        max_size {$CADDY_MAX_REQUEST_BODY}
+    }
     reverse_proxy api:8000 {
         header_up X-Forwarded-For {remote_host}
     }

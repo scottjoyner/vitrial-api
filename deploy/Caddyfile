@@ -8,6 +8,16 @@
         Referrer-Policy "no-referrer"
     }
 
+    # Edge body ceiling. Caddy streams request bodies straight through to uvicorn
+    # by default, so an unbounded body is read into the API container's memory
+    # before any application code runs. The application enforces tighter per-path
+    # limits; this is the outer bound matching the largest of them
+    # (/api/v2/sync/push, 4 MiB) and returns 413 at the edge instead of letting an
+    # oversized upload reach the worker.
+    request_body {
+        max_size {$CADDY_MAX_REQUEST_BODY}
+    }
+
     reverse_proxy api:8000 {
         health_uri /health
         health_interval 15s

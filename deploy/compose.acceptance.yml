@@ -126,6 +126,12 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+    # Same ceiling as production. Acceptance exists to reproduce production
+    # behaviour, and a resource ceiling that differs between the two makes every
+    # memory-related pass here unrepresentative.
+    mem_limit: ${API_MEM_LIMIT:-768m}
+    mem_reservation: ${API_MEM_RESERVATION:-384m}
+    pids_limit: 256
     healthcheck:
       test: ["CMD", "python", "scripts/probe_dependencies.py", "--quiet"]
       interval: 10s
@@ -141,6 +147,12 @@ services:
     restart: unless-stopped
     environment:
       API_HOST: ${API_HOST:?API_HOST is required}
+      # Defaulted rather than required: acceptance is also driven from CI, which
+      # mounts Caddyfile.smoke. That file references no placeholder, so an unset
+      # value here must not be a hard failure -- but it still has to resolve,
+      # because an unresolved {$...} in the production Caddyfile is a Caddy config
+      # load failure rather than a silently absent limit.
+      CADDY_MAX_REQUEST_BODY: ${CADDY_MAX_REQUEST_BODY:-4MB}
     networks: [backend]
     ports:
       - "${HTTP_PORT:-80}:80"

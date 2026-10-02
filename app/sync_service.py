@@ -46,6 +46,15 @@ MAX_SYNC_PULL_SCAN_CHANGES = 500
 # would actually be encoded rather than estimated from payload bytes.
 MAX_SYNC_PULL_RESPONSE_BYTES = 2_250_000
 
+# Cursor ceiling. SyncChangeLog.sequence is a BIGINT, so the largest value a client
+# can legitimately hold back is the int64 maximum. A cursor past it is not a
+# reachable position, and passing it to Postgres raises a DataError that escapes as
+# an unhandled 500 instead of the 400 the caller can act on. Bounding here keeps a
+# malformed cursor a client error on both counts: out of range, and too long to be
+# a plausible sequence (19 digits is already the full int64 width).
+MAX_CURSOR_SEQUENCE = 2**63 - 1
+MAX_CURSOR_DIGITS = 19
+
 
 class InvalidMutation(Exception):
     pass
@@ -255,11 +264,24 @@ async def _apply_push_once(db: AsyncSession, principal: Principal, batch: SyncBa
                 )
             accepted_replay = same_request and prior.result_status == "accepted"
             outcomes[original_index] = accepted_replay
+            # Three outcomes, not two. `idempotent_replay` asserts that this exact
+            # mutation was applied earlier and this response is the original answer;
+            # reporting that when `prior.result_status == "rejected"` is a false
+            # statement, and it is the one an operator reads when a client insists it
+            # never got a rejection. Rejections for stale revisions and failed
+            # validation *do* write a SyncMutation row (S-56), so the id is spent:
+            # the honest label says the id is gone, not that anything replayed.
+            if not same_request:
+                reason = "mutation_id_collision"
+            elif accepted_replay:
+                reason = "idempotent_replay"
+            else:
+                reason = "rejected_mutation_id_reuse"
             outcome_events.append(_outcome_event(
                 batch,
                 record,
                 status="accepted" if accepted_replay else "rejected",
-                reason="idempotent_replay" if same_request else "mutation_id_collision",
+                reason=reason,
                 result_revision=prior.result_server_revision,
             ))
             continue
@@ -445,7 +467,15 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
     if cursor:
         if not cursor.startswith("seq:") or not cursor[4:].isdigit():
             raise InvalidMutation("invalid cursor")
-        start = int(cursor[4:])
+        # Bounded before it reaches the query. The change-log sequence is a BIGINT,
+        # so a cursor above the int64 ceiling becomes a DataError out of asyncpg and
+        # surfaces as an unhandled 500 rather than the 400 the caller can act on.
+        # The digit-length check also keeps a malformed cursor from forcing a
+        # pointless 19-digit parse.
+        digits = cursor[4:]
+        if len(digits) > MAX_CURSOR_DIGITS or int(digits) > MAX_CURSOR_SEQUENCE:
+            raise InvalidMutation("invalid cursor")
+        start = int(digits)
 
     changes = (
         await db.scalars(

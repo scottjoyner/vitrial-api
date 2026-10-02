@@ -102,6 +102,7 @@ The validator fails closed on placeholder/default credentials, group/world-reada
 - Roles are informational; explicit capabilities are authority.
 - Server mutations resolve canonical tenant/parent ownership from server state.
 - `clientMutationID` is idempotent within an organization and fingerprint-bound to the original request.
+- **Mint a new `clientMutationID` for every push attempt, including retries.** A rejected mutation consumes its id permanently: rejections for a stale `baseServerRevision`, a payload that fails validation, or a failed authorization all persist a `sync_mutations` row, so resubmitting the same id is answered from that row instead of being re-evaluated. Resubmitting a rejected record with a *corrected* `baseServerRevision` and the same id returns `rejectedRecordIDs` for that record and no amount of retrying clears it. This is deliberate — it is what makes a replayed batch safe — but it means a client that reuses an id on retry silently loses the user's change. The response carries the current `serverRevision` in the `sync.mutation_result` log event precisely so the client can rebase; pair that with a fresh id.
 - Stale `baseServerRevision` never silently overwrites canonical state.
 - Audit/history provenance stores actor/org/membership/session/revision, never bearer tokens.
 - Evidence uploads are streamed and digest checked before canonical promotion.

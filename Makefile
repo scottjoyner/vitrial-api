@@ -31,8 +31,15 @@ postgres-native:
 migrate:
 	alembic upgrade head
 
+PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python)
+
+# Unit tests. Uses the module form and the same interpreter resolution as
+# test-integration, because the `pytest` console script does not put the repository
+# root on sys.path -- `tests/test_production_preflight.py` then fails to import
+# `scripts.probe_production_preflight` and collection aborts, which reads as a
+# broken repository rather than a broken invocation. See test-integration below.
 test:
-	pytest -q
+	$(PYTHON) -m pytest -q
 
 # The suite CI actually runs, against a real database.
 #
@@ -57,6 +64,6 @@ run:
 	uvicorn app.main:app --reload
 
 check:
-	python -m compileall -q app migrations tests
-	python scripts/validate_backend_contract.py
-	pytest -q
+	$(PYTHON) -m compileall -q app migrations tests
+	$(PYTHON) scripts/validate_backend_contract.py
+	$(MAKE) test

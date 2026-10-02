@@ -211,6 +211,7 @@ jobs:
           S3_ROOT_PASSWORD=ci-s3-secret-12345
           HTTP_PORT=8080
           HTTPS_PORT=8443
+          CADDY_MAX_REQUEST_BODY=4MB
           CADDYFILE_PATH=./Caddyfile.smoke
           EOF
           chmod 600 /tmp/vitrial-acceptance.env

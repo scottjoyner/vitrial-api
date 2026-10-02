@@ -28,4 +28,19 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 # its only TCP peer is the Caddy ingress on the internal network, so `*` is reachable only
 # from Caddy. The deployment trust boundary is Caddyfile: it now overwrites
 # X-Forwarded-For with {remote_host} rather than appending to a client-supplied value.
+#
+# NOTE on single-process: deliberately NO --workers and NO --limit-max-requests.
+# --workers multiplies the database connection budget: settings.py sizes the pool at
+# pool_size 10 + max_overflow 5 per process against a server max_connections that
+# app/settings.py explicitly says must be "divided, not multiplied". Raising the
+# worker count is therefore a change to the database's connection ceiling, not a
+# tuning knob, and is out of scope here.
+#
+# --limit-max-requests is the more tempting of the two and still wrong at one replica:
+# uvicorn recycles the only worker, Caddy takes ~45s to notice via health_uri
+# (3 consecutive failures at health_interval 15s), and every request in that window is
+# a 502. Memory growth is instead bounded by the container mem_limit in
+# deploy/compose.production.yml, which kills the container on genuine runaway rather
+# than on a schedule. Add worker recycling only together with a second api replica,
+# so the drain is invisible.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]

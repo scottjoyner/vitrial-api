@@ -142,3 +142,77 @@ def test_database_pool_tuning_is_forwarded_into_production_compose():
         assert f"{key}:" in compose
         assert f"{key}=" in env_example
 
+
+
+def test_api_container_has_a_bounded_resource_ceiling():
+    """An unbounded container grows until the *host* OOM-killer picks a victim.
+
+    On a host running Postgres and object storage alongside this API, the victim is
+    not reliably this container, so unbounded growth is not a failure of this
+    service alone -- it is an unpredictable failure of whichever service the kernel
+    happened to score worst. mem_limit converts that into one bounded, attributable
+    restart of the container that actually misbehaved.
+    """
+    compose = (ROOT / "deploy" / "compose.production.yml").read_text(encoding="utf-8")
+    acceptance = (ROOT / "deploy" / "compose.acceptance.yml").read_text(encoding="utf-8")
+    env_example = (ROOT / "deploy" / "env.production.example").read_text(encoding="utf-8")
+
+    # Every tunable must cross the deployment boundary: interpolated in compose and
+    # documented with a default in the example env file, matching the convention
+    # test_request_size.py and test_rate_limit.py already enforce for their knobs.
+    # Both compose files, because acceptance boots the same application image and a
+    # ceiling that differs between the two makes every acceptance result a
+    # simulation of a configuration nobody runs.
+    for key, default in (
+        ("API_MEM_LIMIT", "768m"),
+        ("API_MEM_RESERVATION", "384m"),
+        ("CADDY_MAX_REQUEST_BODY", "4MB"),
+    ):
+        for compose_file in (compose, acceptance):
+            assert f"${{{key}:-{default}}}" in compose_file, key
+        assert f"{key}={default}" in env_example, key
+
+    for compose_file in (compose, acceptance):
+        assert "mem_limit:" in compose_file
+        assert "pids_limit:" in compose_file
+
+
+def test_edge_bounds_the_request_body_before_it_reaches_the_api():
+    """Caddy streams request bodies straight through to uvicorn by default.
+
+    That means the body is read into the API container before any application code
+    runs, so the per-path limits in app/request_size.py -- which run inside the
+    process -- are too late to bound memory. The edge ceiling has to exist for the
+    application ceiling to mean anything.
+
+    Both Caddyfiles carry it: the smoke file is the only one CI ever boots, so a
+    limit that lived solely in the production file would be untested by anything.
+    """
+    for name in ("Caddyfile", "Caddyfile.smoke"):
+        caddyfile = (ROOT / "deploy" / name).read_text(encoding="utf-8")
+        assert "request_body {" in caddyfile, name
+        # Interpolated, not literal: a fixed edge ceiling is wrong the moment a
+        # client changes, exactly like the application limits above it.
+        assert "max_size {$CADDY_MAX_REQUEST_BODY}" in caddyfile, name
+
+
+def test_api_container_runs_a_single_worker_deliberately():
+    """--workers multiplies the database connection budget, so it is not a knob.
+
+    app/settings.py sizes the pool at pool_size 10 + max_overflow 5 per process and
+    states the constraint in terms: the budget must be "divided, not multiplied"
+    against the server's max_connections. Silently adding workers would multiply it
+    against a server limit that was never raised.
+
+    --limit-max-requests is equally wrong here: at a single replica uvicorn recycles
+    the only worker, Caddy takes ~45s to notice via health_uri, and every request in
+    that window is a 502. Bounded memory is bought with mem_limit instead, which
+    fires on genuine runaway rather than on a schedule. Both may be added together
+    with a second api replica, and only then.
+    """
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    cmd = next(line for line in dockerfile.splitlines() if line.startswith("CMD "))
+    assert "--workers" not in cmd
+    assert "--limit-max-requests" not in cmd
+    assert "--proxy-headers" in cmd, "the trusted-proxy contract must not be dropped"
+    assert "--forwarded-allow-ips=*" in cmd

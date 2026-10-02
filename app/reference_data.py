@@ -505,6 +505,15 @@ async def current_publications(
     at: datetime | None = None,
 ) -> ReferencePublicationListResponse:
     await ensure_baseline_publications(db, principal)
+    return await _current_publications(db, principal, at=at)
+
+
+async def _current_publications(
+    db: AsyncSession,
+    principal: Principal,
+    *,
+    at: datetime | None = None,
+) -> ReferencePublicationListResponse:
     when = at or datetime.now(timezone.utc)
     rows = (
         await db.scalars(
@@ -536,8 +545,12 @@ async def publication_manifest(
     db: AsyncSession,
     principal: Principal,
 ) -> ReferencePublicationManifest:
-    available_response = await list_publications(db, principal)
-    current_response = await current_publications(db, principal)
+    # Seed once, not twice: list_publications and current_publications each re-ensure
+    # baselines, and manifest calls both, so a single manifest GET used to run the seed
+    # check two full times (4 pk SELECTs each). Ensure once here and reuse the raw legs.
+    await ensure_baseline_publications(db, principal)
+    available_response = await _list_publications(db, principal, None)
+    current_response = await _current_publications(db, principal, at=None)
     return ReferencePublicationManifest(
         current=[
             ReferencePublicationSummary(

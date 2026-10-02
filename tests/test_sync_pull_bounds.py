@@ -19,10 +19,15 @@ from app.schemas import (
     SyncBatch,
     SyncRecord,
 )
+from app.auth import Principal
 from app.sync_service import (
+    MAX_CURSOR_DIGITS,
+    MAX_CURSOR_SEQUENCE,
     MAX_SYNC_PULL_RESPONSE_BYTES,
     MAX_SYNC_PULL_SCAN_CHANGES,
+    InvalidMutation,
     pull_page_accepts,
+    pull_since,
 )
 
 
@@ -181,3 +186,73 @@ def test_scan_ceiling_is_named_and_bounded():
     assert MAX_SYNC_PULL_SCAN_CHANGES == 500
     assert MAX_SYNC_PULL_RESPONSE_BYTES > 0
     assert MAX_SYNC_V1_BATCH_PAYLOAD_BYTES < MAX_SYNC_PULL_RESPONSE_BYTES
+
+
+def _sync_actor() -> Principal:
+    return Principal(
+        user_id="user-1",
+        organization_id="org-1",
+        membership_id="membership-1",
+        session_id="session-1",
+        authorization_revision=1,
+        capabilities=frozenset({"sync"}),
+        customer_ids=frozenset(),
+        project_ids=frozenset(),
+        all_customers=False,
+        all_projects=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "seq:99999999999999999999",  # 20 digits: past int64 and past the width
+        "seq:18446744073709551616",  # 2**64, the classic unsigned overflow boundary
+        "seq:9999999999999999999",  # 19 digits but above int64 max
+        "seq:" + "0" * 40,  # a wide value that *is* in range once parsed
+        "seq:-1",  # negative sequence is not a reachable position
+        "seq:1.0",  # not an integer
+        "seq:0x10",  # not decimal
+        "sequence:1",  # wrong tag
+        "1",  # bare sequence with no tag
+        "seq:1 OR 1=1",  # digits check runs first, so this never reaches the query
+    ],
+)
+async def test_pull_rejects_an_unreachable_cursor_before_touching_the_database(cursor):
+    """A cursor above the int64 ceiling must be a 400, not an unhandled 500.
+
+    SyncChangeLog.sequence is a BIGINT, so a cursor above 2**63-1 is not a
+    position the client could legitimately hold. Letting it reach asyncpg raises a
+    DataError that escapes the route's error handling as a 500 -- an unparseable
+    client string reported as a server fault. db=None is deliberate and safe: the
+    cursor is parsed before any query, so a cursor that passes the bound would
+    fail loudly here rather than silently proving nothing.
+    """
+    with pytest.raises(InvalidMutation):
+        await pull_since(None, _sync_actor(), cursor)
+
+
+async def test_pull_accepts_the_largest_representable_cursor():
+    """The bound is inclusive of int64 max -- it rejects unreachable positions,
+    not large ones. A client legitimately sitting at the last sequence of a very
+    long-lived change log must still be able to resume from it."""
+    assert MAX_CURSOR_SEQUENCE == 2**63 - 1
+    assert MAX_CURSOR_DIGITS == len(str(MAX_CURSOR_SEQUENCE))
+
+    # A session that records the call proves admission happened: reaching the query
+    # is exactly what must NOT happen for the rejected cursors above, and exactly
+    # what must happen here.
+    reached_query = False
+
+    class _SentinelSession:
+        async def scalars(self, *args, **kwargs):
+            nonlocal reached_query
+            reached_query = True
+            raise _ReachedQuery
+
+    class _ReachedQuery(Exception):
+        pass
+
+    with pytest.raises(_ReachedQuery):
+        await pull_since(_SentinelSession(), _sync_actor(), f"seq:{MAX_CURSOR_SEQUENCE}")
+    assert reached_query is True
