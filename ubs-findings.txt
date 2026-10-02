@@ -36,7 +36,7 @@
 ║                     “We see bugs before you do.”                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-UBS Meta-Runner v5.4.17  2026-10-02T18:02:52Z
+UBS Meta-Runner v5.4.17  2026-10-02T19:33:47Z
 Project: /home/nez/Projects/vitrial-api
 Format:  text
 Detected: python
@@ -6123,7 +6123,7 @@ Finished python (6s)
     Review ruff output above
 
 • bandit (security)
-Run started:2026-10-02 18:02:59.343595+00:00
+Run started:2026-10-02 19:33:54.901538+00:00
 
 Test results:
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -6303,97 +6303,97 @@ Files scanned: 46
 
 5. ASYNC/AWAIT PITFALLS
 [info] await inside loops — for event in outcome_events: (9 found) — py.async.await-in-loop
-    /home/nez/Projects/vitrial-api/app/sync_service.py:439  await inside loops — for event in outcome_events: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/sync_service.py#L439)
-    /home/nez/Projects/vitrial-api/app/storage.py:120  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L120)
-    /home/nez/Projects/vitrial-api/app/storage.py:189  await inside loops — while len(buffer) >= self.part_size: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L189)
-    /home/nez/Projects/vitrial-api/app/storage.py:269  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L269)
-    /home/nez/Projects/vitrial-api/app/request_size.py:211  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/request_size.py#L211)
+    /home/nez/Projects/vitrial-api/app/sync_service.py:439  await inside loops — for event in outcome_events: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_service.py#L439)
+    /home/nez/Projects/vitrial-api/app/storage.py:120  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L120)
+    /home/nez/Projects/vitrial-api/app/storage.py:189  await inside loops — while len(buffer) >= self.part_size: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L189)
+    /home/nez/Projects/vitrial-api/app/storage.py:269  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L269)
+    /home/nez/Projects/vitrial-api/app/request_size.py:211  await inside loops — while True: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/request_size.py#L211)
 [warning] Blocking calls inside async functions — async def stream(self, key: str) -> AsyncIterator[bytes]: (1 found) — py.async.blocking-call
-    /home/nez/Projects/vitrial-api/app/storage.py:115  Blocking calls inside async functions — async def stream(self, key: str) -> AsyncIterator[bytes]: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L115)
-[info] Async functions found — async def collect_snapshot() -> Snapshot: (109 found) — py.async.census
-    /home/nez/Projects/vitrial-api/scripts/probe_production_preflight.py:71  Async functions found — async def collect_snapshot() -> Snapshot: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/probe_production_preflight.py#L71)
-    /home/nez/Projects/vitrial-api/scripts/probe_production_preflight.py:141  Async functions found — async def run() -> int: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/probe_production_preflight.py#L141)
-    /home/nez/Projects/vitrial-api/scripts/probe_dependencies.py:12  Async functions found — async def run_probe() -> dict[str, str]: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/probe_dependencies.py#L12)
-    /home/nez/Projects/vitrial-api/scripts/gc_evidence.py:11  Async functions found — async def run(limit: int, execute: bool) -> int: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/gc_evidence.py#L11)
-    /home/nez/Projects/vitrial-api/migrations/env.py:24  Async functions found — async def run_async_migrations(): (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/migrations/env.py#L24)
+    /home/nez/Projects/vitrial-api/app/storage.py:115  Blocking calls inside async functions — async def stream(self, key: str) -> AsyncIterator[bytes]: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L115)
+[info] Async functions found — async def run_async_migrations(): (109 found) — py.async.census
+    /home/nez/Projects/vitrial-api/migrations/env.py:24  Async functions found — async def run_async_migrations(): (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/migrations/env.py#L24)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:123  Async functions found — async def apply_push_v2( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L123)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:141  Async functions found — async def pull_since_v2( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L141)
+    /home/nez/Projects/vitrial-api/app/sync_service.py:98  Async functions found — async def _next_revision(db: AsyncSession, organization_id: str) -> int: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_service.py#L98)
+    /home/nez/Projects/vitrial-api/app/sync_service.py:107  Async functions found — async def _item_has_immutable_audit_history( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_service.py#L107)
 
 7. SECURITY VULNERABILITIES
 [critical] Request-controlled value reaches HTTP response header — response.headers["X-Request-ID"] = request_id (2 found) — py.security.header-injection
-    /home/nez/Projects/vitrial-api/app/main.py:85  Request-controlled value reaches HTTP response header — response.headers["X-Request-ID"] = request_id (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/main.py#L85)
-    /home/nez/Projects/vitrial-api/app/main.py:280  Request-controlled value reaches HTTP response header — return Response(status_code=201, headers={"X-Content-SHA256": model.sha256}) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/main.py#L280)
+    /home/nez/Projects/vitrial-api/app/main.py:85  Request-controlled value reaches HTTP response header — response.headers["X-Request-ID"] = request_id (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/main.py#L85)
+    /home/nez/Projects/vitrial-api/app/main.py:280  Request-controlled value reaches HTTP response header — return Response(status_code=201, headers={"X-Content-SHA256": model.sha256}) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/main.py#L280)
 [critical] Request-controlled LDAP filter or DN reaches directory sink — db.add(model) (7 found) — py.security.ldap-injection
-    /home/nez/Projects/vitrial-api/app/reference_data.py:406  Request-controlled LDAP filter or DN reaches directory sink — db.add(model) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/reference_data.py#L406)
-    /home/nez/Projects/vitrial-api/app/pairing.py:93  Request-controlled LDAP filter or DN reaches directory sink — db.add(grant) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/pairing.py#L93)
-    /home/nez/Projects/vitrial-api/app/pairing.py:154  Request-controlled LDAP filter or DN reaches directory sink — db.add(auth_session) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/pairing.py#L154)
-    /home/nez/Projects/vitrial-api/app/admin.py:110  Request-controlled LDAP filter or DN reaches directory sink — db.add(organization) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/admin.py#L110)
-    /home/nez/Projects/vitrial-api/app/admin.py:126  Request-controlled LDAP filter or DN reaches directory sink — db.add(user) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/admin.py#L126)
+    /home/nez/Projects/vitrial-api/app/reference_data.py:406  Request-controlled LDAP filter or DN reaches directory sink — db.add(model) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/reference_data.py#L406)
+    /home/nez/Projects/vitrial-api/app/pairing.py:93  Request-controlled LDAP filter or DN reaches directory sink — db.add(grant) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/pairing.py#L93)
+    /home/nez/Projects/vitrial-api/app/pairing.py:154  Request-controlled LDAP filter or DN reaches directory sink — db.add(auth_session) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/pairing.py#L154)
+    /home/nez/Projects/vitrial-api/app/admin.py:110  Request-controlled LDAP filter or DN reaches directory sink — db.add(organization) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/admin.py#L110)
+    /home/nez/Projects/vitrial-api/app/admin.py:126  Request-controlled LDAP filter or DN reaches directory sink — db.add(user) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/admin.py#L126)
 [critical] Secret, signature, or token compared with ==/!= (7 found) — python.ctcompare.secret_eq
-    app/lifecycle.py:78  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/lifecycle.py#L78)
-    app/delivery_production.py:53  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_production.py#L53)
-    app/delivery_installation.py:56  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_installation.py#L56)
-    app/delivery_execution.py:162  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_execution.py#L162)
-    app/delivery_execution.py:196  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/delivery_execution.py#L196)
+    app/lifecycle.py:78  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/lifecycle.py#L78)
+    app/delivery_production.py:53  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/delivery_production.py#L53)
+    app/delivery_installation.py:56  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/delivery_installation.py#L56)
+    app/delivery_execution.py:162  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/delivery_execution.py#L162)
+    app/delivery_execution.py:196  Secret, signature, or token compared with ==/!=; use hmac.compare_digest() or secrets.compare_digest() (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/delivery_execution.py#L196)
 
 8. FUNCTION & SCOPE ISSUES
 [info] Nested functions - verify closures and lifetimes — def payload_must_be_bounded(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]: (18 found) — py.functions.nested-defs
-    /home/nez/Projects/vitrial-api/app/sync_v2.py:48  Nested functions - verify closures and lifetimes — def payload_must_be_bounded(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/sync_v2.py#L48)
-    /home/nez/Projects/vitrial-api/app/sync_v2.py:63  Nested functions - verify closures and lifetimes — def aggregate_payload_must_be_bounded(self) -> "SyncBatchV2": (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/sync_v2.py#L63)
-    /home/nez/Projects/vitrial-api/app/storage.py:65  Nested functions - verify closures and lifetimes — def __init__(self, root: Path): (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L65)
-    /home/nez/Projects/vitrial-api/app/storage.py:68  Nested functions - verify closures and lifetimes — def _path(self, key: str) -> Path: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L68)
-    /home/nez/Projects/vitrial-api/app/storage.py:133  Nested functions - verify closures and lifetimes — def __init__(self): (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L133)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:48  Nested functions - verify closures and lifetimes — def payload_must_be_bounded(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L48)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:63  Nested functions - verify closures and lifetimes — def aggregate_payload_must_be_bounded(self) -> "SyncBatchV2": (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L63)
+    /home/nez/Projects/vitrial-api/app/storage.py:65  Nested functions - verify closures and lifetimes — def __init__(self, root: Path): (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L65)
+    /home/nez/Projects/vitrial-api/app/storage.py:68  Nested functions - verify closures and lifetimes — def _path(self, key: str) -> Path: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L68)
+    /home/nez/Projects/vitrial-api/app/storage.py:133  Nested functions - verify closures and lifetimes — def __init__(self): (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L133)
 
 10. CONTROL FLOW GOTCHAS
-[info] Possible unreachable code after return — return subprocess.run( (156 found) — py.control-flow.unreachable-code
-    /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:50  Possible unreachable code after return — return subprocess.run( (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/audit_branch_staleness.py#L50)
-    /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:74  Possible unreachable code after return — return {"branch": branch, "verdict": "NO-COMMON-ANCESTOR", "adds": [], "behind": []} (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/audit_branch_staleness.py#L74)
-    /home/nez/Projects/vitrial-api/scripts/audit_branch_staleness.py:114  Possible unreachable code after return — return { (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/audit_branch_staleness.py#L114)
-    /home/nez/Projects/vitrial-api/scripts/validate_deployment.py:45  Possible unreachable code after return — return parsed.hostname (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/validate_deployment.py#L45)
-    /home/nez/Projects/vitrial-api/scripts/validate_deployment.py:164  Possible unreachable code after return — return 1 (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/validate_deployment.py#L164)
+[info] Possible unreachable code after return — return json.dumps( (156 found) — py.control-flow.unreachable-code
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:26  Possible unreachable code after return — return json.dumps( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L26)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:95  Possible unreachable code after return — return SyncRecord( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L95)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:109  Possible unreachable code after return — return SyncRecordV2( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L109)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:134  Possible unreachable code after return — return SyncResultV2( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L134)
+    /home/nez/Projects/vitrial-api/app/sync_v2.py:147  Possible unreachable code after return — return SyncBatchV2( (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/sync_v2.py#L147)
 
 16. I/O & RESOURCE SAFETY
 [warning] open() calls missing 'with' — fd = os.open(path, flags, 0o600) (1 found) — py.io.open-missing-with
-    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:254  open() calls missing 'with' — fd = os.open(path, flags, 0o600) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/bootstrap_two_user_acceptance.py#L254)
-[info] open() missing encoding — with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response: (4 found) — py.io.open-no-encoding
-    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:85  open() missing encoding — with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/bootstrap_two_user_acceptance.py#L85)
-    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:254  open() missing encoding — fd = os.open(path, flags, 0o600) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/bootstrap_two_user_acceptance.py#L254)
-    /home/nez/Projects/vitrial-api/app/storage.py:96  open() missing encoding — with temporary.open("wb") as handle: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L96)
-    /home/nez/Projects/vitrial-api/app/storage.py:119  open() missing encoding — with path.open("rb") as handle: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/storage.py#L119)
+    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:254  open() calls missing 'with' — fd = os.open(path, flags, 0o600) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/bootstrap_two_user_acceptance.py#L254)
+[info] open() missing encoding — with temporary.open("wb") as handle: (4 found) — py.io.open-no-encoding
+    /home/nez/Projects/vitrial-api/app/storage.py:96  open() missing encoding — with temporary.open("wb") as handle: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L96)
+    /home/nez/Projects/vitrial-api/app/storage.py:119  open() missing encoding — with path.open("rb") as handle: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/storage.py#L119)
+    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:85  open() missing encoding — with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/bootstrap_two_user_acceptance.py#L85)
+    /home/nez/Projects/vitrial-api/scripts/bootstrap_two_user_acceptance.py:254  open() missing encoding — fd = os.open(path, flags, 0o600) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/bootstrap_two_user_acceptance.py#L254)
 
 17. TYPING STRICTNESS
 [info] Frequent 'Any' usage — def bind_principal(principal: Any) -> None: (3 found) — py.typing.any-usage
-    /home/nez/Projects/vitrial-api/app/observability.py:135  Frequent 'Any' usage — def bind_principal(principal: Any) -> None: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L135)
-    /home/nez/Projects/vitrial-api/app/observability.py:152  Frequent 'Any' usage — def redact(value: Any, *, key: str | None = None) -> Any: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L152)
-    /home/nez/Projects/vitrial-api/app/observability.py:202  Frequent 'Any' usage — def log_event(event: str, *, level: int = logging.INFO, **fields: Any) -> None: (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L202)
+    /home/nez/Projects/vitrial-api/app/observability.py:135  Frequent 'Any' usage — def bind_principal(principal: Any) -> None: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L135)
+    /home/nez/Projects/vitrial-api/app/observability.py:152  Frequent 'Any' usage — def redact(value: Any, *, key: str | None = None) -> Any: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L152)
+    /home/nez/Projects/vitrial-api/app/observability.py:202  Frequent 'Any' usage — def log_event(event: str, *, level: int = logging.INFO, **fields: Any) -> None: (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L202)
 
 18. PYTHON I/O & MODULE USAGE
 [info] Dynamic imports present — sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1])) (3 found) — py.modules.dynamic-import
-    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:16  Dynamic imports present — sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1])) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L16)
-    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:20  Dynamic imports present — app_module = importlib.import_module("app.main") (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L20)
-    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:32  Dynamic imports present — module = importlib.import_module(mod_name) (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L32)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:16  Dynamic imports present — sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1])) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/check_guard_prefixes.py#L16)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:20  Dynamic imports present — app_module = importlib.import_module("app.main") (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/check_guard_prefixes.py#L20)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:32  Dynamic imports present — module = importlib.import_module(mod_name) (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/check_guard_prefixes.py#L32)
 
 AST-GREP RULE PACK FINDINGS
 ast-grep rule-pack summary
 [info] py.any-typing: Use precise types; 'Any' weakens type guarantees (6 found) — py.any-typing
-    /home/nez/Projects/vitrial-api/app/observability.py:12  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L12)
-    /home/nez/Projects/vitrial-api/app/observability.py:135  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L135)
-    /home/nez/Projects/vitrial-api/app/observability.py:152  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L152)
-    /home/nez/Projects/vitrial-api/app/observability.py:152  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L152)
-    /home/nez/Projects/vitrial-api/app/observability.py:168  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L168)
+    /home/nez/Projects/vitrial-api/app/observability.py:12  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L12)
+    /home/nez/Projects/vitrial-api/app/observability.py:135  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L135)
+    /home/nez/Projects/vitrial-api/app/observability.py:152  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L152)
+    /home/nez/Projects/vitrial-api/app/observability.py:152  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L152)
+    /home/nez/Projects/vitrial-api/app/observability.py:168  py.any-typing: Use precise types; 'Any' weakens type guarantees (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L168)
 [info] py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (3 found) — py.importlib-dynamic
-    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:16  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L16)
-    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:20  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L20)
-    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:32  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/check_guard_prefixes.py#L32)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:16  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/check_guard_prefixes.py#L16)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:20  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/check_guard_prefixes.py#L20)
+    /home/nez/Projects/vitrial-api/scripts/check_guard_prefixes.py:32  py.importlib-dynamic: Dynamic imports hinder static analysis and packaging (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/check_guard_prefixes.py#L32)
 [warning] py.json-load-no-try: json.load() without try/except crashes on malformed JSON or empty files (1 found) — py.json-load-no-try
-    /home/nez/Projects/vitrial-api/scripts/validate_backend_contract.py:36  py.json-load-no-try: json.load() without try/except crashes on malformed JSON or empty files (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/scripts/validate_backend_contract.py#L36)
+    /home/nez/Projects/vitrial-api/scripts/validate_backend_contract.py:36  py.json-load-no-try: json.load() without try/except crashes on malformed JSON or empty files (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/scripts/validate_backend_contract.py#L36)
 [info] py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (2 found) — py.logging-exception-no-exc-info
-    /home/nez/Projects/vitrial-api/app/observability.py:188  py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L188)
-    /home/nez/Projects/vitrial-api/app/observability.py:196  py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (https://github.com/scottjoyner/vitrial-api/blob/36f32b10e1d755091c2eb6d9002b08d3dda3481c/app/observability.py#L196)
+    /home/nez/Projects/vitrial-api/app/observability.py:188  py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L188)
+    /home/nez/Projects/vitrial-api/app/observability.py:196  py.logging-exception-no-exc-info: logging call missing exc_info=True when reporting exceptions (https://github.com/scottjoyner/vitrial-api/blob/0b894218e6d52ec62421ab5e4cfb72e3849d4fcc/app/observability.py#L196)
 good: All tracked resource acquisitions have matching cleanups
 good: No 'is' literal comparisons
 Critical issues: 16
 Warning issues: 3
 Info items: 313
-Report generated: 2026-10-02T18:02:58Z
+Report generated: 2026-10-02T19:33:53Z
 1. NONE / DEFENSIVE PROGRAMMING
 2. NUMERIC / ARITHMETIC PITFALLS
 3. COLLECTION SAFETY
