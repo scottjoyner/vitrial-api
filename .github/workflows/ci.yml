@@ -189,7 +189,7 @@ jobs:
           set -euo pipefail
           docker run --rm --memory=3g --memory-swap=6g \
             -v "$PWD/beam:/work" -w /work \
-            "$BEAM_IMAGE" sh -lc '
+            "$BEAM_IMAGE" bash -lc '
               set -euo pipefail
               elixir --version
               erl -noshell -eval "io:format(\"~s~n\",[erlang:system_info(otp_release)]), halt()."
@@ -226,7 +226,7 @@ jobs:
             -v "$PWD/.cache/mix-build:/work/_build" \
             -v "$PWD/.cache/hex:/root/.hex" \
             -v "$PWD/.cache/rebar3:/root/.rebar3" \
-            -w /work "$BEAM_IMAGE" sh -lc '
+            -w /work "$BEAM_IMAGE" bash -lc '
               set -euo pipefail
               mix local.hex --force --if-missing
               mix local.rebar --force --if-missing
@@ -277,7 +277,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Dependency + filesystem vulnerability scan (trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: '.'
@@ -288,7 +288,7 @@ jobs:
       - name: Build image for scan
         run: docker build -t vitrial-api:security .
       - name: Container image scan (trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: vitrial-api:security
