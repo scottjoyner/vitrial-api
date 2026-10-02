@@ -69,9 +69,12 @@ check:
 	$(PYTHON) scripts/check_guard_prefixes.py
 	$(MAKE) test
 
-# UBS bug gate: fail on any NEW critical/warning finding vs the committed baseline.
-# Same verdict as CI (.github/workflows/ubs.yml). See trackers/vitrial-api-TRACKER.md
-# "UBS loop status" for why the baseline is a defined floor and not a silent rebaseline.
+# UBS rapid bug gate — the same verdict CI enforces, locally, in seconds.
+#
+# Fails on any NEW critical/warning finding versus the committed baseline
+# (ubs-baseline.json); the baseline's residual findings are the documented
+# false-positive floor (see trackers/vitrial-api-TRACKER.md "UBS loop status").
+# A scan that cannot run is a failure, not a pass — see scripts/ubs_gate.sh.
 ubs:
 	bash scripts/ubs_gate.sh ubs-baseline.json
 
