@@ -69,7 +69,15 @@ class AssemblyBOMLine(StrictModel):
 class AssemblyBOMSnapshot(StrictModel):
     schema: Literal["vitrial.bom.v1"] = "vitrial.bom.v1"
     engineVersion: str = Field(min_length=1, max_length=256)
+    configurationID: str = Field(min_length=1, max_length=256)
+    configurationVersion: int = Field(ge=1)
+    calculationBasis: str = Field(min_length=1, max_length=1024)
     lines: list[AssemblyBOMLine] = Field(default_factory=list)
+
+
+class AssemblyRenderOverall(StrictModel):
+    widthMM: float = Field(gt=0)
+    heightMM: float = Field(gt=0)
 
 
 class AssemblyRenderSection(StrictModel):
@@ -82,7 +90,9 @@ class AssemblyRenderSection(StrictModel):
 class AssemblyRenderDescriptor(StrictModel):
     schema: Literal["vitrial.render.v1"] = "vitrial.render.v1"
     coordinateSystem: Literal["normalized_opening"] = "normalized_opening"
-    overall: AssemblyOverall
+    configurationID: str = Field(min_length=1, max_length=256)
+    configurationVersion: int = Field(ge=1)
+    overall: AssemblyRenderOverall
     sections: list[AssemblyRenderSection]
 
 
@@ -125,12 +135,14 @@ class AssemblySnapshotV1(StrictModel):
         if abs(cursor - 1.0) > _FRAME_TOLERANCE:
             raise ValueError("v1 planar sections must fill the opening width")
 
-        if abs(self.renderDescriptor.overall.width - self.overall.width) > _FRAME_TOLERANCE:
+        if self.renderDescriptor.configurationID != self.bom.configurationID:
+            raise ValueError("render descriptor and BOM configuration identity disagree")
+        if self.renderDescriptor.configurationVersion != self.bom.configurationVersion:
+            raise ValueError("render descriptor and BOM configuration version disagree")
+        if abs(self.renderDescriptor.overall.widthMM - self.overall.width) > _FRAME_TOLERANCE:
             raise ValueError("render descriptor width does not match assembly")
-        if abs(self.renderDescriptor.overall.height - self.overall.height) > _FRAME_TOLERANCE:
+        if abs(self.renderDescriptor.overall.heightMM - self.overall.height) > _FRAME_TOLERANCE:
             raise ValueError("render descriptor height does not match assembly")
-        if self.renderDescriptor.overall.unit != self.overall.unit:
-            raise ValueError("render descriptor unit does not match assembly")
 
         render_by_id = {section.sectionID: section for section in self.renderDescriptor.sections}
         if set(render_by_id) != set(section_ids):
