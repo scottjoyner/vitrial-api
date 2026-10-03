@@ -338,8 +338,11 @@ defmodule VitrialSync.Delivery.Handoff do
 
   defp procurement_requires_materials(_materials_plan), do: :ok
 
-  defp frozen_materials(nil), do: %{}
-
+  # No nil clause: `procurement_requires_materials(nil)` above already halts the
+  # pipeline with an error, so by the time this is reached the plan is present.
+  # The clause that was here could not be invoked, which is exactly what
+  # `mix compile --warnings-as-errors` reported — and that is the build the BEAM
+  # CI job runs, so a clause no caller can reach is a red build, not a style note.
   defp frozen_materials(materials_plan) do
     Enum.reduce(List.wrap(Map.get(materials_plan, "requirements") || []), %{}, fn requirement,
                                                                                    acc ->
