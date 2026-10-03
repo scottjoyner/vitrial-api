@@ -26,6 +26,8 @@ from app.pull_prefetch import (
     resolve_visible,
 )
 from app.metrics import sync_mutations_total
+from app.metrics import sync_pull_page_size
+from app.metrics import sync_pull_truncated_total
 from app.rejection_codes import rejection_code
 from app.ownership import (
     AuthorizationRejected,
@@ -505,6 +507,12 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
     ).all()
 
     records: list[SyncRecord] = []
+    # Did this page stop early because a record did not fit? Set at the break below and
+    # read after the loop. Tracked as a flag rather than inferred from
+    # `len(records) < len(changes)` because most short pages are short because the scan
+    # was exhausted, which is normal -- conflating the two would make "truncated"
+    # meaningless.
+    truncated = False
     # The cursor advances only past changes actually consumed. An invisible
     # change, or one whose entity is gone, IS consumed: it can never be
     # delivered, so leaving it unconsumed would stall the cursor forever. A
@@ -555,12 +563,21 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
         # page. The next request must observe that same change rather than
         # silently skip it.
         if not pull_page_accepts(records, record, change.sequence):
+            truncated = True
             break
 
         records.append(record)
         max_seq = max(max_seq, change.sequence)
 
     result = SyncBatch(deviceID="server", cursor=f"seq:{max_seq}", records=records)
+    # Recorded here, after the loop and before the return, so the observation covers
+    # exactly what the caller receives. In a `finally` would also have covered the
+    # error paths, but an exception here means no page was produced, and reporting a
+    # page size for a page that does not exist is the kind of plausible-looking number
+    # that sends an operator chasing the wrong thing.
+    sync_pull_page_size.observe(len(records))
+    if truncated:
+        sync_pull_truncated_total.inc()
     log_event(
         "sync.pull_completed",
         startSequence=start,

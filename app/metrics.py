@@ -409,6 +409,31 @@ sync_commit_duration_seconds = registry.register(
     )
 )
 
+# Page size is a distribution, not a sum: a pull returning 3 records and one returning
+# 400 are both "working", and the ceiling is what tells them apart.
+sync_pull_page_size = registry.register(
+    Histogram(
+        "vitrial_sync_pull_page_size",
+        "Records delivered per pull page.",
+        (),
+        # Buckets are record counts around the configured page ceiling, so an operator
+        # can see pages approaching the limit before they start truncating.
+        buckets=(0.0, 1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 200.0, 400.0, 800.0),
+    )
+)
+
+# A page that stopped early because the next record did not fit is the operationally
+# dangerous case: the client re-pulls from an unchanged cursor, and if a SINGLE record
+# exceeds the ceiling the loop never advances. That is invisible in a page-size
+# histogram (which just shows small pages) and obvious here.
+sync_pull_truncated_total = registry.register(
+    Counter(
+        "vitrial_sync_pull_truncated_total",
+        "Pulls whose page stopped early because the next record exceeded the page ceiling.",
+        (),
+    )
+)
+
 # ── Auth metrics ─────────────────────────────────────────────────────────────
 auth_failures_total = registry.register(
     Counter(

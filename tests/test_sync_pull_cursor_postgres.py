@@ -26,6 +26,8 @@ from sqlalchemy import text
 
 from app.auth import Principal
 from app.db import SessionFactory
+from app.metrics import sync_pull_page_size
+from app.metrics import sync_pull_truncated_total
 from app.models import CanonicalCustomer, Organization, SyncChangeLog, SyncEntity, User
 from app.schemas import SyncBatch
 from app.sync_service import MAX_SYNC_PULL_SCAN_CHANGES, pull_since
@@ -117,6 +119,56 @@ def cursor_of(pulled: SyncBatch) -> int:
     return int(pulled.cursor[4:])
 
 
+async def seed_orphan_change(db, *, index: int) -> None:
+    """A change whose entity is gone: consumed by the cursor, never delivered.
+
+    This is the case that separates a genuinely truncated page from a short one. Both
+    end with fewer records than changes scanned, but only truncation means the client
+    re-pulls from an unchanged cursor and cannot advance. Inferring truncation from
+    `len(records) < len(changes)` counts both, so the metric fires on entirely normal
+    traffic and gets muted -- which is why truncation is tracked as a flag at the break.
+    """
+    db.add(SyncChangeLog(
+        organization_id="org-1",
+        entity_type="customer",
+        entity_id=f"vanished-{index:04d}",
+        server_revision=1,
+        operation="upsert",
+        client_mutation_id=f"vanished-mutation-{index:04d}",
+        created_at=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc),
+    ))
+    await db.flush()
+
+
+@pytest.mark.asyncio
+async def test_a_short_page_is_not_counted_as_truncated():
+    """The negative case for the truncation counter: fewer records, no truncation.
+
+    Without this, the counter could be implemented as `len(records) < len(changes)` and
+    every normal pull with any invisible or vanished change would report a truncation.
+    The metric would then be permanently noisy and an operator would learn to ignore it
+    -- including the real stall it exists to catch.
+    """
+    async with SessionFactory() as db:
+        await clear(db)
+        await seed_org(db)
+        await seed_deliverable_customers(db, 3)
+        # Two changes whose entities no longer exist: consumed, not delivered.
+        await seed_orphan_change(db, index=0)
+        await seed_orphan_change(db, index=1)
+        await db.commit()
+
+        before = sync_pull_truncated_total.value()
+        pulled = await pull_since(db, actor(), "seq:0")
+
+    assert len(pulled.records) == 3, "only the live customers are delivered"
+    # More changes were scanned than records returned -- and that is NOT truncation.
+    assert len(pulled.records) < 5
+    assert sync_pull_truncated_total.value() == before, (
+        "a page short because changes were invisible is not a truncated page"
+    )
+
+
 @pytest.mark.asyncio
 async def test_cursor_advances_when_the_page_is_fully_consumed():
     """A normal page advances the cursor to the last delivered sequence."""
@@ -157,6 +209,16 @@ async def test_cursor_stops_before_a_deliverable_record_that_does_not_fit(monkey
 
         first = await pull_since(db, actor(), "seq:0")
         assert 0 < len(first.records) < 6, "expected a partial page"
+
+        # The truncation metric must fire for THIS page -- a page that stopped because a
+        # record would not fit is the case that matters, because the client re-pulls from
+        # an unchanged cursor. Asserted in the test that already constructs that
+        # situation, because a metric test that builds its own fixtures would check the
+        # counter rather than the accounting that produces it.
+        assert sync_pull_truncated_total.value() >= 1, (
+            "a page that stopped early must be counted as truncated"
+        )
+        assert sync_pull_page_size.count() >= 1
 
         # Drain the rest, one bounded page at a time, and prove the union is
         # exactly the six records with no loss and no duplication. A cursor that

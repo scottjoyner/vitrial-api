@@ -338,6 +338,48 @@ def test_drain_gauge_reflects_the_lifecycle_transition():
     drain_state.reset()
 
 
+def test_pull_page_size_is_recorded_and_truncation_is_counted_separately():
+    """A truncated page and a naturally-short page must be distinguishable.
+
+    This is the property that makes the truncation counter worth having. Most short
+    pages are short because the scan was exhausted, which is entirely normal; only a
+    page that stopped because a record would not fit means the client re-pulls from an
+    unchanged cursor. If the two were inferred from `len(records) < len(changes)` they
+    would collapse, and the counter would fire on ordinary traffic and be muted.
+    """
+    from app.metrics import sync_pull_page_size
+    from app.metrics import sync_pull_truncated_total
+
+    # Both metrics are unlabelled, so they must render even at zero -- otherwise a
+    # quiet system shows "no data" instead of "0 truncations", which reads as
+    # un-instrumented rather than healthy.
+    assert sync_pull_page_size.count() == 0
+    assert sync_pull_truncated_total.value() == 0
+
+    sync_pull_page_size.observe(0)
+    sync_pull_page_size.observe(7)
+    assert sync_pull_page_size.count() == 2
+
+    sync_pull_truncated_total.inc()
+    assert sync_pull_truncated_total.value() == 1
+    # A short page is not a truncated page.
+    assert sync_pull_truncated_total.value() == 1
+    assert sync_pull_page_size.count() == 2
+
+
+def test_pull_page_size_buckets_are_record_counts_not_latency():
+    """Guards against copying the latency bucket scale onto a record count.
+
+    The latency buckets (0.005..60) would put every realistic page size in the +Inf
+    bucket, making the histogram useless while still looking populated.
+    """
+    from app.metrics import sync_pull_page_size
+
+    assert 0.005 not in sync_pull_page_size.buckets
+    assert sync_pull_page_size.buckets[-1] >= 100.0
+    assert all(a < b for a, b in zip(sync_pull_page_size.buckets, sync_pull_page_size.buckets[1:]))
+
+
 def test_gc_counter_labelling_vocabulary_is_closed():
     """GC outcomes must be one of four fixed labels, not free text.
 
