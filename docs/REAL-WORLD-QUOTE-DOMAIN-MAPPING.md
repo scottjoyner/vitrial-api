@@ -377,6 +377,19 @@ installation result
 This should be analytics/training evidence, not a mechanism that silently rewrites historical
 quotes or current authority.
 
+## 12A. Cross-repo implementation evidence
+
+iOS draft PR #95 implements the first read-only experiment boundary described here:
+
+- deterministic real-quote assembly fixtures;
+- configuration-derived reference BOM output;
+- a shared customer/AR projection tied to the same configuration revision;
+- a tempered-glass final-measurement release assessment.
+
+No API entity, sync schema, capability, or delivery transition changes are introduced by that PR.
+Treat its output as experiment evidence until an API contract change is separately specified and
+accepted.
+
 ## 13. Proposed read-only experiment before any schema change
 
 Use Villa Camila fixtures to build a pure contract prototype that answers, for each quoted Item:
