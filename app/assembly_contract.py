@@ -223,3 +223,53 @@ def validate_quotation_line_design_snapshot(
             "quotation designSnapshot configurationVersionID does not match quotation line"
         )
     return snapshot
+
+
+def validate_assembly_contract_mutation(entity_type: str, payload: dict) -> None:
+    """Validate v1 assembly additions only when they are present.
+
+    This deliberately leaves legacy payloads untouched. It is a shape/provenance guard that runs
+    before the existing lifecycle and ownership checks; it does not grant any capability or create
+    a new persistence path.
+    """
+    if entity_type == "configuration":
+        if "assembly" in payload:
+            validate_configuration_assembly(payload)
+        return
+
+    if entity_type == "configuration_version":
+        configuration = payload.get("configuration")
+        if not isinstance(configuration, dict) or "assembly" not in configuration:
+            return
+        snapshot = validate_configuration_assembly(configuration)
+        if snapshot is None:
+            return
+
+        envelope_id = payload.get("id")
+        configuration_id = configuration.get("id")
+        configuration_version = configuration.get("version")
+        if (
+            not isinstance(envelope_id, str)
+            or not isinstance(configuration_id, str)
+            or not isinstance(configuration_version, int)
+            or isinstance(configuration_version, bool)
+            or envelope_id != f"{configuration_id}#v{configuration_version}"
+        ):
+            raise ValueError(
+                "configuration_version envelope does not match nested Configuration identity/version"
+            )
+        return
+
+    if entity_type == "quotation":
+        lines = payload.get("lines")
+        if not isinstance(lines, list):
+            return
+        for index, line in enumerate(lines):
+            if not isinstance(line, dict):
+                continue
+            if "designSnapshot" not in line:
+                continue
+            try:
+                validate_quotation_line_design_snapshot(line)
+            except ValueError as exc:
+                raise ValueError(f"quotation line {index + 1} assembly design is invalid: {exc}") from exc
