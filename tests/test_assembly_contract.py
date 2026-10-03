@@ -10,6 +10,7 @@ from app.assembly_contract import (
     AssemblySnapshotV1,
     validate_assembly_contract_mutation,
     validate_configuration_assembly,
+    validate_quotation_design_against_configuration_version,
     validate_quotation_line_design_snapshot,
 )
 from app.schemas import EntityType
@@ -200,3 +201,61 @@ def test_quotation_design_snapshot_rejects_render_configuration_identity_drift()
 
     with pytest.raises(ValidationError, match="configurationVersionID does not match render descriptor"):
         validate_quotation_line_design_snapshot(document["quotationLine"])
+
+
+def test_quote_design_matches_canonical_configuration_version():
+    document = fixture_document()
+    configuration_version = {
+        "id": "configuration-window-1#v1",
+        "configuration": document["configuration"],
+    }
+
+    validate_quotation_design_against_configuration_version(
+        document["quotationLine"],
+        configuration_version,
+    )
+
+
+def test_quote_design_rejects_render_drift_from_canonical_configuration_version():
+    document = fixture_document()
+    configuration_version = {
+        "id": "configuration-window-1#v1",
+        "configuration": document["configuration"],
+    }
+    document["quotationLine"]["designSnapshot"]["renderDescriptor"]["sections"][0]["operation"] = "right"
+
+    with pytest.raises(ValueError, match="render descriptor differs from canonical"):
+        validate_quotation_design_against_configuration_version(
+            document["quotationLine"],
+            configuration_version,
+        )
+
+
+def test_quote_design_rejects_reference_provenance_drift_from_canonical_version():
+    document = fixture_document()
+    configuration_version = {
+        "id": "configuration-window-1#v1",
+        "configuration": document["configuration"],
+    }
+    document["quotationLine"]["designSnapshot"]["referenceData"]["priceBookVersionID"] = "other-price-book"
+
+    with pytest.raises(ValueError, match="reference provenance differs from canonical"):
+        validate_quotation_design_against_configuration_version(
+            document["quotationLine"],
+            configuration_version,
+        )
+
+
+def test_quote_design_rejects_configuration_version_for_another_item():
+    document = fixture_document()
+    configuration_version = {
+        "id": "configuration-window-1#v1",
+        "configuration": copy.deepcopy(document["configuration"]),
+    }
+    configuration_version["configuration"]["itemID"] = "other-item"
+
+    with pytest.raises(ValueError, match="belongs to another Item"):
+        validate_quotation_design_against_configuration_version(
+            document["quotationLine"],
+            configuration_version,
+        )
