@@ -48,13 +48,28 @@ RUN pip3 install --no-cache-dir --break-system-packages "pydantic>=2,<3"
 # (apps_path), the one app that declares the dep, and the committed lock —
 # `mix deps.get` then resolves byte-exactly what CI will verify against that
 # same lock. The scratch tree is discarded; ~/.hex (cache.ets + the epgsql tar)
-# and ~/.mix/archives (hex, rebar3 — epgsql is a [:rebar3] build) are what
-# persist.
+# and ~/.mix/archives (hex, rebar3) are what persist.
 RUN mix local.hex --force \
  && mix local.rebar --force
 
-COPY beam/mix.exs beam/mix.lock /tmp/depseed/
+# Dependency pre-seed. OPTIONAL by design, and the previous version of this file
+# was not: it did `COPY beam/mix.exs beam/mix.lock`, which fails the whole build
+# with
+#
+#   failed to calculate checksum ...: "/beam/mix.lock": not found
+#
+# the moment the lockfile is deleted. That is exactly what happened when the
+# maintainer ruled "native as much as possible" and epgsql was removed — the
+# lockfile went, and this line took the whole gate image down with it. A
+# dependency-cache line must not be load-bearing on the dependency existing.
+#
+# The lockfile is copied with a GLOB, and that is the whole mechanism: Docker's
+# COPY fails on a literal path that does not exist, but a wildcard that matches
+# nothing copies nothing and succeeds. Putting `COPY beam/mix.lock` on its own
+# line does NOT work — verified, it fails the build identically.
+COPY beam/mix.exs /tmp/depseed/
 COPY beam/apps/vitrial_sync/mix.exs /tmp/depseed/apps/vitrial_sync/mix.exs
+COPY beam/mix.* /tmp/depseed/
 
 RUN cd /tmp/depseed \
  && mix deps.get \
