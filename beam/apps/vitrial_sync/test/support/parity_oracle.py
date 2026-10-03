@@ -1118,6 +1118,237 @@ def narrowing_class(value):
 
 
 # ---------------------------------------------------------------------------
+# batch
+# ---------------------------------------------------------------------------
+
+
+def batch_priors() -> list[dict]:
+    """The constructible batch corpus, with its seeded rows.
+
+    The slice cuts the loop body at the step-4 `try:`, so the entire accept
+    path -- revision assignment, the canonical row, the membership grant, the
+    changelog -- is past the boundary. Every record below therefore RESOLVES
+    in steps 1-3 (a step-1/2/3 outcome), and the writer guard
+    (`len(db.added) == 2 * len(writers)`) still holds: only stale_revision
+    rejections write rows, two each. The intra-batch case that IS constructible
+    is [A stale under m1, B reusing m1]: B reads the rejection row A wrote
+    mid-batch (FakeDB.add is immediately visible), and B writes nothing, so
+    the guard holds at 2 rows / 1 writer. The two commit-visibility cases an
+    accept would need (duplicate of an ACCEPTED id, staleness against a
+    same-batch create) are unit-only on the BEAM side, by the boundary and
+    the guard, not by omission.
+    """
+    return [
+        {
+            "name": "batch_missing_id",
+            "records": [record(id="r1", entityID="c1", clientMutationID=None)],
+            "priors": [],
+            "entity": None,
+        },
+        {
+            "name": "batch_missing_id_then_stale",
+            "records": [
+                record(id="r1", entityID="c1", clientMutationID=None, baseServerRevision=4),
+                record(id="r2", entityID="c1", clientMutationID="m2", baseServerRevision=4),
+            ],
+            "priors": [],
+            "entity": {"entity_type": "customer", "entity_id": "c1", "server_revision": 5},
+        },
+        {
+            "name": "batch_replay_trio",
+            "records": [
+                record(id="r1", entityID="c1", clientMutationID="m-replay", baseServerRevision=0),
+                record(id="r2", entityID="c2", clientMutationID="m-spent", baseServerRevision=0),
+                record(id="r3", entityID="c3", clientMutationID="m-collide", baseServerRevision=0),
+            ],
+            "priors": [
+                {
+                    "client_mutation_id": "m-replay",
+                    "entity_type": "customer",
+                    "entity_id": "c1",
+                    "base_server_revision": 0,
+                    "result_status": "accepted",
+                    "result_server_revision": 7,
+                    "fingerprint": "SELF",
+                },
+                {
+                    "client_mutation_id": "m-spent",
+                    "entity_type": "customer",
+                    "entity_id": "c2",
+                    "base_server_revision": 0,
+                    "result_status": "rejected",
+                    "result_server_revision": 3,
+                    "fingerprint": "SELF",
+                },
+                {
+                    "client_mutation_id": "m-collide",
+                    "entity_type": "customer",
+                    "entity_id": "c3",
+                    "base_server_revision": 0,
+                    "result_status": "accepted",
+                    "result_server_revision": 4,
+                    "fingerprint": COLLIDING_FINGERPRINT,
+                },
+            ],
+            "entity": None,
+        },
+        {
+            "name": "batch_stale_seeded_below",
+            "records": [record(id="r1", entityID="c1", clientMutationID="m1", baseServerRevision=4)],
+            "priors": [],
+            "entity": {"entity_type": "customer", "entity_id": "c1", "server_revision": 5},
+        },
+        {
+            "name": "batch_stale_seeded_above",
+            "records": [record(id="r1", entityID="c1", clientMutationID="m1", baseServerRevision=9)],
+            "priors": [],
+            "entity": {"entity_type": "customer", "entity_id": "c1", "server_revision": 5},
+        },
+        {
+            "name": "batch_stale_create_with_base",
+            "records": [record(id="r1", entityID="c1", clientMutationID="m1", baseServerRevision=0)],
+            "priors": [],
+            "entity": None,
+        },
+        {
+            "name": "batch_intra_stale_then_reuse",
+            "records": [
+                record(id="r1", entityID="c1", clientMutationID="dup", baseServerRevision=4),
+                record(id="r2", entityID="c1", clientMutationID="dup", baseServerRevision=4),
+            ],
+            "priors": [],
+            "entity": {"entity_type": "customer", "entity_id": "c1", "server_revision": 5},
+        },
+    ]
+
+
+def batch_rows(reference: Reference, attrs_list: list[dict], priors: list[dict], entity) -> dict:
+    """The seeded store: one Organization, the priors keyed by cmid, the entity.
+
+    `priors` is a LIST, not the singular slot the admission world uses, so one
+    batch can seed a prior per cmid; the singular fields are unchanged and the
+    44 admission cases keep their shape.
+    """
+    rows: dict = {
+        ("Organization", ORGANIZATION_ID): Organization(id=ORGANIZATION_ID),
+    }
+    records_by_cmid = {attrs["clientMutationID"]: reference.SyncRecord(**attrs) for attrs in attrs_list}
+
+    for prior in priors:
+        cmid = prior["client_mutation_id"]
+        rows[("SyncMutation", (ORGANIZATION_ID, cmid))] = SyncMutation(
+            organization_id=ORGANIZATION_ID,
+            client_mutation_id=cmid,
+            entity_type=prior["entity_type"],
+            entity_id=prior["entity_id"],
+            base_server_revision=prior["base_server_revision"],
+            result_status=prior["result_status"],
+            result_server_revision=prior["result_server_revision"],
+        )
+        fingerprint = prior.get("fingerprint")
+        if fingerprint == "SELF":
+            fingerprint = reference.request_fingerprint(records_by_cmid[cmid])
+        if fingerprint:
+            rows[("SyncMutationFingerprint", (ORGANIZATION_ID, cmid))] = SyncMutationFingerprint(
+                organization_id=ORGANIZATION_ID,
+                client_mutation_id=cmid,
+                request_fingerprint=fingerprint,
+            )
+
+    if entity is not None:
+        rows[
+            ("SyncEntity", (ORGANIZATION_ID, entity["entity_type"], entity["entity_id"]))
+        ] = SyncEntity(
+            organization_id=ORGANIZATION_ID,
+            entity_type=entity["entity_type"],
+            entity_id=entity["entity_id"],
+            server_revision=entity["server_revision"],
+        )
+    return rows
+
+
+def batch_cases(reference: Reference) -> list[dict]:
+    resolved = []
+    for spec in batch_priors():
+        attrs_list = [wire_form(reference, attrs) for attrs in spec["records"]]
+        records = [reference.SyncRecord(**attrs) for attrs in attrs_list]
+        rows = batch_rows(reference, attrs_list, spec["priors"], spec["entity"])
+
+        db = FakeDB(rows)
+        batch = reference.SyncBatch(deviceID="dev1", cursor=None, records=records)
+        principal = Principal(ORGANIZATION_ID)
+        outcomes, events = asyncio.run(reference.slice(db, principal, batch))
+
+        # Every record must resolve in steps 1-3: the slice has no step 4+,
+        # so a record that falls past it has NO outcome here, and the BEAM
+        # side (whose walk continues into the authority steps) would have
+        # nothing sound to compare against.
+        unresolved = [i for i in range(len(records)) if i not in outcomes]
+        if unresolved:
+            raise SystemExit(
+                f"parity_oracle: batch case {spec['name']} has records {unresolved}"
+                " that do not resolve in steps 1-3. The slice boundary makes"
+                " such a case incomparable; it belongs in the BEAM unit suite."
+            )
+
+        ordered = sorted(
+            enumerate(records),
+            key=lambda pair: reference.mutation_sort_key(pair[1].entityType, pair[0]),
+        )
+        emitters = [i for i, _ in ordered if i in outcomes]
+        if len(emitters) != len(events):
+            raise SystemExit(
+                f"parity_oracle: {spec['name']}: {len(events)} events but"
+                f" {len(emitters)} records with outcomes"
+            )
+
+        per_index: list[dict] = []
+        for index in range(len(records)):
+            event = events[emitters.index(index)]
+            if outcomes[index] != (event["resultStatus"] == "accepted"):
+                raise SystemExit(
+                    f"parity_oracle: {spec['name']} record {index}: outcome="
+                    f"{outcomes[index]} but event says {event['resultStatus']}"
+                )
+            per_index.append(
+                {
+                    "outcome": {
+                        "status": event["resultStatus"],
+                        "reason": event["reason"],
+                        "result_revision": event["resultServerRevision"],
+                    },
+                    "event": event,
+                }
+            )
+
+        # The same writer guard `run_steps_1_to_3` enforces: within the slice,
+        # only a stale_revision rejection writes, and it writes exactly the
+        # mutation + fingerprint pair. The intra-batch reuse case passes this
+        # at 2 rows / 1 writer, because B reads A's row and adds none.
+        writers = [
+            i for i in emitters if events[emitters.index(i)]["reason"] == "stale_revision"
+        ]
+        if len(db.added) != 2 * len(writers):
+            raise SystemExit(
+                f"parity_oracle: {spec['name']}: the slice added {len(db.added)}"
+                f" rows for {len(writers)} stale_revision rejections. Either a"
+                " branch beyond stale_revision writes within steps 1-3 now, or"
+                " `_record_mutation` no longer adds exactly two rows."
+            )
+
+        resolved.append(
+            {
+                "name": spec["name"],
+                "records": [emit_record(attrs) for attrs in attrs_list],
+                "priors": spec["priors"],
+                "entity": spec["entity"],
+                "per_index": per_index,
+            }
+        )
+    return resolved
+
+
+# ---------------------------------------------------------------------------
 # payload
 # ---------------------------------------------------------------------------
 
@@ -1718,7 +1949,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--only",
         default="all",
-        choices=["all", "admission", "page", "payload"],
+        choices=["all", "admission", "batch", "page", "payload"],
         help="which section(s) to emit; `all` is one object with every section",
     )
     args = parser.parse_args(argv)
@@ -1735,10 +1966,12 @@ def main(argv: list[str]) -> int:
         return 4
 
     document: dict = {"limits": limits(reference)}
-    wanted = ["admission", "page", "payload"] if args.only == "all" else [args.only]
+    wanted = ["admission", "batch", "page", "payload"] if args.only == "all" else [args.only]
     for section in wanted:
         if section == "admission":
             document["admission"] = admission_cases(reference)
+        elif section == "batch":
+            document["batch"] = batch_cases(reference)
         elif section == "page":
             document["page"] = page_cases(reference)
         else:

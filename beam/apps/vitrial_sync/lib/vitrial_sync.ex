@@ -46,14 +46,31 @@ defmodule VitrialSync do
   `VitrialSync.Provenance` and `VitrialSync.Decimal` are the shared vocabulary
   those decisions are written in.
 
+  The batch around those decisions:
+
+    * `VitrialSync.Batch` -- the walk over one push batch (the
+      `_apply_push_once` loop in `app/sync_service.py`): `EntityOrder` sort,
+      one `Admission.decide/6` per record against a WORKING scope derived from
+      the principal and widened after every accepted customer/project create
+      (`app/ownership.py:865`/`:884`), outcomes keyed by original index,
+      outcome events in processing order, and every database effect returned
+      for the caller's one transaction
+    * `VitrialSync.MutationEvent` -- the `sync.mutation_result` event body,
+      exactly `_outcome_event`'s eight wire fields; the metric increment and
+      the log line remain caller work
+
   ## What is not, and why that is visible
 
   Every decision returns the work it would do -- upsert tuples, a scope grant, a
-  GC row -- as data, because a pure function cannot write it. The transaction
-  that applies them, the storage it reads them from, and the HTTP surface are
-  the next slices. They are absent rather than stubbed: there is no
-  `apply_push/1` that returns `:not_implemented`, because a function that looks
-  like the sync engine and cannot sync is worse than no function -- the next
-  caller has no way to tell the difference.
+  GC row, and now whole mutation/changelog/entity row maps -- as data, because a
+  pure function cannot write it. The transaction that applies them, the storage
+  it reads them from, and the HTTP surface are the next slices. They are absent
+  rather than stubbed: there is no `apply_push/1` that returns
+  `:not_implemented`, because a function that looks like the sync engine and
+  cannot sync is worse than no function -- the next caller has no way to tell
+  the difference. One reference step is missing entirely, and is tracked rather
+  than papered over: `validate_assembly_contract_mutation`
+  (`app/sync_service.py:319-323`), named in `VitrialSync.Batch`'s step table and
+  VITR-V015 in the tracker.
   """
 end

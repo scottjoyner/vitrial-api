@@ -124,7 +124,9 @@ defmodule VitrialSync.Admission do
   Decide one record.
 
       iex> alias VitrialSync.{Admission, Record}
-      iex> record = %Record{id: "r1", entity_type: "customer", entity_id: "c1", updated_at: "2026-10-02T00:00:00Z", payload: ~s({}), client_mutation_id: "m1", base_server_revision: 0}
+      iex> record = %Record{id: "r1", entity_type: "customer", entity_id: "c1",
+      ...>   updated_at: "2026-10-02T00:00:00Z", payload: ~s({}), client_mutation_id: "m1",
+      ...>   base_server_revision: 0}
       iex> Admission.decide(record, Admission.empty_context()).reason
       "stale_revision"
   """
@@ -311,14 +313,23 @@ defmodule VitrialSync.Admission do
       iex> world = %Canonical.World{
       ...>   membership: %Canonical.Membership{active: true, organization_id: "org", user_id: "u1"},
       ...>   organization: %Canonical.Organization{authorization_revision: 1}}
-      iex> Admission.decide(record, Admission.empty_context(), nil, principal, world)
-      {:ok, %{authority: :generic, evidence_gc: nil, ownership: %{authorization_revision_bump?: true, scope_grant: %{customer_ids: ["c1"], project_ids: []}, upserts: [{:customer, "c1", nil}]}, payload: %{"id" => "c1"}, plan: %VitrialSync.Ownership.Plan{customer_id: "c1", deleted_at: nil, entity_id: "c1", entity_type: "customer", is_create: true, item_id: nil, project_id: nil, project_sector_id: nil, sector_id: nil}}}
+      iex> {:ok, effects} = Admission.decide(record, Admission.empty_context(), nil, principal, world); :ok
+      :ok
+      iex> effects.authority
+      :generic
+      iex> effects.payload
+      %{"id" => "c1"}
+      iex> effects.ownership.scope_grant
+      %{customer_ids: ["c1"], project_ids: []}
+      iex> effects.ownership.upserts
+      [{:customer, "c1", nil}]
 
       iex> alias VitrialSync.{Admission, Canonical, Record}
       iex> record = %Record{id: "r2", entity_type: "customer", entity_id: "c1",
       ...>   updated_at: "2026-10-02T00:00:00Z", payload: ~s({}), client_mutation_id: "m2",
       ...>   deleted_at: "2026-10-02T00:00:00Z"}
-      iex> principal = %Canonical.Principal{organization_id: "org", capabilities: MapSet.new(["customer.edit"])}
+      iex> principal = %Canonical.Principal{organization_id: "org",
+      ...>   capabilities: MapSet.new(["customer.edit"])}
       iex> Admission.decide(record, Admission.empty_context(), nil, principal, Canonical.empty_world())
       {:rejected, "authorization_rejected"}
   """

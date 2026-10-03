@@ -40,13 +40,19 @@ defmodule VitrialSync.Ownership do
   ## Design-snapshot binding
 
   A quotation line may carry a `designSnapshot`, which must be bound to the
-  canonical frozen `ConfigurationVersion` it names. The shape of both snapshots is
-  validated earlier in the request by `validate_assembly_contract_mutation`
-  (`app/sync_service.py:320-323`, `app/assembly_contract.py:260-292`) -- before
-  any of these steps run -- so `bind_design_snapshot/2` here works on already
-  validated objects and compares them directly. That ordering is a precondition,
-  not an accident: re-validating the shapes here would be a second copy of a
-  contract that the reference validates once.
+  canonical frozen `ConfigurationVersion` it names. The shape of both snapshots
+  is validated before this step runs -- in the reference by
+  `validate_assembly_contract_mutation` (`app/sync_service.py:319-323`,
+  `app/assembly_contract.py`, validator at `:294-330`) -- so
+  `bind_design_snapshot/2` here works on already validated objects and compares
+  them directly. That ordering is a precondition, not an accident: re-validating
+  the shapes here would be a second copy of a contract that the reference
+  validates once. On the BEAM, however, NOTHING yet establishes that
+  precondition -- the validator is unported (tracked as VITR-V015 in
+  `trackers/vitrial-api-TRACKER.md`; the gap is named in `VitrialSync.Batch`'s
+  step table, and `drift_test.exs` pins the reference's decode -> validate
+  order) -- so this module is faithful to the reference's *order*, not yet to
+  its *guarantee*.
   """
 
   alias VitrialSync.{Canonical, Provenance, Value}
@@ -616,8 +622,20 @@ defmodule VitrialSync.Ownership do
        ) do
     canonical = Canonical.item_child(world, entity_type, entity_id)
 
+    # Both guards are conditional on the CANONICAL row being absent
+    # (`app/ownership.py:597-598`: `if canonical is None and generic_entity_exists`,
+    # `if canonical is None and deleting`). Unlike the customer/project arms,
+    # where the guard runs only inside the nil branch, this arm splits later, so
+    # the nil-conditions travel WITH the arguments: an update of an existing
+    # child -- SyncEntity row present, canonical child present -- must pass, and
+    # firing on `generic_exists` alone refused every one of them.
     with :ok <- append_only_guard(entity_type, canonical, generic_exists, deleting),
-         :ok <- absent_canonical(entity_type, generic_exists, deleting and is_nil(canonical)),
+         :ok <-
+           absent_canonical(
+             entity_type,
+             is_nil(canonical) and generic_exists,
+             deleting and is_nil(canonical)
+           ),
          :ok <- identity(payload, entity_id, deleting),
          {:ok, item_id} <- resolve_item_id(entity_type, entity_id, payload, canonical, world),
          {:ok, item, project} <- item_for_scope(world, scope, item_id),

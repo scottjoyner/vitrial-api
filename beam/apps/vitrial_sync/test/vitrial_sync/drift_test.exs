@@ -154,6 +154,71 @@ defmodule VitrialSync.DriftTest do
     end
   end
 
+  describe "the reference's batch assembly, as code" do
+    # These are the lines the BEAM batch walk is written against. Each is a
+    # CODE fragment (comments and docstrings are stripped first), so a
+    # reference refactor that changes one of these behaviours fails here even
+    # when the comment explaining the old behaviour survived.
+    test "a replay answers with the prior row's own revision", %{sync: sync} do
+      push = PythonSource.function_body(sync, "async def _apply_push_once")
+
+      assert_contains(push, "result_revision=prior.result_server_revision")
+    end
+
+    test "the response lists are assembled in the client's ORIGINAL order", %{sync: sync} do
+      push = PythonSource.function_body(sync, "async def _apply_push_once")
+
+      # `enumerate(batch.records)` walks the original order; `outcomes` is
+      # keyed by original index. Both filters, and their asymmetry: an absent
+      # outcome is NOT `is True`, so it lands in the rejected list.
+      assert_in_order(push, [
+        "acceptedRecordIDs=[record.id for index, record in enumerate(batch.records)",
+        "rejectedRecordIDs=[record.id for index, record in enumerate(batch.records)"
+      ])
+
+      assert_contains(push, "if outcomes.get(index) is True")
+      assert_contains(push, "if outcomes.get(index) is not True")
+    end
+
+    test "nextCursor is the post-commit sequence read, nil-coalesced to zero", %{sync: sync} do
+      push = PythonSource.function_body(sync, "async def _apply_push_once")
+
+      assert_contains(push, "nextCursor=f\"seq:{int(seq or 0)}\"")
+    end
+
+    test "a revision is coalesce(max(server_revision), 0) + 1", %{sync: sync} do
+      next_revision = PythonSource.function_body(sync, "async def _next_revision")
+
+      assert_contains(next_revision, "func.coalesce(func.max(SyncEntity.server_revision), 0)")
+      assert_contains(next_revision, "return int(value or 0) + 1")
+    end
+
+    test "the accept path flushes per record, so the batch sees its own writes", %{sync: sync} do
+      push = PythonSource.function_body(sync, "async def _apply_push_once")
+
+      # The per-accept flush (sync_service.py:443) is what makes each record's
+      # writes visible to the next -- the fact the BEAM walk threads through
+      # its store, and the fact `test_push_preread_deferred.py` exists for.
+      assert_contains(push, "await db.flush()")
+    end
+
+    test "the assembly-contract validation runs between decode and the item-delete guard", %{
+      sync: sync
+    } do
+      push = PythonSource.function_body(sync, "async def _apply_push_once")
+
+      # The BEAM does NOT port validate_assembly_contract_mutation yet (its own
+      # vertical, tracked as VITR-V015); this pair pins the reference ORDER the
+      # port's moduledoc documents, so the day the validator lands -- or the
+      # day the reference moves the call -- the change is visible here rather
+      # than silently absorbed.
+      assert_in_order(push, [
+        "payload = decode_payload(record)",
+        "validate_assembly_contract_mutation(record.entityType, payload)"
+      ])
+    end
+  end
+
   describe "the reference's page-fit predicate" do
     test "applies the count, payload and response ceilings in that order", %{sync: sync} do
       accepts = PythonSource.function_body(sync, "def pull_page_accepts")

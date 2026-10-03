@@ -296,10 +296,12 @@ defmodule VitrialSync.Batch do
         walk_record(acc, index, record, principal)
       end)
 
+    # `state.events` was appended in walk order, which IS processing order --
+    # the reference appends inside the sorted loop (`app/sync_service.py:436`).
     %Run{
       records: records,
       results: state.results,
-      events: Enum.reverse(state.events),
+      events: state.events,
       effects: state.effects,
       result: nil
     }

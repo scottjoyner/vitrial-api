@@ -23,15 +23,7 @@ defmodule VitrialSync.BatchTest do
 
   use ExUnit.Case, async: true
 
-  alias VitrialSync.{
-    Admission,
-    Batch,
-    Canonical,
-    CanonicalJSON,
-    Fingerprint,
-    MutationEvent,
-    Record
-  }
+  alias VitrialSync.{Batch, CanonicalJSON, Fingerprint, MutationEvent, Record}
 
   alias VitrialSync.Canonical.{
     Customer,
@@ -43,6 +35,7 @@ defmodule VitrialSync.BatchTest do
     Organization,
     Principal,
     Project,
+    ProjectSector,
     World
   }
 
@@ -203,10 +196,18 @@ defmodule VitrialSync.BatchTest do
 
       run = run!(records, principal, store(world))
 
-      assert %{1 => project} = run.results
+      assert %{0 => customer, 1 => project} = run.results
+      assert customer.status == :accepted
+      # The customer grant delta is EMPTY (the membership already holds c1),
+      # so c1 produces no bump. The project is a genuinely new id and still
+      # grants.
+      assert run.effects.membership_grants == [%{customer_ids: [], project_ids: ["p1"]}]
+      assert run.effects.organization_authorization_revision == 8
+      # And the project is nonetheless authorized -- the entry scope object
+      # was widened unconditionally on the customer create arm
+      # (`app/ownership.py:865`), which is the half the gated grant delta
+      # cannot express. Under a restricted principal, this line IS the pin.
       assert project.status == :accepted
-      assert run.effects.membership_grants == []
-      assert run.effects.organization_authorization_revision == 7
     end
 
     test "child-first arrival processes the parent first and reports ids in original order" do
@@ -465,7 +466,9 @@ defmodule VitrialSync.BatchTest do
         record("r1", "customer", "c1", base_server_revision: 1, deleted_at: @ts)
       ]
 
-      run = run!(records, principal(["customer.edit"]), store(world))
+      # The store's max_revision is the caller's pre-commit read of
+      # max(server_revision) -- here 1, the seeded entity.
+      run = run!(records, principal(["customer.edit"]), store(world, max_revision: 1))
 
       assert %{0 => outcome} = run.results
       assert outcome.status == :accepted
@@ -478,15 +481,22 @@ defmodule VitrialSync.BatchTest do
     test "evidence GC is enqueued only when a blob row exists" do
       item_children = [%ItemChild{entity_type: "evidence", entity_id: "e1", item_id: "i1"}]
       entity = %Entity{entity_type: "evidence", entity_id: "e1", server_revision: 2}
-      item = %Item{item_id: "i1", project_id: "p1"}
+      item = %Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1"}
+      sector = %ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}
 
       payload = ~s({"id": "e1", "itemID": "i1"})
 
       record =
         record("r1", "evidence", "e1", base_server_revision: 2, deleted_at: @ts, payload: payload)
 
+      # The item-child authority walks the whole chain: the evidence's item,
+      # the item's sector, and the sector's project must all be canonical.
+      project = %Project{project_id: "p1", customer_id: "c1"}
+
       with_blob =
         org_world(
+          projects: [project],
+          project_sectors: [sector],
           items: [item],
           item_children: item_children,
           entities: [entity],
@@ -502,7 +512,15 @@ defmodule VitrialSync.BatchTest do
       assert [%{document_id: "e1", reason: "metadata_tombstone", grace_seconds: 86_400}] =
                run.effects.evidence_gc_rows
 
-      without_blob = org_world(items: [item], item_children: item_children, entities: [entity])
+      without_blob =
+        org_world(
+          projects: [project],
+          project_sectors: [sector],
+          items: [item],
+          item_children: item_children,
+          entities: [entity]
+        )
+
       run = run!([record], principal(["item.evidence.manage"]), store(without_blob))
 
       assert run.results[0].status == :accepted

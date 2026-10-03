@@ -12,11 +12,29 @@ defmodule VitrialSync.ParityTest do
     * **admission** -- for each record, `{status, reason, result_revision}` from
       `VitrialSync.Admission.decide/2` against the same three fields from the
       reference's own `_apply_push_once`
+    * **batch** -- the same three fields per ORIGINAL index from the whole
+      `VitrialSync.Batch` walk, plus the full `_outcome_event` maps, against
+      the reference's steps 1-3 slice of `_apply_push_once`
     * **page** -- `VitrialSync.Page`'s wire sizing against the byte length of
       real `SyncBatch.model_dump_json()` output, plus the three ceilings against
       the constants read out of `app/schemas.py` and `app/sync_service.py`
     * **payload** -- `VitrialSync.Payload.decode/1`'s accept/reject and
       `VitrialSync.CanonicalJSON.encode/1`'s bytes against the reference's
+
+  ## What the batch section cannot see, and why that is stated here
+
+  The oracle's slice cuts the loop body at the step-4 `try:`, so the whole
+  accept path -- revision assignment, the canonical row, the membership grant,
+  the changelog -- is past the boundary, and its writer guard
+  (`len(db.added) == 2 * len(writers)`) would reject any case where an accept
+  writes. Two intra-batch behaviours therefore have NO differential case and
+  are pinned only by `batch_test.exs`: a same-batch duplicate of an ACCEPTED
+  id, and staleness judged against a same-batch create's NEW revision. The one
+  intra-batch case the slice CAN express -- [A stale under m1, B reusing m1],
+  where B reads the rejection row A wrote mid-batch -- is in the corpus below;
+  it passes the writer guard at 2 rows / 1 writer precisely because B writes
+  nothing. Every corpus record resolves in steps 1-3, so what the walk does
+  past the slice cannot change what is compared here.
 
   ## The seven things that are NOT identical, and why that is a test
 
@@ -53,7 +71,18 @@ defmodule VitrialSync.ParityTest do
   """
   use ExUnit.Case, async: false
 
-  alias VitrialSync.{Admission, CanonicalJSON, Page, Payload, Record}
+  alias VitrialSync.{
+    Admission,
+    Batch,
+    Canonical,
+    CanonicalJSON,
+    Fingerprint,
+    MutationEvent,
+    Page,
+    Payload,
+    Record
+  }
+
   alias VitrialSync.PythonReference
 
   if reason = PythonReference.unavailable_reason() do
@@ -68,6 +97,7 @@ defmodule VitrialSync.ParityTest do
   # counts appear twice; nothing else in the suite hardcodes a number.
   @documented %{
     admission_cases: 44,
+    batch_cases: 7,
     page_cases: 117,
     payload_cases: 169,
     payload_accepted: 55,
@@ -81,6 +111,7 @@ defmodule VitrialSync.ParityTest do
 
     {:ok,
      admission: index_by_name(document["admission"]),
+     batch: index_by_name(document["batch"]),
      page: index_by_name(document["page"]),
      payload: index_by_name(document["payload"]),
      limits: document["limits"]}
@@ -145,6 +176,68 @@ defmodule VitrialSync.ParityTest do
                "rejected_mutation_id_reuse",
                "stale_revision"
              ]
+    end
+  end
+
+  describe "the push batch walk against the steps 1-3 slice" do
+    test "every case agrees per original index, outcome and event map key-for-key",
+         %{batch: cases} do
+      assert map_size(cases) == @documented.batch_cases
+
+      Enum.each(cases, fn {name, row} ->
+        records = Enum.map(row["records"], &record!/1)
+        store = batch_store!(records, row)
+
+        assert {:ok, run} = Batch.run(records, "dev1", batch_principal(), store)
+
+        row["per_index"]
+        |> Enum.with_index()
+        |> Enum.each(fn {expected, index} ->
+          outcome = Map.fetch!(run.results, index)
+
+          assert {to_string(outcome.status), outcome.reason, outcome.result_revision} ==
+                   {expected["outcome"]["status"], expected["outcome"]["reason"],
+                    expected["outcome"]["result_revision"]},
+                 "#{name} (record #{index})"
+
+          # The full eight-field map, compared literally: the reference's
+          # `_outcome_event` output against `MutationEvent.of/3`'s.
+          assert MutationEvent.of(Enum.fetch!(records, index), "dev1", outcome) ==
+                   expected["event"],
+                 "#{name} (record #{index}: event differs)"
+        end)
+      end)
+    end
+
+    test "the corpus reaches every reason the slice can emit, including the intra-batch reuse", %{
+      batch: cases
+    } do
+      emitted =
+        cases
+        |> Enum.flat_map(fn {_name, row} ->
+          Enum.map(row["per_index"], & &1["outcome"]["reason"])
+        end)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      assert emitted == [
+               "idempotent_replay",
+               "missing_client_mutation_id",
+               "mutation_id_collision",
+               "rejected_mutation_id_reuse",
+               "stale_revision"
+             ]
+
+      # B read A's mid-batch rejection row: the one intra-batch fact the slice
+      # can express, and the reason this section is not merely the admission
+      # corpus re-run through a different caller.
+      refute is_nil(cases["batch_intra_stale_then_reuse"])
+
+      assert Enum.map(
+               cases["batch_intra_stale_then_reuse"]["per_index"],
+               & &1["outcome"]["reason"]
+             ) ==
+               ["stale_revision", "rejected_mutation_id_reuse"]
     end
   end
 
@@ -349,6 +442,71 @@ defmodule VitrialSync.ParityTest do
       result_status: prior["result_status"],
       result_server_revision: prior["result_server_revision"]
     }
+  end
+
+  # The batch cases resolve in steps 1-3 by oracle assertion, so the world the
+  # walk continues into is never consulted for a verdict; the seeded entity and
+  # the seeded priors are the only state any compared record can see.
+  defp batch_store!(records, row) do
+    priors =
+      Map.new(row["priors"], fn prior ->
+        {prior["client_mutation_id"],
+         %{
+           entity_type: prior["entity_type"],
+           entity_id: prior["entity_id"],
+           base_server_revision: prior["base_server_revision"],
+           result_status: prior["result_status"],
+           result_server_revision: prior["result_server_revision"]
+         }}
+      end)
+
+    fingerprints =
+      row["priors"]
+      |> Enum.flat_map(fn
+        %{"fingerprint" => "SELF"} = prior ->
+          record = Enum.find(records, &(&1.client_mutation_id == prior["client_mutation_id"]))
+
+          [{prior["client_mutation_id"], Fingerprint.of(Record.mutation(record))}]
+
+        %{"fingerprint" => hex} = prior when is_binary(hex) ->
+          [{prior["client_mutation_id"], hex}]
+
+        _without_fingerprint ->
+          []
+      end)
+      |> Map.new()
+
+    entity = row["entity"]
+
+    entities =
+      if entity do
+        [
+          %Canonical.Entity{
+            entity_type: entity["entity_type"],
+            entity_id: entity["entity_id"],
+            server_revision: entity["server_revision"]
+          }
+        ]
+      else
+        []
+      end
+
+    %Batch.Store{
+      priors: priors,
+      fingerprints: fingerprints,
+      world: %Canonical.World{
+        organization: %Canonical.Organization{authorization_revision: 0},
+        entities: entities
+      },
+      max_revision: 0
+    }
+  end
+
+  # The oracle's Principal carries exactly {"sync"}: no entity capability is
+  # ever consulted, because every compared record resolves before the
+  # authority steps.
+  defp batch_principal do
+    %Canonical.Principal{organization_id: "org", capabilities: MapSet.new(["sync"])}
   end
 
   defp candidates!(row) do
