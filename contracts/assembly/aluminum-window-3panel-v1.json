@@ -1,0 +1,250 @@
+{
+  "configuration": {
+    "id": "configuration-window-1",
+    "itemID": "item-window-1",
+    "itemTypeID": "item-type-window",
+    "version": 1,
+    "status": "complete",
+    "assembly": {
+      "schema": "vitrial.assembly.v1",
+      "templateID": "aluminum_window_3_panel",
+      "templateVersion": 1,
+      "measurementID": "measurement-opening-1",
+      "overall": {
+        "width": 2400,
+        "height": 1650,
+        "unit": "mm"
+      },
+      "sections": [
+        {
+          "id": "panel-1",
+          "sectionType": "sliding",
+          "operation": "left",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 0.3333333333333333,
+            "height": 1
+          },
+          "widthMM": 800,
+          "heightMM": 1650
+        },
+        {
+          "id": "panel-2",
+          "sectionType": "sliding",
+          "operation": "right",
+          "frame": {
+            "x": 0.3333333333333333,
+            "y": 0,
+            "width": 0.3333333333333333,
+            "height": 1
+          },
+          "widthMM": 800,
+          "heightMM": 1650
+        },
+        {
+          "id": "panel-3",
+          "sectionType": "fixed",
+          "operation": null,
+          "frame": {
+            "x": 0.6666666666666666,
+            "y": 0,
+            "width": 0.33333333333333337,
+            "height": 1
+          },
+          "widthMM": 800,
+          "heightMM": 1650
+        }
+      ],
+      "selections": {
+        "aluminumSystemID": "al-system-sliding",
+        "aluminumProfileID": "al-profile-frame",
+        "finishID": "finish-natural-anodized",
+        "glassTypeID": "glass-tempered",
+        "glassThicknessID": "glass-6mm",
+        "glassTreatmentID": "glass-treatment-none",
+        "hardwareIDs": [
+          "hardware-roller",
+          "hardware-handle",
+          "hardware-lock"
+        ],
+        "accessoryIDs": [
+          "accessory-weather-seal",
+          "accessory-anchor-kit"
+        ]
+      },
+      "referenceData": {
+        "catalogVersionID": "configurator-catalog-v2",
+        "catalogContentSHA256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "compatibilityRulesVersionID": "configurator-rules-v1",
+        "compatibilityRulesContentSHA256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "priceBookVersionID": "price-book-unconfigured-v1",
+        "priceBookContentSHA256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "bom": {
+        "schema": "vitrial.bom.v1",
+        "engineVersion": "deterministic-planar-rules-v1",
+        "lines": [
+          {
+            "id": "bom-glass-panel-1",
+            "role": "glass_infill",
+            "referenceEntryIDs": [
+              "glass-tempered",
+              "glass-6mm",
+              "glass-treatment-none"
+            ],
+            "sourceRuleID": "planar.glass.area.v1",
+            "sourceSectionID": "panel-1",
+            "quantity": 1.32,
+            "unit": "m2",
+            "wasteQuantity": 0
+          },
+          {
+            "id": "bom-profile-reference",
+            "role": "profile_reference_geometry",
+            "referenceEntryIDs": [
+              "al-profile-frame"
+            ],
+            "sourceRuleID": "planar.profile.perimeter-dividers.reference.v1",
+            "sourceSectionID": null,
+            "quantity": 12.3,
+            "unit": "m",
+            "wasteQuantity": 0
+          }
+        ],
+        "configurationID": "configuration-window-1",
+        "configurationVersion": 1,
+        "calculationBasis": "Deterministic planar reference geometry; not a fabrication cut list or procurement authority."
+      },
+      "renderDescriptor": {
+        "schema": "vitrial.render.v1",
+        "coordinateSystem": "normalized_opening",
+        "overall": {
+          "widthMM": 2400,
+          "heightMM": 1650
+        },
+        "sections": [
+          {
+            "sectionID": "panel-1",
+            "sectionType": "sliding",
+            "operation": "left",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 0.3333333333333333,
+              "height": 1
+            }
+          },
+          {
+            "sectionID": "panel-2",
+            "sectionType": "sliding",
+            "operation": "right",
+            "frame": {
+              "x": 0.3333333333333333,
+              "y": 0,
+              "width": 0.3333333333333333,
+              "height": 1
+            }
+          },
+          {
+            "sectionID": "panel-3",
+            "sectionType": "fixed",
+            "operation": null,
+            "frame": {
+              "x": 0.6666666666666666,
+              "y": 0,
+              "width": 0.33333333333333337,
+              "height": 1
+            }
+          }
+        ],
+        "configurationID": "configuration-window-1",
+        "configurationVersion": 1
+      }
+    }
+  },
+  "quotationLine": {
+    "id": "line-window-1",
+    "itemID": "item-window-1",
+    "configurationVersionID": "configuration-window-1#v1",
+    "designSnapshot": {
+      "schema": "vitrial.quote-line-design.v1",
+      "templateID": "aluminum_window_3_panel",
+      "templateVersion": 1,
+      "configurationVersionID": "configuration-window-1#v1",
+      "overall": {
+        "width": 2400,
+        "height": 1650,
+        "unit": "mm"
+      },
+      "sectionSummary": [
+        {
+          "sectionType": "sliding",
+          "operation": "left"
+        },
+        {
+          "sectionType": "sliding",
+          "operation": "right"
+        },
+        {
+          "sectionType": "fixed",
+          "operation": null
+        }
+      ],
+      "bomSHA256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "referenceData": {
+        "catalogVersionID": "configurator-catalog-v2",
+        "catalogContentSHA256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "compatibilityRulesVersionID": "configurator-rules-v1",
+        "compatibilityRulesContentSHA256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "priceBookVersionID": "price-book-unconfigured-v1",
+        "priceBookContentSHA256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "renderDescriptor": {
+        "schema": "vitrial.render.v1",
+        "coordinateSystem": "normalized_opening",
+        "overall": {
+          "widthMM": 2400,
+          "heightMM": 1650
+        },
+        "sections": [
+          {
+            "sectionID": "panel-1",
+            "sectionType": "sliding",
+            "operation": "left",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 0.3333333333333333,
+              "height": 1
+            }
+          },
+          {
+            "sectionID": "panel-2",
+            "sectionType": "sliding",
+            "operation": "right",
+            "frame": {
+              "x": 0.3333333333333333,
+              "y": 0,
+              "width": 0.3333333333333333,
+              "height": 1
+            }
+          },
+          {
+            "sectionID": "panel-3",
+            "sectionType": "fixed",
+            "operation": null,
+            "frame": {
+              "x": 0.6666666666666666,
+              "y": 0,
+              "width": 0.33333333333333337,
+              "height": 1
+            }
+          }
+        ],
+        "configurationID": "configuration-window-1",
+        "configurationVersion": 1
+      }
+    }
+  }
+}
