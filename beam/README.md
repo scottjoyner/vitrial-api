@@ -5,6 +5,10 @@ alongside the FastAPI service in the repository root. The Python service is
 retained unmodified as the **reference implementation and parity oracle** — it is
 not being retired by this tree.
 
+**Start with [`ARCHITECTURE.md`](ARCHITECTURE.md)** for where the port actually
+is, what remains, and the order that work has to happen in. This file says what
+the umbrella *is*; that one says what state it is *in*.
+
 ## Why this exists
 
 The Python service is 7,884 lines of application code with 11,487 lines of tests

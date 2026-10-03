@@ -5,6 +5,12 @@ evidence storage, with a BEAM/Elixir port under `beam/`. Read `README.md` for th
 endpoints, and security invariants, `deploy/README.md` for deploy/rollback/acceptance, and
 `MIGRATION.md` for where this tree came from.
 
+**Working on the BEAM port? Read `beam/ARCHITECTURE.md` first.** It states where the
+port actually is — what is built, what is a declared scaffold, what does not exist
+yet at all — and the order the remaining work has to happen in. `beam/README.md` says
+what the umbrella *is*; the architecture doc says what state it is *in*, and the
+remaining work is ordered by real dependencies rather than convenience.
+
 ## Where agents look — in order
 
 1. **This file** — routing and the compliance checklist below.
