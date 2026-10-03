@@ -110,7 +110,7 @@ def test_nested_snapshot_must_bind_to_existing_configuration_identity():
 
 def test_quotation_design_snapshot_must_bind_to_line_configuration_version():
     document = fixture_document()
-    document["quotationLine"]["designSnapshot"]["configurationVersionID"] = "configuration-window-1#v2"
+    document["quotationLine"]["configurationVersionID"] = "configuration-window-1#v2"
 
     with pytest.raises(ValueError, match="does not match quotation line"):
         validate_quotation_line_design_snapshot(document["quotationLine"])
