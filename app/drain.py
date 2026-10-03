@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import contextlib
 
+from app.metrics import drain_active
+
 
 class DrainState:
     """Process-local drain flag. Single process by design (see Dockerfile)."""
@@ -60,6 +62,15 @@ drain_state = DrainState()
 
 @contextlib.asynccontextmanager
 async def lifespan(_app):
-    """Flip to draining on shutdown; never un-drain on startup within one process."""
+    """Flip to draining on shutdown; never un-drain on startup within one process.
+
+    The drain gauge is set at both ends rather than sampled on scrape, because the
+    transition happens exactly once and a scrape may never coincide with it. Setting
+    it on shutdown is what makes `vitrial_drain_active 1` observable during the window
+    where it matters -- an instance that is finishing uploads but should receive no
+    new work.
+    """
+    drain_active.set(0)
     yield
     drain_state.begin()
+    drain_active.set(1)

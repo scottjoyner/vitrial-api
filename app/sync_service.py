@@ -24,6 +24,7 @@ from app.pull_prefetch import (
     resolve_delivery_visible,
     resolve_visible,
 )
+from app.metrics import sync_mutations_total
 from app.rejection_codes import rejection_code
 from app.ownership import (
     AuthorizationRejected,
@@ -436,7 +437,15 @@ async def _apply_push_once(db: AsyncSession, principal: Principal, batch: SyncBa
 
     await db.commit()
 
+    # Recorded here rather than at outcome construction because this is the first
+    # point the outcome is real: everything above is still inside the transaction
+    # and may roll back (the replay path below exists precisely because PostgreSQL
+    # aborts), so counting earlier would report mutations that never happened.
+    #
+    # Keyed on the stable `reason` vocabulary, so the aggregate survives a refactor
+    # that renames an exception class.
     for event in outcome_events:
+        sync_mutations_total.inc(code=str(event.get("reason") or "internal_error"))
         log_event("sync.mutation_result", **event)
 
     seq = await db.scalar(

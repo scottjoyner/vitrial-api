@@ -23,6 +23,9 @@ from app.drain import drain_state
 from app.drain import lifespan as drain_lifespan
 from app.evidence import put_blob
 from app.models import EvidenceBlob
+from app.metrics import refresh_dependency_gauges
+from app.metrics import registry
+from app.metrics_middleware import MetricsMiddleware
 from app.request_size import RequestSizeLimitMiddleware
 from app.rate_limit import (
     client_key_for,
@@ -177,6 +180,22 @@ async def ready(response: Response) -> ReadinessResponse:
         database=readiness.database,
         objectStorage=readiness.object_storage,
     )
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics(
+    _: None = Depends(require_admin_key),
+) -> Response:
+    """Prometheus exposition of the counters that back the runbook.
+
+    Excluded from the schema because the pinned public contract does not describe it,
+    and gated on the admin key for the same reason the other internal routes are:
+    the counters carry route names, status classes and rejection codes, which is
+    reconnaissance even without a body. Disabled entirely when no admin key hash is
+    configured, so a default deployment exposes nothing.
+    """
+    refresh_dependency_gauges()
+    return Response(content=registry.render(), media_type="text/plain; version=0.0.4")
 
 
 @app.get("/api/v1/version", response_model=VersionResponse, operation_id="version")
@@ -380,3 +399,9 @@ async def admin_revoke_session(
 # the decorator form builds a new downstream request and cannot intercept the body
 # stream. See app/request_size.py.
 app.add_middleware(RequestSizeLimitMiddleware)
+
+# Registered after the byte guard, so instrumentation sits INSIDE it: a request
+# refused for being oversized is still observed with its 413 status, which is exactly
+# the signal an operator wants when diagnosing a client that streams too much. The
+# route label is read from the matched template, so this adds no cardinality.
+app.add_middleware(MetricsMiddleware)
