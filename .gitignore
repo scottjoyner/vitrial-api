@@ -36,3 +36,9 @@ ubs-new.md
 beam/_build/
 beam/deps/
 .cache/
+
+# Editor/tool scratch written into the working tree. Not source, and not any agent's
+# work product -- but leaving it untracked makes `make verify-clean` permanently red for
+# everyone, and a gate that can never pass is a gate people learn to ignore. Same
+# rationale as beam/_build and .cache above.
+.zcode/
