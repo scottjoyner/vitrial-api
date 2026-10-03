@@ -73,6 +73,20 @@ why it is waiting in `beam/apps/ORPHAN_EXEMPT.txt` with a real reason.
 A module with a test counts as specified and needs no exemption — that is what makes the
 guard usable while the port is being built bottom-up.
 
+## Never finish with uncommitted work
+
+More than one agent edits this repo concurrently, and scratch under `/mnt/build-fast/tmp`
+is wiped between sessions — so uncommitted work can be lost twice over. **Commit and push
+everything you produce before you declare a task done.**
+
+- [ ] `make verify-clean` — fails on a dirty tree or unpushed commits. Run it last.
+- [ ] **Stage only your own files** (`git add <path>...`). **Never `git add -A`** — it
+      sweeps a concurrent agent's in-flight edits into your commit. This has already
+      happened once here: another agent's `git add -A` absorbed this repo's tracker and
+      seed edits into their commit. Content survived; authorship and message did not.
+- [ ] Durable tooling lives in `~/.venvs/vitrial-api` and `~/.pgdata/vitrial` (port 5435),
+      never in `/mnt/build-fast/tmp`.
+
 **Rules that are already held — do not churn them:**
 - [ ] Ripgrep only, never grep.
 - [ ] Env-gated, default OFF, degrade honestly (admin routes 404 when no key hash; rate limiter

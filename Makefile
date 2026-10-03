@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check beam-structure ubs ubs-accept branches
+.PHONY: install postgres postgres-native migrate migrate-native test test-integration test-all run check beam-structure ubs ubs-accept branches verify-clean
 
 install:
 	python -m pip install -e '.[dev]'
@@ -117,6 +117,29 @@ branches:
 #
 # Run this only after deciding each new finding is a validated false positive or
 # an accepted debt -- never to make the gate green.
+# Refuse to finish a session with uncommitted work.
+#
+# More than one agent edits this repo concurrently, and the `/mnt/build-fast/tmp`
+# scratch is wiped between sessions -- so uncommitted work can be lost twice over.
+# Run this before declaring anything done. It is a check, not a fixer: never
+# `git add -A` here, because that sweeps another agent's in-flight edits into your
+# commit. Stage the files you actually changed.
+verify-clean:
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "WORKING TREE DIRTY -- commit or stash before finishing:"; \
+		git status --porcelain; \
+		echo; \
+		echo "Stage ONLY your own files (git add <path>...); git add -A sweeps a"; \
+		echo "concurrent agent's in-flight work into your commit."; \
+		exit 1; \
+	fi
+	@if [ -n "$$(git log --oneline @{u}..HEAD 2>/dev/null)" ]; then \
+		echo "UNPUSHED COMMITS -- push before finishing:"; \
+		git log --oneline @{u}..HEAD; \
+		exit 1; \
+	fi
+	@echo "clean: tree committed and pushed"
+
 ubs-accept:
 	@test -f ubs-history.json || { \
 		echo "no ubs-history.json; run 'make ubs' first"; exit 1; }
