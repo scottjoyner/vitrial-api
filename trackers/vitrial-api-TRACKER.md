@@ -10,21 +10,34 @@ date: 2026-10-03
 # vitrial-api — Work Tracker
 
 > Reconciles GitHub issues against what has **actually shipped** on `main`
-> (HEAD `4865052`, 2026-10-03). Only check a box when a commit in `git log` is
+> (HEAD `a20ff34`, 2026-10-03). Only check a box when a commit in `git log` is
 > evidence of it. Use `[~]` for the part-that-works, not `[x]`.
 
-> **Verification status of the rows below (2026-10-03).** `VITR-V008`, `-009`, `-010`,
-> `-011` and `-013` are marked Fixed on **static evidence only** — source reading plus
-> formula replay. No Python test was executed: `python -m pytest` fails collection with
-> `ModuleNotFoundError: No module named 'sqlalchemy'` (no venv in this workspace), and
-> PostgreSQL is unreachable (`psql -U vitrial -d vitrial` → `FATAL: Peer authentication
-> failed`; `docker ps` → `No such file or directory`). Every affected test file is also
-> gated on `POSTGRES_INTEGRATION=1` or `S3_INTEGRATION=1`. Treat "Fixed" here as
-> *correct-by-inspection, pending a green suite*, and re-run before relying on it.
-> The BEAM-side guards were run and passed (`scripts/check_beam_scaffold.py` exit 0,
-> `scripts/check_beam_orphans.py` exit 0, `scripts/validate_backend_contract.py` exit 0,
-> `compileall` exit 0, `elixirc` over `beam/apps/vitrial_sync/lib` exit 0).
+> **Verification status of the rows below (2026-10-03, `55876bd`/`a20ff34`).** `VITR-V008`,
+> `-009`, `-010`, `-011` and `-013` are marked Fixed and that is now **executed** evidence,
+> not inspection: the CI run on `55876bd` is green on all four workflows — Unit + contract
+> `353 passed, 63 skipped`, PostgreSQL + S3 integration `416 passed`, BEAM umbrella
+> `532 passed (3 doctests, 529 tests)`, Container build and Security both success.
+> Still true and still worth knowing: there is **no local Python environment**
+> (`python -m pytest` fails collection with `ModuleNotFoundError: No module named 'boto3'`,
+> no sqlalchemy) and PostgreSQL is unreachable from this workspace, so the Python half is
+> verifiable only by pushing. The BEAM half *is* locally reproducible —
+> `docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim` via podman.
+> Guards all exit 0: `check_beam_scaffold.py` (8 apps, 1 built, 7 declared),
+> `check_beam_orphans.py` (93 sources, 59/60 modules reachable, no dead modules),
+> `validate_backend_contract.py`, `compileall`.
 > Full state and next steps: `memory-seeds/vitrial-api-state-2026-10-03.md`.
+
+> **Two reds were hiding behind each other between `4865052` and `55876bd`, and both
+> arrived with the assembly-topology merge `d28cd62`.** A boto3 client stub in
+> `tests/test_object_storage.py` was `lambda **kwargs` against a **positional** call
+> (`boto3.client("s3", endpoint_url=…)`, `app/storage.py:139`), so the three tests pinning
+> `VITR-V013` raised `TypeError` before any assertion — the row below claimed S3 coverage
+> that did not exist. And 22 Elixir files in `vitrial_sync` were unformatted, which is the
+> first step of the Beam CI job. Fixed in `55876bd`; the unit job moved 350+3failed → 353
+> passed, which is the count arithmetic for exactly those three tests.
+> **Lesson for reading any "pinned by" clause in this tracker: a stub narrower than the
+> call it stands in for turns "covered" into "never ran", silently.**
 
 ## Legend
 
@@ -126,7 +139,7 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | **Fixed** — one transaction for the whole run with a `SAVEPOINT` per row, so the `SKIP LOCKED` locks survive to the single commit at `app/evidence_gc.py:217` (`app/evidence_gc.py:118-217`); pinned by a two-collector test plus a structural no-commit-in-the-loop assertion. Commit-worthy on its own: it makes two shipped comments true that the ordering had made false. |
 | `VITR-V012` | LOW | The collector's happy-path test cannot pass under the shipped 86400s GC grace, so GC is effectively unexercised | **Fixed** (`0fab6f8`) |
 | `VITR-V014` | **HIGH** | `evidence_gc`'s `StorageError` handler reads `row.id` after `db.rollback()`, raising `MissingGreenlet` — a failing object store aborts the whole collection run | **Fixed** (`0fab6f8`) |
-| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | **Fixed** — the post-publish staging delete is now best-effort and logs `storage.staging_delete_failed` instead of escalating to `StorageError` (`app/storage.py:219-246`); pinned by three S3-store tests in `tests/test_object_storage.py` that need no S3. Commit-worthy on its own: it moves a production-only code path (S3 is what both compose files ship) from untested to covered in the default suite. |
+| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | **Fixed** — the post-publish staging delete is now best-effort and logs `storage.staging_delete_failed` instead of escalating to `StorageError` (`app/storage.py:219-246`); pinned by three S3-store tests in `tests/test_object_storage.py` that need no S3. Commit-worthy on its own: it moves a production-only code path (S3 is what both compose files ship) from untested to covered in the default suite. **The pinning was itself broken until `55876bd`** — the client stub could not accept the positional service name, so all three raised `TypeError` at construction and never reached an assertion; they now run (unit job 350+3failed → 353 passed). |
 
 `VITR-V007` is the serious one: a client received **201** for an upload whose object the
 collector had already deleted, and every later `GET`/`HEAD` on that document 404'd. Root
