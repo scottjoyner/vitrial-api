@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **380 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
+`make check` runs contract validation + guard lint + tests. Baseline: **385 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -170,6 +170,35 @@ timeout — a hung index would wedge a build step forever). Fixed with an explic
 The companion finding (float-equality on `alembic==1.20.0`) is a version pin read as
 numeric comparison; scoped in `.ubsignore` with reasoning rather than worked around.
 
+## VITR-V007 — silent data loss in evidence publication (commit 76e11e5)
+
+The most serious defect found so far, and it survived because no test exercised the GC
+happy path. A client got **201** for an upload whose object the collector had already
+deleted; every later `GET`/`HEAD` on that document 404'd.
+
+Reachable interleaving: upload v1 (bytes X) → key K canonical → upload v2 (bytes Y) →
+key K2 canonical and K queued for GC → upload v3 (**bytes X again**; keys are
+content-addressed so this writes K again, and `evidence.py:209` queues K2 leaving the
+stale row for K) → collector deletes K because the blob still points at K2 → upload v3
+commits its pointer to K and returns 201.
+
+**The lesson: a lock only protects what happens inside it.** `put_blob` streams the
+object BEFORE taking the org row lock — deliberately, so a 100 MiB upload does not hold a
+transaction for its whole duration. So the lock serialized the pointer *switch* while
+leaving the *write* outside it, and a comment at `evidence_gc.py` asserted a protection
+the ordering never provided. Comments that promise safety are load-bearing; if the code
+changes, they must change with it.
+
+Fixed from both sides (both take the same row lock, which is what makes the pair safe):
+cancel any pending GC row for the key being published, then verify the object still
+exists and fail retryably rather than commit a pointer to a missing object. Each half
+verified against a planted regression.
+
+`VITR-V008`–`VITR-V013` are logged in the tracker and NOT fixed. Of those, **VITR-V012 is
+the highest leverage**: the collector's happy-path test cannot pass under the shipped
+86400s GC grace, so GC is effectively unexercised — which is precisely why -007, -010,
+-011 and -013 all remain reachable. Fixing the *test* unlocks the rest.
+
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
 - Run migrations before `python -m pytest` or you get 44 failures that look like defects but
@@ -196,3 +225,6 @@ numeric comparison; scoped in `.ubsignore` with reasoning rather than worked aro
 - `ubs-history.json` is rewritten by every `make ubs` run, so it is almost always dirty
   when you go to rebase. Stash it explicitly (`git stash -- ubs-history.json`) or the
   rebase refuses to start.
+- S3 integration tests are gated behind `S3_INTEGRATION=1` and are NOT in the default
+  baseline, so a whole subsystem (evidence GC) can be effectively untested while CI is
+  green. When reading a green CI result, ask what the default baseline actually skipped.

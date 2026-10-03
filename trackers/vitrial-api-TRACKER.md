@@ -79,10 +79,10 @@ No open PRs. No Jira, no in-repo board, no beads records.
 
 ### P1 — resilience & operations
 
-- [~] Metrics for request rate/latency/status, auth failures, sync outcome, DB pool, S3 latency, GC backlog, page sizes. Only structured durationMs/statusCode logs exist; no metrics endpoint, no pool-exponent, no GC backlog surfacing. `reason=type(exc).__name__` (`VITR-V006`).
+- [x] Metrics for request rate/latency/status, auth failures, sync outcome, DB pool, S3 latency, GC backlog, page sizes — `app/metrics.py`, `GET /metrics` (admin-gated, out of the pinned schema). Labels on the matched route template with a series cap; sync outcomes on the stable `VITR-V006` vocabulary; pull page size plus a truncation counter.
 - [~] Trace/correlation propagation. `X-Request-ID` accepted/preserved and one-way `sha256:` refs for org/actor/membership/session/entity/device. It is not a W3C `traceparent`; nothing crosses the iOS→API→DB→S3 boundary as one trace.
 - [ ] SLOs/alerts for availability, p95, sync failure rate, dependency readiness.
-- [ ] Graceful shutdown/drain test with in-flight sync and evidence streams.
+- [x] Graceful shutdown/drain test with in-flight sync and evidence streams — `app/drain.py`, `/ready` 503 on SIGTERM while `/health` stays 200, 45s uvicorn budget inside a 60s `stop_grace_period`, `deploy.sh` awaits the replaced container and fails on non-zero exit.
 - [ ] PostgreSQL backup/PITR and restore drill.
 - [~] S3 versioning/retention/restore policy and orphan/GC reconciliation runbook — GC exists and is scheduled (`deploy/gc-evidence.timer`), but no documented restore policy.
 
@@ -106,9 +106,31 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | **Fixed** (`33ccee4`) |
 | `VITR-V005` | MED | Evidence reference safety scan is O(all measurements + requirements) per delete | **Fixed** (`30b29ab`) |
 | `VITR-V006` | MED | Rejection outcome is `reason=<exception class name>`, not a code | **Fixed** (`257e725`) |
+| `VITR-V007` | **HIGH** | Evidence GC can delete the object an in-flight upload is publishing — silent data loss | **Fixed** (`76e11e5`) |
+| `VITR-V008` | MED | GET routes write and `commit()`; concurrent first reads raise an unhandled `IntegrityError` → 500 | Open |
+| `VITR-V009` | MED | `ownership.py`'s whole `delivery_execution` branch is unreachable; its tests drive dead, already-divergent code | Open |
+| `VITR-V010` | MED | GC rows that are blocked or failing are never backed off, and `attempts` is write-only | Open |
+| `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | Open |
+| `VITR-V012` | LOW | The collector's happy-path test cannot pass under the shipped 86400s GC grace, so GC is effectively unexercised | Open |
+| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | Open |
 
-All six defects are closed. Remaining open work is #28 production-foundation boxes, not
-defects.
+`VITR-V007` is the serious one: a client received **201** for an upload whose object the
+collector had already deleted, and every later `GET`/`HEAD` on that document 404'd. Root
+cause was that `put_blob` streams the object *before* taking the organization row lock
+(deliberately — a 100 MiB upload must not hold a transaction for its duration), so the
+lock serialized the pointer switch but left the write outside it. The comment at
+`evidence_gc.py` asserted a protection the ordering did not provide.
+
+**These last six were found by a systematic read of auth/ownership/sync/storage, not by
+a failing test.** That is itself the finding: nothing in the suite exercises the GC happy
+path (`VITR-V012`), which is the direct reason `VITR-V007`, `-010`, `-011` and `-013` all
+remain reachable. Fixing the *test* is the highest-leverage item here.
+
+`VITR-V009` deserves a note: `authorize_record` has one production caller, and delivery
+records never reach it — `tests/test_delivery_execution_ownership.py` (295 lines)
+validates a dead path that has already diverged (its tombstone branch has no capability
+check, which the live copy enforces). It is harmless today and is a booby trap for the
+next refactor.
 
 ### `VITR-V001` — dead guard prefixes
 
