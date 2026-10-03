@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
+from app.assembly_contract import validate_assembly_contract_mutation
 from app.delivery_execution import (
     DELIVERY_ENTITY_TYPE,
     DeliveryExecutionRejected,
@@ -313,6 +314,10 @@ async def _apply_push_once(db: AsyncSession, principal: Principal, batch: SyncBa
 
         try:
             payload = decode_payload(record)
+            try:
+                validate_assembly_contract_mutation(record.entityType, payload)
+            except ValueError as exc:
+                raise InvalidMutation(f"invalid assembly contract: {exc}") from exc
             if (
                 record.entityType == "item"
                 and record.deletedAt is not None
