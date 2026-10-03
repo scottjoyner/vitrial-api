@@ -3,8 +3,8 @@ defmodule VitrialSync.Page do
   Assembling one page of a pull response, and deciding what the cursor may
   advance past.
 
-  Reproduces the page loop in `pull_since` (`app/sync_service.py:462-556`) and
-  `pull_page_accepts` (`app/sync_service.py:63-79`).
+  Reproduces the page loop in `pull_since` (`app/sync_service.py:479-588`) and
+  `pull_page_accepts` (`app/sync_service.py:68-84`).
 
   ## The cursor discipline is the whole point
 
@@ -31,8 +31,14 @@ defmodule VitrialSync.Page do
     * `MAX_SYNC_V1_BATCH_PAYLOAD_BYTES` (2_100_000) bounds the **sum of payload
       bytes**, which is what the iOS client budgets against
     * `MAX_SYNC_PULL_RESPONSE_BYTES` (2_250_000) bounds the **serialized batch**,
-      because base64 expansion and per-record framing are not covered by the
-      other two
+      because per-record framing is not covered by the other two. There is no
+      base64 expansion to budget for: Pydantic serializes a `bytes` payload as a
+      UTF-8-decoded JSON string (quote-escaped, but otherwise the same bytes the
+      aggregate ceiling counts -- measured, not assumed). What the other two
+      ceilings never see is the framing around those bytes -- field names, the
+      `id`/`entityID`/`clientMutationID` triple, timestamps, the cursor -- and
+      enough of it crosses the 150_000-byte gap once roughly 170 records are in
+      flight, which the parity suite's `response_ceiling` case demonstrates.
 
   All three have to be checked, and the third has to be checked against the bytes
   that will actually go on the wire. Estimating it is how the response grows past

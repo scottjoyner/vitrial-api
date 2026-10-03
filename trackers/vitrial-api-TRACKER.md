@@ -10,34 +10,56 @@ date: 2026-10-03
 # vitrial-api — Work Tracker
 
 > Reconciles GitHub issues against what has **actually shipped** on `main`
-> (HEAD `a20ff34`, 2026-10-03). Only check a box when a commit in `git log` is
+> (HEAD `342f9be`, 2026-10-03). Only check a box when a commit in `git log` is
 > evidence of it. Use `[~]` for the part-that-works, not `[x]`.
 
-> **Verification status of the rows below (2026-10-03, `55876bd`/`a20ff34`).** `VITR-V008`,
-> `-009`, `-010`, `-011` and `-013` are marked Fixed and that is now **executed** evidence,
+> **Verification status of the rows below (2026-10-03, at `342f9be`).** `VITR-V008`,
+> `-009`, `-010`, `-011` and `-013` are marked Fixed and that is **executed** evidence,
 > not inspection: the CI run on `55876bd` is green on all four workflows — Unit + contract
 > `353 passed, 63 skipped`, PostgreSQL + S3 integration `416 passed`, BEAM umbrella
-> `532 passed (3 doctests, 529 tests)`, Container build and Security both success.
+> `532 passed (3 doctests, 529 tests)`, Container build and Security both success. Nothing
+> in this run touched `app/`, so those Python rows stand as they were.
 > Still true and still worth knowing: there is **no local Python environment**
 > (`python -m pytest` fails collection with `ModuleNotFoundError: No module named 'boto3'`,
 > no sqlalchemy) and PostgreSQL is unreachable from this workspace, so the Python half is
-> verifiable only by pushing. The BEAM half *is* locally reproducible —
-> `docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim` via podman.
-> Guards all exit 0: `check_beam_scaffold.py` (8 apps, 1 built, 7 declared),
-> `check_beam_orphans.py` (93 sources, 59/60 modules reachable, no dead modules),
-> `validate_backend_contract.py`, `compileall`.
+> verifiable only by pushing.
+>
+> **The BEAM half moved this run and every BEAM number below was re-measured here.**
+> `./scripts/beam_gate.sh` → `Result: 555 passed (3 doctests, 552 tests)`, **exit 0**,
+> up from 532 + 23 skipped: `342f9be` landed the differential harness
+> (`parity_oracle.py` + `python_reference.ex` + `parity_test.exs` + `drift_test.exs`,
+> +23 tests) and `beam/Dockerfile.gate`, which gives the gate container the `python3` the
+> oracle needs to execute rather than skip itself. Guards re-run here, all exit 0:
+> `check_beam_scaffold.py` (8 apps, 1 built, 7 declared), `check_beam_orphans.py`
+> (97 sources, 60 modules, 59 reachable, no dead modules), `validate_backend_contract.py`,
+> `compileall`.
 > Full state and next steps: `memory-seeds/vitrial-api-state-2026-10-03.md`.
 
-> **Two reds were hiding behind each other between `4865052` and `55876bd`, and both
-> arrived with the assembly-topology merge `d28cd62`.** A boto3 client stub in
-> `tests/test_object_storage.py` was `lambda **kwargs` against a **positional** call
-> (`boto3.client("s3", endpoint_url=…)`, `app/storage.py:139`), so the three tests pinning
-> `VITR-V013` raised `TypeError` before any assertion — the row below claimed S3 coverage
-> that did not exist. And 22 Elixir files in `vitrial_sync` were unformatted, which is the
-> first step of the Beam CI job. Fixed in `55876bd`; the unit job moved 350+3failed → 353
-> passed, which is the count arithmetic for exactly those three tests.
-> **Lesson for reading any "pinned by" clause in this tracker: a stub narrower than the
-> call it stands in for turns "covered" into "never ran", silently.**
+> **A green gate is a statement about the gate, not about the port.** The pinned
+> `hexpm/elixir` image has no `python3`, so before `342f9be` the differential
+> harness skipped itself and `mix test` reported `532 passed / 23 skipped` — all
+> green, with the oracle that proves the port correct never executed. All three
+> figures below were reproduced by running each shape here, not quoted:
+> `./scripts/beam_gate.sh` (gate image) **555 passed**; the same gate with
+> `BEAM_IMAGE=<the bare pinned image>` **549 passed (3 doctests, 546 tests), 6 skipped**,
+> printing `[parity] differential suite SKIPPED: no python3 on PATH`; and `ci.yml`'s
+> BEAM job shape (`-v "$PWD/beam:/work"`, bare image) **532 passed (3 doctests,
+> 529 tests), 23 skipped**, printing both skip reasons. **`ci.yml` still runs the
+> bare image against a `beam/`-only mount, so the oracle does not run in CI yet** —
+> pointing that job at `beam/Dockerfile.gate` is the open item, and until it is done
+> the local gate is the only place the oracle executes.
+>
+> **The two reds that hid behind each other** (between `4865052` and `55876bd`, both
+> arriving with the assembly-topology merge `d28cd62`) are the same defect class as the
+> above, and the lesson generalises to every "pinned by" clause in this file. A boto3
+> client stub in `tests/test_object_storage.py` was `lambda **kwargs` against a
+> **positional** call (`boto3.client("s3", endpoint_url=…)`, `app/storage.py:140-141`), so the
+> three tests pinning `VITR-V013` raised `TypeError` before any assertion — the row below
+> claimed S3 coverage that did not exist. And 22 Elixir files in `vitrial_sync` were
+> unformatted, which is the first step of the Beam CI job. Fixed in `55876bd`; the unit
+> job moved 350+3failed → 353 passed, which is the count arithmetic for exactly those three
+> tests. **A stub narrower than the call it stands in for, and a gate narrower than the
+> work it gates, both turn "covered" into "never ran" — silently.**
 
 ## Legend
 
@@ -133,13 +155,13 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V005` | MED | Evidence reference safety scan is O(all measurements + requirements) per delete | **Fixed** (`30b29ab`) |
 | `VITR-V006` | MED | Rejection outcome is `reason=<exception class name>`, not a code | **Fixed** (`257e725`) |
 | `VITR-V007` | **HIGH** | Evidence GC can delete the object an in-flight upload is publishing — silent data loss | **Fixed** (`76e11e5`) |
-| `VITR-V008` | MED | GET routes write and `commit()`; concurrent first reads raise an unhandled `IntegrityError` → 500 | **Fixed** (race half) — `ensure_baseline_publications` catches 23505, rolls back and re-checks (`app/reference_data.py:417-477`); pinned by `tests/test_reference_baseline_seed_concurrency_postgres.py`. The write-on-GET half of the title is `VITR-V004` and is **not** fixed. Commit-worthy on its own: a 500 no client retry can resolve, with the first coverage of the four GET helpers under concurrency. |
-| `VITR-V009` | MED | `ownership.py`'s whole `delivery_execution` branch is unreachable; its tests drive dead, already-divergent code | **Fixed** — the dead branch and its helper `_current_quotation_id` are deleted, so `delivery_execution` falls through `authorize_record`'s closing `raise` and the generic gate now **fails closed** for delivery (`app/ownership.py:750-762`); `tests/test_delivery_execution_ownership.py` (11 tests against a gate no request reaches) removed, replaced by `tests/test_delivery_authorization_dispatch.py`. Commit-worthy on its own: it removes a second authorization gate rather than adding one. |
-| `VITR-V010` | MED | GC rows that are blocked or failing are never backed off, and `attempts` is write-only | **Fixed** — both retain paths now reschedule `not_before` through `_reschedule` (`app/evidence_gc.py:40`, called at `:160` and `:192`), so `attempts` is read as the backoff's input (300 s doubling, capped at 3600 s). **Give-up is deliberately not implemented** — abandoning a row means never reclaiming that object, which is a maintainer's call. |
-| `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | **Fixed** — one transaction for the whole run with a `SAVEPOINT` per row, so the `SKIP LOCKED` locks survive to the single commit at `app/evidence_gc.py:217` (`app/evidence_gc.py:118-217`); pinned by a two-collector test plus a structural no-commit-in-the-loop assertion. Commit-worthy on its own: it makes two shipped comments true that the ordering had made false. |
+| `VITR-V008` | MED | GET routes write and `commit()`; concurrent first reads raise an unhandled `IntegrityError` → 500 | **Fixed** (race half) — `ensure_baseline_publications` catches 23505, rolls back and re-checks (`app/reference_data.py:417-478`, verified by line number this run); pinned by `tests/test_reference_baseline_seed_concurrency_postgres.py`. The write-on-GET half of the title is `VITR-V004` and is **not** fixed. Commit-worthy on its own: a 500 no client retry can resolve, with the first coverage of the four GET helpers under concurrency. |
+| `VITR-V009` | MED | `ownership.py`'s whole `delivery_execution` branch is unreachable; its tests drive dead, already-divergent code | **Fixed** — the dead branch and its helper `_current_quotation_id` are deleted, so `delivery_execution` falls through `authorize_record`'s closing `raise` and the generic gate now **fails closed** for delivery. The reason it is in place is written at `app/ownership.py:835-846`; the raise itself is `app/ownership.py:847` (**re-measured this run** — the `750-762` citation carried by earlier revisions of this row and by the memory seed pointed at quotation capability logic, not the closing gate). `tests/test_delivery_execution_ownership.py` (11 tests against a gate no request reaches) removed, replaced by `tests/test_delivery_authorization_dispatch.py`. Commit-worthy on its own: it removes a second authorization gate rather than adding one. |
+| `VITR-V010` | MED | GC rows that are blocked or failing are never backed off, and `attempts` is write-only | **Fixed** — both retain paths now reschedule `not_before` through `_reschedule` (`app/evidence_gc.py:40`, called at `:192` and `:211` — **both re-measured this run**; the `:160`/`:192` pair in earlier revisions of this row was wrong), so `attempts` is read as the backoff's input (300 s doubling, capped at 3600 s). **Give-up is deliberately not implemented** — abandoning a row means never reclaiming that object, which is a maintainer's call. |
+| `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | **Fixed** — one transaction for the whole run with a `SAVEPOINT` per row (`app/evidence_gc.py:144`), so the `SKIP LOCKED` locks survive to the single commit at `app/evidence_gc.py:217` (`:99-217`, both re-measured this run); pinned by a two-collector test plus a structural no-commit-in-the-loop assertion. Commit-worthy on its own: it makes two shipped comments true that the ordering had made false. |
 | `VITR-V012` | LOW | The collector's happy-path test cannot pass under the shipped 86400s GC grace, so GC is effectively unexercised | **Fixed** (`0fab6f8`) |
 | `VITR-V014` | **HIGH** | `evidence_gc`'s `StorageError` handler reads `row.id` after `db.rollback()`, raising `MissingGreenlet` — a failing object store aborts the whole collection run | **Fixed** (`0fab6f8`) |
-| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | **Fixed** — the post-publish staging delete is now best-effort and logs `storage.staging_delete_failed` instead of escalating to `StorageError` (`app/storage.py:219-246`); pinned by three S3-store tests in `tests/test_object_storage.py` that need no S3. Commit-worthy on its own: it moves a production-only code path (S3 is what both compose files ship) from untested to covered in the default suite. **The pinning was itself broken until `55876bd`** — the client stub could not accept the positional service name, so all three raised `TypeError` at construction and never reached an assertion; they now run (unit job 350+3failed → 353 passed). |
+| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | **Fixed** — the post-publish staging delete is now best-effort and logs `storage.staging_delete_failed` instead of escalating to `StorageError` (the `try`/`except` is `app/storage.py:234-246`, the log at `:240`, and the comment explaining why is `:219-233` — all three re-measured this run; earlier revisions of this row cited `:219-246`, which conflated the comment with the code). Pinned by three S3-store tests in `tests/test_object_storage.py` that need no S3. Commit-worthy on its own: it moves a production-only code path (S3 is what both compose files ship) from untested to covered in the default suite. **The pinning was itself broken until `55876bd`** — the client stub could not accept the positional service name, so all three raised `TypeError` at construction and never reached an assertion; they now run (unit job 350+3failed → 353 passed). |
 
 `VITR-V007` is the serious one: a client received **201** for an upload whose object the
 collector had already deleted, and every later `GET`/`HEAD` on that document 404'd. Root
@@ -211,15 +233,21 @@ A `GET` mutates, and `/manifest` does it twice per call.
 
 ### `VITR-V005` — evidence scan O(N)
 
-`ownership.py:343` (`_ensure_evidence_delete_safe`) and `evidence_gc.py:42`
-(`_is_referenced`) load every `measurement`/`customer_requirement` payload and scan in Python.
-Linear: 100 rows 11 ms → 5,000 rows 79 ms.
+`_ensure_evidence_delete_safe` and `_is_referenced` loaded every
+`measurement`/`customer_requirement` payload and scanned it in Python. Linear:
+100 rows 11 ms → 5,000 rows 79 ms. Both functions still exist and are still the
+call sites — now at `app/ownership.py:404` and `app/evidence_gc.py:76` (the
+`:343`/`:42` pair this section used to cite was where they sat before the
+fix) — but the scan itself is gone: `_evidence_reference_filter`
+(`app/ownership.py:375`) pushes the lookup into PostgreSQL as `jsonb @>`.
 
 ### `VITR-V006` — rejection reason collapses to class name
 
-`sync_service.py:368` sets `reason=type(exc).__name__`. Sync outcome logs carry ~5 reasons while the
-code expresses 183. Nothing aggregates them. Needs a rejection-code vocabulary; belongs with the
-metrics box on #28.
+Before the fix, `sync_service.py` set `reason=type(exc).__name__`. Sync outcome
+logs carried ~5 reasons while the code expressed 183, and nothing aggregated
+them. The emission point is now `app/sync_service.py:399`
+(`reason=rejection_code(exc)`), with the three transport/framing reasons spelled
+out literally beside it at `:247`, `:313` and `:440`.
 
 ---
 
@@ -285,6 +313,61 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - [ ] Close issue #30's checkbox (MinIO→RustFS already landed); reconcile #2/#28 in GitHub.
 - [ ] The four guard-prefix entries are a Rule-5 violation — after W1, add a lint rule so a
       matching-by-class failure fails, per `AGENTS.md` "measure, don't assert". (Done: W1 + guard lint)
+
+## BEAM waves — `beam/apps/vitrial_sync`
+
+Ordered for long sessions, same shape as the Python queue. Verified 2026-10-03 at
+`342f9be`; the ordering argument is `beam/ARCHITECTURE.md` §3, which now carries the
+same per-slice state table.
+
+- [x] **4a — push steps 5–9.** Five named decisions (S-58 item-delete guard, S-59
+      lifecycle, S-60 delivery authority + its four handoffs, S-61 generic
+      authorization and ownership plan, S-62 evidence GC enqueue) as pure
+      functions over the validated record, wired into `Admission.decide/2` as one
+      ordered pipeline through `VitrialSync.Authority`. Each returns a token from
+      the closed rejection vocabulary rather than an exception class name.
+- [x] **4b — pull visibility resolution.** `VitrialSync.Prefetch`,
+      branch-for-branch against `record_is_visible` and
+      `delivery_execution_is_visible`, with the deliberate `deleted_at`
+      asymmetry preserved in **both** directions.
+- [ ] **4c — wire assembly.** Turn `Page` plus visibility results into the exact
+      wire response. The last slice in wave 4 that can be built without a
+      database, and the only thing left in the wave. **Not built; this run
+      produced no files for it.**
+- [x] **4d — the differential harness.** `342f9be`. `parity_oracle.py` AST-lifts
+      the reference functions out of `app/` and executes them; `parity_test.exs`
+      compares admission decisions, page wire sizes against real
+      `SyncBatch.model_dump_json()` output, and payload decode; `drift_test.exs`
+      re-reads the reference *source* and runs with or without an interpreter.
+      +23 tests. `beam/Dockerfile.gate` is the other half: the pinned image plus
+      `python3` and `pydantic`, so the oracle executes instead of skipping
+      itself. Measured parity: admission 44 cases / 50 records, page wire sizes
+      117 cases, payload decode 169 cases with exactly 13 documented divergences.
+- [ ] **4e — nothing was built, and there is nothing on record to build.** Neither
+      `beam/ARCHITECTURE.md` nor `beam/README.md` defines a 4e; the run labelled a
+      wave 4e and it produced no files. Logged as unbuilt rather than described,
+      because inventing a scope for it would be worse than admitting there isn't one.
+
+### Open, and specific
+- [ ] **Point `ci.yml`'s BEAM job at `beam/Dockerfile.gate`.** Today it mounts
+      `$PWD/beam:/work` into the bare pinned image, so the oracle cannot run and
+      the suite reports `532 passed, 23 skipped` with both skip reasons printed.
+      The local gate is currently the only place the parity corpus executes.
+      Verified here by running the CI job's exact container shape.
+- [ ] **`BEAM_BASE_IMAGE_ONLY=1` does not force the bare image.**
+      `scripts/beam_gate.sh` consults the variable only inside the
+      build-on-demand block, and `IMAGE` is already defaulted to the gate image
+      above it — so on a host where the gate image exists, the documented
+      "prove the fallback path" switch keeps using the gate image. Measured:
+      it still reported `555 passed`. `BEAM_IMAGE=<base>` is the override that
+      works, and is what the 549/6-skipped figure above was measured through.
+- [ ] **`beam/apps/PLANNED_APPS.txt`'s `vitrial_ownership` line is stale.** It
+      still declares that `app/ownership.py:726` "carries a duplicate
+      delivery-policy block that is unreachable … (VITR-V006, filed)". That block
+      was deleted by the `VITR-V009` fix; `app/ownership.py:835-846` now
+      documents its absence as deliberate, and the defect it cited was `VITR-V009`,
+      not `VITR-V006`. `check_beam_scaffold.py` passes either way — it checks the
+      line's *presence*, not its truth — so nothing catches this class of rot.
 
 ## Branch / pipeline hygiene (established 2026-10-02)
 
@@ -507,9 +590,16 @@ Per #28, none of these are defects — they are unshipped commitments:
 - [ ] Session renewal story (today: fixed bearer TTL + manual revoke only). **Product
       decision, not engineering** — asked, awaiting an answer on whether sessions should
       slide-refresh or stay fixed-TTL with manual revoke.
-- [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
-- [ ] W3 follow-up: acceptance assertion so a mis-set trust proxy fails fast.
 - [ ] `VITR-V005` follow-up: `jsonb` + GIN index migration (schema change on a pinned contract).
+
+> The two rows that used to sit here — "Reproducible install in the production image
+> (lockfile committed; image still installs by range)" and "W3 follow-up: acceptance
+> assertion so a mis-set trust proxy fails fast" — contradicted the checked rows
+> above them and were removed rather than left to disagree. Both were already done:
+> `Dockerfile:31-32` installs `requirements-runtime-lock.txt` and then
+> `--no-deps .`, and `94eaef8` is the trust-proxy assertion. A tracker that carries
+> the same item as both open and closed is worse than one that carries it once,
+> because a reader cannot tell which one is the lie.
 
 ## UBS loop status — `review/vitrial-api-hardening`
 
