@@ -95,6 +95,22 @@ def test_quotation_design_snapshot_pins_frozen_configuration_and_reference_versi
     assert snapshot.bomSHA256 == "4" * 64
 
 
+
+def test_nested_snapshot_must_bind_to_existing_configuration_identity():
+    document = fixture_document()
+    document["configuration"]["assembly"]["renderDescriptor"]["configurationID"] = "other-config"
+
+    with pytest.raises(ValueError, match="configurationID does not match Configuration"):
+        validate_configuration_assembly(document["configuration"])
+
+
+def test_quotation_design_snapshot_must_bind_to_line_configuration_version():
+    document = fixture_document()
+    document["quotationLine"]["designSnapshot"]["configurationVersionID"] = "configuration-window-1#v2"
+
+    with pytest.raises(ValueError, match="does not match quotation line"):
+        validate_quotation_line_design_snapshot(document["quotationLine"])
+
 def test_absent_nested_contract_preserves_legacy_payload_shape():
     assert validate_configuration_assembly({"id": "configuration-legacy"}) is None
     assert validate_quotation_line_design_snapshot({"id": "legacy-line"}) is None
