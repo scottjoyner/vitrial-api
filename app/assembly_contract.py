@@ -174,8 +174,25 @@ class QuotationAssemblyDesignSnapshotV1(StrictModel):
     configurationVersionID: str = Field(min_length=1, max_length=256)
     overall: AssemblyOverall
     sectionSummary: list[dict[str, JsonValue]] = Field(min_length=1)
+    renderDescriptor: AssemblyRenderDescriptor
     bomSHA256: str = Field(pattern=_SHA256_PATTERN)
     referenceData: AssemblyReferenceDataPins
+
+    @model_validator(mode="after")
+    def validate_render_identity(self) -> "QuotationAssemblyDesignSnapshotV1":
+        expected = (
+            f"{self.renderDescriptor.configurationID}"
+            f"#v{self.renderDescriptor.configurationVersion}"
+        )
+        if self.configurationVersionID != expected:
+            raise ValueError(
+                "quotation designSnapshot configurationVersionID does not match render descriptor"
+            )
+        if abs(self.renderDescriptor.overall.widthMM - self.overall.width) > _FRAME_TOLERANCE:
+            raise ValueError("quotation designSnapshot width does not match render descriptor")
+        if abs(self.renderDescriptor.overall.heightMM - self.overall.height) > _FRAME_TOLERANCE:
+            raise ValueError("quotation designSnapshot height does not match render descriptor")
+        return self
 
 
 def validate_configuration_assembly(payload: dict) -> AssemblySnapshotV1 | None:
