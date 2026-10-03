@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.assembly_contract import (
     AssemblySnapshotV1,
+    validate_assembly_contract_mutation,
     validate_configuration_assembly,
     validate_quotation_line_design_snapshot,
 )
@@ -135,3 +136,44 @@ def test_contract_validation_is_deterministic_and_non_mutating():
 
     assert first == second
     assert document == before
+
+
+def test_mutation_guard_is_noop_for_legacy_payloads():
+    validate_assembly_contract_mutation(
+        "configuration",
+        {"id": "legacy-config", "version": 1},
+    )
+    validate_assembly_contract_mutation(
+        "quotation",
+        {"id": "legacy-quote", "lines": [{"id": "line-1", "itemID": "item-1"}]},
+    )
+
+
+def test_configuration_version_guard_binds_envelope_to_nested_configuration():
+    document = fixture_document()
+    configuration = document["configuration"]
+    envelope = {
+        "id": "configuration-window-1#v1",
+        "configuration": configuration,
+    }
+    validate_assembly_contract_mutation("configuration_version", envelope)
+
+    envelope["id"] = "configuration-window-1#v2"
+    with pytest.raises(ValueError, match="envelope does not match"):
+        validate_assembly_contract_mutation("configuration_version", envelope)
+
+
+def test_quotation_mutation_guard_validates_only_lines_with_design_snapshot():
+    document = fixture_document()
+    quotation = {
+        "id": "quotation-1",
+        "lines": [
+            {"id": "legacy", "itemID": "item-legacy"},
+            document["quotationLine"],
+        ],
+    }
+    validate_assembly_contract_mutation("quotation", quotation)
+
+    quotation["lines"][1]["designSnapshot"]["configurationVersionID"] = "configuration-window-1#v2"
+    with pytest.raises(ValueError, match="quotation line 2 assembly design is invalid"):
+        validate_assembly_contract_mutation("quotation", quotation)
