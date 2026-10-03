@@ -94,7 +94,7 @@ def test_quotation_design_snapshot_pins_frozen_configuration_and_reference_versi
     assert snapshot.referenceData.catalogVersionID == "configurator-catalog-v2"
     assert snapshot.referenceData.compatibilityRulesVersionID == "configurator-rules-v1"
     assert snapshot.referenceData.priceBookVersionID == "price-book-unconfigured-v1"
-    assert snapshot.bomSHA256 == "4" * 64
+    assert snapshot.bomSHA256 == "0da9e19412fe9a5b191e7cd309b18eed5d58c9d52364f212ed67dfa8e27dc07b"
     assert snapshot.renderDescriptor.configurationID == "configuration-window-1"
     assert snapshot.renderDescriptor.configurationVersion == 1
 
@@ -225,6 +225,21 @@ def test_quote_design_rejects_render_drift_from_canonical_configuration_version(
     document["quotationLine"]["designSnapshot"]["renderDescriptor"]["sections"][0]["operation"] = "right"
 
     with pytest.raises(ValueError, match="render descriptor differs from canonical"):
+        validate_quotation_design_against_configuration_version(
+            document["quotationLine"],
+            configuration_version,
+        )
+
+
+def test_quote_design_rejects_bom_digest_drift_from_canonical_configuration_version():
+    document = fixture_document()
+    configuration_version = {
+        "id": "configuration-window-1#v1",
+        "configuration": document["configuration"],
+    }
+    document["quotationLine"]["designSnapshot"]["bomSHA256"] = "f" * 64
+
+    with pytest.raises(ValueError, match="BOM digest differs from canonical"):
         validate_quotation_design_against_configuration_version(
             document["quotationLine"],
             configuration_version,
