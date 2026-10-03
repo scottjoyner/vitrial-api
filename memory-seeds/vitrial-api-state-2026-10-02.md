@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **315 passed, 1 skipped**.
+`make check` runs contract validation + guard lint + tests. Baseline: **339 passed, 1 skipped**.
 
 ## HOME MOVED (2026-10-02)
 
@@ -95,6 +95,33 @@ rather than assert on literals. Spec'd on #28 P0.
   `record_is_visible`/`delivery_execution_is_visible` — pinned by
   `test_pull_prefetch_equivalence.py`.
 
+## Metrics + Dependabot landed (commits 91434e0, beab668, 32d2a30)
+
+**Metrics** (`app/metrics.py`, `app/metrics_middleware.py`). Hand-rolled Prometheus
+exposition rather than `prometheus_client` — the image is security-scanned and carrying a
+live advisory, so a dependency for ~120 lines is a bad trade. `GET /metrics` is
+`include_in_schema=False` and gated on `require_admin_key`.
+
+The design constraint that matters is **cardinality**, defended twice: request metrics
+label on the matched route template (never the raw path — otherwise every uploaded
+document mints a permanent series and OOMs the scraper), and every metric carries a
+series cap that, when exceeded, is refused and counted in
+`vitrial_metrics_label_series_dropped_total` rather than silently growing.
+
+Bugs found while building it:
+- `Registry.render()` held `_LOCK` and called `metric.render()`, which re-acquires the
+  same non-reentrant lock. **Self-deadlock** — a scrape hangs forever rather than
+  raising. Split into `_render_unlocked`; pinned by a watchdog-thread test.
+- My first failure-policy test asserted the wrong mechanism and passed against a planted
+  defect. Response integrity is *structural* (recording runs in a `finally` after the
+  response is fully sent); what `except: return` actually buys is that the exception
+  doesn't escape and turn every request into a spurious 500. Pin the real property.
+
+**Dependabot alert 1**: `pytest<9.0.3` (GHSA-6w46-j5rx-g56g). `pytest-asyncio` 0.26
+hard-pins `pytest<9`, so **both** must move or the environment is unsatisfiable rather
+than partially fixed. Dev-only — pytest is not a production dep. Verified on an isolated
+venv *and* from a clean-room lockfile install (the real CI path) before committing.
+
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
 - Run migrations before `python -m pytest` or you get 44 failures that look like defects but
@@ -107,3 +134,10 @@ rather than assert on literals. Spec'd on #28 P0.
   ran (`request_size.py:40-44`); `pull_prefetch` excluding delivery under a comment claiming
   the opposite; prefetch "locally green, CI red" for three rounds because the defect was in code
   only the integration job executes.
+- A test that passes against a planted defect is worse than no test: it launders the gap as
+  coverage. Always confirm a negative control actually turns red — twice this session the
+  first attempt didn't fail, and both times the *test* was wrong, not the code.
+- Don't `pip install -e .` into a scratch venv to test a dependency bump: it silently
+  downgrades pytest back to the range in `pyproject.toml` and you will think you tested
+  9.x while running 8.x. Install the target version explicitly afterwards and check
+  `pytest --version` before trusting any result.

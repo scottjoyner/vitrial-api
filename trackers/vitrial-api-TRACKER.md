@@ -249,8 +249,21 @@ Per #28, none of these are defects — they are unshipped commitments:
       sync outcomes keyed on the stable W6 rejection codes, pool saturation (honest under
       NullPool: reports 0, not the configured size), drain state, series-drop counter.
       Commit `91434e0`, 22 tests, two planted-defect controls confirmed red.
-- [ ] Page-size distribution and S3/object-store latency histograms are declared in
-      `app/metrics.py` but not yet recorded at their call sites (evidence PUT, pull paging).
+- [x] **Object-store + GC histograms wired** — `beab668`. A declared-but-never-written
+      metric is worse than a missing one: it renders a live series of zeros, so a
+      dashboard reads "object-store latency: 0" and the operator concludes the store is
+      instant. `put_verified` is timed in a `finally` at the store boundary (not around
+      the handler — this is a 100 MiB streamed write, and handler latency folds in
+      authorization and DB work). GC counts once per run from the returned totals so it
+      cannot drift from `GCResult`; `dry_run` is labelled apart from real reclamation.
+      Remaining: pull page-size distribution is still unrecorded.
+- [x] **Dependabot alert 1** — `32d2a30`. GHSA-6w46-j5rx-g56g (medium), pytest tmpdir
+      `/tmp/pytest-of-{user}` handling, fixed in 9.0.3. `pytest-asyncio` 0.26 hard-pins
+      `pytest<9`, so both had to move together — bumping pytest alone gives an
+      unsatisfiable environment, not a partial one. Dev-only: pytest is not a production
+      dependency and `test_production_dependencies.py` still passes. Verified twice on an
+      isolated venv: 339 passed, 1 skipped both times, the second from a clean-room
+      install of the edited lockfile (the exact CI path). No new transitive deps.
 - [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
 - [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
 - [ ] W3 follow-up: acceptance assertion so a mis-set trust proxy fails fast.
