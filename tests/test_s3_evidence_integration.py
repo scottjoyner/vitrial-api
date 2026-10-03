@@ -1,6 +1,6 @@
 import hashlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -133,7 +133,13 @@ async def test_s3_stream_replace_and_canonical_gc():
         )).all()
         assert len(queued) == 1
 
-        result = await collect_due_evidence_gc(db, limit=20)
+        # `now` is pushed past the queue row's not_before rather than relying on
+        # EVIDENCE_GC_GRACE_SECONDS=0. The shipped grace is 86400s (settings.py and both
+        # production env files), so collecting at wall-clock now selects nothing and this
+        # assertion could only ever pass under a configuration that is never deployed.
+        # Advancing `now` exercises the real grace arithmetic instead of bypassing it.
+        past_grace = datetime.now(timezone.utc) + timedelta(days=2)
+        result = await collect_due_evidence_gc(db, limit=20, now=past_grace)
         assert result.deleted >= 1
         # The GC metrics must agree with the value this same call returns. Asserted
         # here rather than in a unit test because this is the only place a real
@@ -152,7 +158,13 @@ async def test_s3_stream_replace_and_canonical_gc():
         await queue_blob_gc(db, current, reason="metadata_tombstone", grace_seconds=0)
         await db.commit()
 
-        result = await collect_due_evidence_gc(db, limit=20)
+        # `now` is pushed past the queue row's not_before rather than relying on
+        # EVIDENCE_GC_GRACE_SECONDS=0. The shipped grace is 86400s (settings.py and both
+        # production env files), so collecting at wall-clock now selects nothing and this
+        # assertion could only ever pass under a configuration that is never deployed.
+        # Advancing `now` exercises the real grace arithmetic instead of bypassing it.
+        past_grace = datetime.now(timezone.utc) + timedelta(days=2)
+        result = await collect_due_evidence_gc(db, limit=20, now=past_grace)
         assert result.deleted >= 1
         assert not await store.exists(replacement_key)
         assert await db.get(EvidenceBlob, (org_id, document_id)) is None

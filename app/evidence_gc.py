@@ -132,6 +132,15 @@ async def collect_due_evidence_gc(
             deleted += 1
             continue
 
+        # Read the primary key BEFORE the rollback below. `db.rollback()` expires every
+        # instance in the session, so touching `row.id` afterwards makes SQLAlchemy
+        # refresh the row -- which means lazy IO from a synchronous context and raises
+        # MissingGreenlet under asyncpg. That turned the StorageError handler into the
+        # thing it was written to prevent: a failing object store aborted the whole
+        # collection run with a traceback instead of recording the failure. See
+        # VITR-V014.
+        row_id = row.id
+
         try:
             await store_for_provider(row.storage_provider).delete(row.object_key)
             if current_points_to_candidate and current is not None:
@@ -141,7 +150,7 @@ async def collect_due_evidence_gc(
             deleted += 1
         except StorageError as exc:
             await db.rollback()
-            retry = await db.get(EvidenceObjectGC, row.id)
+            retry = await db.get(EvidenceObjectGC, row_id)
             if retry is not None:
                 retry.attempts += 1
                 retry.last_error = str(exc)[:1024]
