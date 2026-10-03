@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **385 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
+`make check` runs contract validation + guard lint + tests. Baseline: **390 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -198,6 +198,30 @@ verified against a planted regression.
 the highest leverage**: the collector's happy-path test cannot pass under the shipped
 86400s GC grace, so GC is effectively unexercised — which is precisely why -007, -010,
 -011 and -013 all remain reachable. Fixing the *test* unlocks the rest.
+
+## VITR-V012 + VITR-V014 — the untested path was hiding a crash (commit 0fab6f8)
+
+Fixing `VITR-V012` (GC untested) immediately produced `VITR-V014` (HIGH) on its first run.
+Worth remembering as a sequence, not two facts.
+
+`VITR-V012`: the collector's only test was gated behind `S3_INTEGRATION=1`, which the
+default baseline does not set. But the gate is only needed for S3 *multipart* behaviour —
+`evidence_storage_provider` defaults to `local`, so the whole collector was exercisable
+with `LocalObjectStore` and no S3. **A test behind an integration flag is not coverage**;
+the flag gets used to excuse testing the logic too.
+
+Worse, that test could never have passed: `queue_blob_gc` sets `not_before = now + 86400`
+(the shipped grace) and the test collected at wall-clock `now`, asserting `deleted >= 1`.
+Measured rather than assumed — `deleted=0` at `now`, `deleted=1` past the grace. **An
+assertion the shipped configuration cannot satisfy is a test of nothing, and a green
+suite is not evidence it is right.**
+
+`VITR-V014`: the collector's `StorageError` handler did `db.rollback()` then read `row.id`.
+A rollback expires every instance in the session, so that touched property triggers a
+refresh — lazy IO from a sync context, `MissingGreenlet` under asyncpg. The handler
+written to record a failed collection instead **aborted the whole run**, precisely when
+object storage is unhealthy. Same shape as `VITR-V007`: code that only executes on the
+error path is code nobody has run.
 
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 

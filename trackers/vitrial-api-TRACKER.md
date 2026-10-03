@@ -111,7 +111,8 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V009` | MED | `ownership.py`'s whole `delivery_execution` branch is unreachable; its tests drive dead, already-divergent code | Open |
 | `VITR-V010` | MED | GC rows that are blocked or failing are never backed off, and `attempts` is write-only | Open |
 | `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | Open |
-| `VITR-V012` | LOW | The collector's happy-path test cannot pass under the shipped 86400s GC grace, so GC is effectively unexercised | Open |
+| `VITR-V012` | LOW | The collector's happy-path test cannot pass under the shipped 86400s GC grace, so GC is effectively unexercised | **Fixed** (`0fab6f8`) |
+| `VITR-V014` | **HIGH** | `evidence_gc`'s `StorageError` handler reads `row.id` after `db.rollback()`, raising `MissingGreenlet` — a failing object store aborts the whole collection run | **Fixed** (`0fab6f8`) |
 | `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | Open |
 
 `VITR-V007` is the serious one: a client received **201** for an upload whose object the
@@ -131,6 +132,25 @@ records never reach it — `tests/test_delivery_execution_ownership.py` (295 lin
 validates a dead path that has already diverged (its tombstone branch has no capability
 check, which the live copy enforces). It is harmless today and is a booby trap for the
 next refactor.
+
+**`VITR-V012` was the keystone.** Its fix immediately produced `VITR-V014`: the collector's
+`StorageError` handler read `row.id` *after* `db.rollback()`, and because a rollback
+expires every instance in the session, that triggered lazy IO from a synchronous context
+and raised `MissingGreenlet`. The handler written to record a failed collection instead
+aborted the entire run — exactly when object storage is unhealthy and an operator most
+needs the failure recorded. Fixed by reading the primary key before the rollback.
+
+Two lessons from it:
+
+1. **A test gated behind an integration flag is not coverage.** The collector was fully
+   exercisable against `LocalObjectStore` with no S3 at all; the gate was needed only for
+   multipart behaviour, and had been used to excuse testing the collector's logic too.
+2. **That test could never have passed.** `queue_blob_gc` sets `not_before = now + 86400`
+   and the test collected at wall-clock `now`, then asserted `deleted >= 1`. It needed
+   `EVIDENCE_GC_GRACE_SECONDS=0`, a value no deployment ships. Measured against the local
+   store rather than assumed: `deleted=0` at wall-clock `now`, `deleted=1` past the grace.
+   An assertion that cannot be satisfied by the shipped configuration is a test of
+   nothing, and a green suite is not evidence it is correct.
 
 ### `VITR-V001` — dead guard prefixes
 
