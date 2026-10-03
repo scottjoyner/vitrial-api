@@ -146,3 +146,27 @@ def test_canonical_material_is_valid_compact_sorted_json():
     assert decoded["schema"] == "vitrial.bom-digest.v1"
     assert decoded["lines"][0]["quantity"] == "1.320000"
     assert b" " not in material.split(b'"calculationBasis":', 1)[0]
+
+def test_cross_runtime_unicode_escaping_and_rounding_fixture():
+    bom = AssemblyBOMSnapshot.model_validate({
+        "schema": "vitrial.bom.v1",
+        "engineVersion": "reglas-á/v1",
+        "configurationID": "configuración-ñ",
+        "configurationVersion": 7,
+        "calculationBasis": 'Área "útil" / prueba — Bogotá\\nlínea',
+        "lines": [{
+            "id": "vidrio-á",
+            "role": "glass_ñ",
+            "referenceEntryIDs": ["vidrio/6mm", "tratamiento-ó"],
+            "sourceRuleID": 'regla."uno"',
+            "sourceSectionID": "paño-1",
+            "quantity": 1.2345675,
+            "unit": "m2",
+            "wasteQuantity": 0.0000006,
+        }],
+    })
+
+    assert assembly_bom_sha256(bom) == (
+        "a3f72123c9599dd4377bd874dde38c62e874201bc656170a6cf312b858357049"
+    )
+
