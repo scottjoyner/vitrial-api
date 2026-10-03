@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
+from app.assembly_contract import validate_quotation_design_against_configuration_version
 from app.models import (
     CanonicalCustomer,
     CanonicalItem,
@@ -727,6 +728,34 @@ async def authorize_record(
                 item, _ = await _item_for_scope(db, principal, scope, line_item_id)
                 if item.project_id != project_id:
                     raise AuthorizationRejected("Quotation line Item belongs to another Project")
+
+                if line.get("designSnapshot") is not None:
+                    configuration_version_id = _value(line, "configurationVersionID")
+                    configuration_version = await db.get(
+                        SyncEntity,
+                        (
+                            principal.organization_id,
+                            "configuration_version",
+                            configuration_version_id,
+                        ),
+                    )
+                    if (
+                        configuration_version is None
+                        or configuration_version.deleted_at is not None
+                        or not isinstance(configuration_version.payload_json, dict)
+                    ):
+                        raise AuthorizationRejected(
+                            "Quotation assembly ConfigurationVersion is not canonical and active"
+                        )
+                    try:
+                        validate_quotation_design_against_configuration_version(
+                            line,
+                            configuration_version.payload_json,
+                        )
+                    except ValueError as exc:
+                        raise AuthorizationRejected(
+                            f"Quotation assembly design does not match canonical ConfigurationVersion: {exc}"
+                        ) from exc
             events = payload.get("events") or []
             if not isinstance(events, list):
                 raise AuthorizationRejected("Quotation event history is invalid")
