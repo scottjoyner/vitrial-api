@@ -57,7 +57,10 @@ class AssemblySectionTopologyEvidence(StrictTopologyModel):
     persistence or authority contract is adopted.
     """
 
+    schemaVersion: Literal[1] = 1
     id: str = Field(min_length=1, max_length=256)
+    sourceReferenceID: str = Field(min_length=1, max_length=256)
+    sourceScopeReference: str = Field(min_length=1, max_length=256)
     itemID: str = Field(min_length=1, max_length=256)
     configurationID: str = Field(min_length=1, max_length=256)
     configurationVersion: int = Field(ge=1)
