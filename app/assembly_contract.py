@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from typing import Literal
 
 from pydantic import Field, JsonValue, model_validator
@@ -163,6 +166,52 @@ class AssemblySnapshotV1(StrictModel):
                 raise ValueError("BOM line sourceSectionID is not part of the assembly")
 
         return self
+
+
+def _bom_digest_decimal6(value: float) -> str:
+    if not math.isfinite(value):
+        raise ValueError("BOM digest input contains a non-finite numeric value")
+    normalized = 0.0 if value == 0 else value
+    return f"{normalized:.6f}"
+
+
+def canonical_bom_digest_material(bom: AssemblyBOMSnapshot) -> bytes:
+    """Cross-runtime canonical material for vitrial.bom-digest.v1.
+
+    Do not hash Pydantic/JSON encoder output directly: float formatting is runtime-specific.
+    Every floating BOM quantity is first normalized to one fixed six-decimal POSIX string.
+    """
+    material = {
+        "schema": "vitrial.bom-digest.v1",
+        "bomSchema": bom.schema,
+        "engineVersion": bom.engineVersion,
+        "configurationID": bom.configurationID,
+        "configurationVersion": bom.configurationVersion,
+        "calculationBasis": bom.calculationBasis,
+        "lines": [
+            {
+                "id": line.id,
+                "role": line.role,
+                "referenceEntryIDs": line.referenceEntryIDs,
+                "sourceRuleID": line.sourceRuleID,
+                "sourceSectionID": line.sourceSectionID or "",
+                "quantity": _bom_digest_decimal6(line.quantity),
+                "unit": line.unit,
+                "wasteQuantity": _bom_digest_decimal6(line.wasteQuantity),
+            }
+            for line in bom.lines
+        ],
+    }
+    return json.dumps(
+        material,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def assembly_bom_sha256(bom: AssemblyBOMSnapshot) -> str:
+    return hashlib.sha256(canonical_bom_digest_material(bom)).hexdigest()
 
 
 class QuotationAssemblyDesignSnapshotV1(StrictModel):
@@ -329,6 +378,11 @@ def validate_quotation_design_against_configuration_version(
         raise ValueError("quotation designSnapshot reference provenance differs from canonical ConfigurationVersion")
     if snapshot.renderDescriptor != canonical.renderDescriptor:
         raise ValueError("quotation designSnapshot render descriptor differs from canonical ConfigurationVersion")
+    expected_bom_sha256 = assembly_bom_sha256(canonical.bom)
+    if snapshot.bomSHA256 != expected_bom_sha256:
+        raise ValueError(
+            "quotation designSnapshot BOM digest differs from canonical ConfigurationVersion"
+        )
 
     expected_summary = [
         {"sectionType": section.sectionType, "operation": section.operation}
