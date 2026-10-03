@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **356 passed, 1 skipped** (includes another agent's BEAM/docs work merged into main).
+`make check` runs contract validation + guard lint + tests. Baseline: **380 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -145,6 +145,31 @@ non-fast-forward. `git diff --stat HEAD...origin/main` showed overlap only in
 suite on the merged result (**356 passed**), and pushed. The dropped stash held a stale
 scan timestamp superseded by the committed one — dropped rather than left to rot.
 
+## The image was never installing the lockfile (commit 150c7ac)
+
+`requirements-lock.txt` was committed and CI installed it — but the **production
+image** ran `pip install .`, resolving against the *ranges* in `pyproject.toml`. The
+lockfile was decorative for the only artifact that ships. Fixed with a generated
+`requirements-runtime-lock.txt` + `scripts/generate_runtime_lock.py`.
+
+**The lesson worth keeping: do not derive a set by subtracting another set.**
+"Combined lock minus dev packages" was the first implementation and it is wrong
+*quietly*. Resolving the runtime and dev closures separately in throwaway venvs showed
+they overlap in both directions — `anyio`, `certifi`, `idna`, `packaging` come from
+both httpx and fastapi/botocore — so `certifi` looks dev-only in one resolution and
+required in another. A hardcoded denylist drops a package the image needs, and the
+failure is an ImportError at container start for a dependency nobody thought was
+optional. Resolve the set you actually want instead.
+
+Verification that mattered: mirrored the Dockerfile `RUN` into a fresh venv and booted
+it. `starlette.testclient` refusing to import for want of `httpx` was the proof the
+runtime lock actually excludes dev tooling — the error *is* the assertion.
+
+UBS caught a real defect in this work on its first run (`subprocess.run` with no
+timeout — a hung index would wedge a build step forever). Fixed with an explicit bound.
+The companion finding (float-equality on `alembic==1.20.0`) is a version pin read as
+numeric comparison; scoped in `.ubsignore` with reasoning rather than worked around.
+
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
 - Run migrations before `python -m pytest` or you get 44 failures that look like defects but
@@ -168,3 +193,6 @@ scan timestamp superseded by the committed one — dropped rather than left to r
   rebasing a rejected push. "Rejected" does not mean "conflicting" — this time only the
   other agent's `deploy/README.md` moved, and the rebase was free. Re-run the suite on
   the merged result either way: their 8 commits changed the tree under you.
+- `ubs-history.json` is rewritten by every `make ubs` run, so it is almost always dirty
+  when you go to rebase. Stash it explicitly (`git stash -- ubs-history.json`) or the
+  rebase refuses to start.

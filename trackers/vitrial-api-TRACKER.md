@@ -274,6 +274,19 @@ Per #28, none of these are defects — they are unshipped commitments:
       like a fix and is the exact reverse), and the preference order inside
       `client_key_for` is pinned so the Caddy control cannot quietly become decorative.
       All three verified against planted defects.
+- [x] **Reproducible install in the production image** — `150c7ac`. The image ran
+      `pip install .`, i.e. it resolved against the *ranges* in `pyproject.toml`. The
+      committed lockfile was decorative for the artifact that ships: the image could
+      resolve to versions CI never tested, and a range can move onto a yanked or
+      newly-malicious release with no commit at all. New generated
+      `requirements-runtime-lock.txt`, derived by **resolving** the runtime closure in a
+      clean venv, not by subtracting dev packages from the combined lock — the two
+      closures overlap (anyio/certifi/idna/packaging come from both httpx and
+      fastapi/botocore), so a denylist silently drops a package the image needs and
+      fails at container start. Dockerfile installs the lock with `--no-deps .` so pip
+      cannot re-resolve over the pins. Verified by mirroring the Dockerfile RUN into a
+      fresh venv and booting it (`/health` 200, `/metrics` 404 gated, and
+      `starlette.testclient` correctly refusing to import for want of httpx).
 - [ ] Session renewal story (today: fixed bearer TTL + manual revoke only). **Product
       decision, not engineering** — asked, awaiting an answer on whether sessions should
       slide-refresh or stay fixed-TTL with manual revoke.
