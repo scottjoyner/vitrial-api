@@ -314,6 +314,7 @@ def _verify_corner(
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
         kind=topology.kind,
+        dimensionBasis=verification.dimensionBasis,
         verifiedBy=verification.verifiedBy,
         verifiedAt=verification.verifiedAt,
         evidenceReferenceIDs=verification.evidenceReferenceIDs,
