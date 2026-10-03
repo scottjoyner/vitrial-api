@@ -239,6 +239,9 @@ jobs:
       # memory cap, the `_build`/`deps` bind mounts (so the host runner cache is
       # populated and reused), and propagating the container exit code rather than
       # letting a non-zero `docker run` be swallowed by a pipeline.
+      - name: Build the gate image (pinned BEAM toolchain + the oracle's python)
+        run: docker build -q -t server-api-beam-gate:ci -f beam/Dockerfile.gate .
+
       - name: Compile, format-check and test the umbrella
         run: |
           set -euo pipefail
@@ -246,12 +249,12 @@ jobs:
           set +e
           docker run --rm --network=host \
             --memory=3g --memory-swap=6g \
-            -v "$PWD/beam:/work" \
-            -v "$PWD/.cache/mix-deps:/work/deps" \
-            -v "$PWD/.cache/mix-build:/work/_build" \
+            -v "$PWD:/work" \
+            -v "$PWD/.cache/mix-deps:/work/beam/deps" \
+            -v "$PWD/.cache/mix-build:/work/beam/_build" \
             -v "$PWD/.cache/hex:/root/.hex" \
             -v "$PWD/.cache/rebar3:/root/.rebar3" \
-            -w /work "$BEAM_IMAGE" bash -lc '
+            -w /work/beam "$BEAM_IMAGE" bash -lc '
               set -euo pipefail
               mix local.hex --force --if-missing
               mix local.rebar --force --if-missing
@@ -266,8 +269,29 @@ jobs:
             echo "ERROR: BEAM container exited ${DOCKER_EXIT}."
             exit "$DOCKER_EXIT"
           fi
+
+          # The differential harness skips itself and prints why. A skip is the one
+          # outcome that must not pass unnoticed: it means this job agreed with
+          # nothing, and a green tick beside 23 skipped oracle tests reads as
+          # parity when it is the absence of parity. Fail on the skip.
+          if grep -q 'SKIPPED' .ci-beam.log; then
+            echo "ERROR: the differential harness skipped itself, so its parity"
+            echo "claims were NOT checked by this job:"
+            grep 'SKIPPED' .ci-beam.log
+            exit 1
+          fi
         env:
-          BEAM_IMAGE: hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim
+          # The gate image, not the bare pinned one. beam/Dockerfile.gate is the
+          # pinned hexpm/elixir image plus python3 and pydantic and changes nothing
+          # else -- same OTP, same Elixir, same Debian release. It exists because
+          # the parity oracle AST-lifts the Python reference out of `app/` and
+          # executes it, and the bare image has no interpreter: with it this job
+          # reported 532 passed / 23 skipped and called that green.
+          #
+          # The repo root is mounted, not just `beam/`, for the same reason -- the
+          # oracle reads `app/`, which lives outside the umbrella. Mounting only
+          # `beam/` made the harness skip for a reason that looks like a code fault.
+          BEAM_IMAGE: server-api-beam-gate:ci
 
       # Run on the host, not in the container: only /work (beam/) is bind-mounted,
       # so the container cannot see the repository's git dir. A lockfile that moved
