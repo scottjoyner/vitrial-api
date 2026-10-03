@@ -4,7 +4,7 @@ recordKind: continuity
 category: goal-set
 seed_type: goal-set
 name: vitrial-api-state-2026-10-03
-description: "server-api at 4865052 (+ uncommitted Python fix set): VITR-V008/-009/-010/-011/-013 all fixed and covered, VITR-V004 corrected to Not fixed. BEAM VitrialSync gains admission steps 5-8 and pull visibility resolution (+302 tests, 529 `test \"` blocks + 3 doctests = 532). Nothing in the Python half was executed — no sqlalchemy, no reachable PostgreSQL."
+description: "server-api at 55876bd, tree green: BEAM 532 tests verified by execution (was grep-counted), two reds fixed (boto3 client stub, 22 unformatted Elixir files). VITR-V008/-009/-010/-011/-013 fixed and covered, VITR-V004 corrected to Not fixed. Python suite runs only on CI — no local sqlalchemy/boto3, no reachable PostgreSQL."
 agent: nez
 date: 2026-10-03
 tasks: []
@@ -14,11 +14,37 @@ repos: [vitrial-api]
 
 ## State
 
-`/home/nez/Projects/server-api` (GitHub `astrix-group-accounts/server-api`) @ `4865052`,
-with an **uncommitted** fix set on top: `app/reference_data.py`, `app/ownership.py`,
-`app/evidence_gc.py`, `app/storage.py`, the tracker, and a concurrent BEAM tree under
-`beam/apps/vitrial_sync/`. Two agents are working this tree at once; see *Concurrent
-ownership* below before staging anything.
+`/home/nez/Projects/server-api` (GitHub `astrix-group-accounts/server-api`) @ `55876bd`, tree
+green: `mix format --check-formatted`, `mix compile --warnings-as-errors` and `mix test` (532
+passed) all clean, both Python BEAM guards exit 0, and all four GitHub workflows green on
+this SHA. Two agents work this tree at once; see *Concurrent ownership* below before staging
+anything.
+
+### What changed since this seed was first written
+
+Three reds on `main` between `4865052` and `55876bd`, none of them code defects:
+
+1. `f1ba4ab` — the wave introduced `defp frozen_materials(nil)`, an **unreachable clause** in
+   a reachable module. The module-level orphan guard cannot see it; only
+   `mix compile --warnings-as-errors` does, and that IS the CI compile, so it is a red build
+   and not a style note. Lesson: a reachability guard over modules has a blind spot at clause
+   granularity, and the compiler is the only thing covering it.
+2. The boto3 client stub in `tests/test_object_storage.py` was `lambda **kwargs: client`,
+   but `S3ObjectStore.__init__` calls `boto3.client("s3", endpoint_url=...)` with the service
+   name **positional** (`app/storage.py:139`). The three tests written to pin `VITR-V013`
+   raised `TypeError` before reaching an assertion. A stub narrower than the call it stands in
+   for turns "this is covered" into "this never ran" — and it did so silently, because the
+   failure looked like a test failure rather than a missing one.
+3. 22 Elixir files in `vitrial_sync` were unformatted, all arriving with the assembly-topology
+   merge `d28cd62`. `mix format` from the umbrella root did **not** fix
+   `ownership_test.exs`; formatting that one file by path did. The root `.formatter.exs` lists
+   `apps/*/test/**/*.{ex,exs}`, so the gap is in the umbrella recursion, not the globs — a
+   tree-wide `mix format` and a tree-wide `mix format --check-formatted` disagree here.
+
+All three share one shape: **a green local signal that was measuring the wrong thing.** The
+grep-counted 532 was real but was never `mix test`; the orphan guard could not see a dead
+clause; the stub accepted nothing and the suite still reported three tests. Verify by
+executing the gate the CI job actually runs.
 
 ## Five defects closed, one corrected
 
@@ -80,13 +106,12 @@ rows, reproducing the reference's population order and key shapes — the
 (`app/delivery_execution.py:868-896`) with the deliberate `deleted_at` asymmetry preserved
 in **both** directions.
 
-**Test count: 532** = 529 `test "` blocks + 3 doctests, counted by grep over
-`beam/apps/vitrial_sync/test/`. **Unverified by execution** — `mix test` was not run. The
-prefetch module was type-checked by compiling `prefetch_test.exs` with
-`Code.compile_file/1` against the built beams with only `:ex_unit` started, which checks
-the module without running a single test. Per-file: delivery 58, lifecycle 62, ownership 59,
-prefetch 22, authority 20, canonical 20, value 20, decimal 14, evidence_gc 10,
-item_delete_guard 9, rejection_code 8.
+**Test count: 532** = 529 `test "` blocks + 3 doctests, **now verified by execution**:
+`mix test` in `docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim`
+reports `Result: 532 passed (3 doctests, 529 tests)`. The grep count this seed originally
+carried happened to be right, but it was right by coincidence and was labelled unverified;
+per-file: delivery 58, lifecycle 62, ownership 59, prefetch 22, authority 20, canonical 20,
+value 20, decimal 14, evidence_gc 10, item_delete_guard 9, rejection_code 8.
 
 ## What to do next
 
