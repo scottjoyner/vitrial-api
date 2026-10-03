@@ -28,6 +28,14 @@ jobs:
       - run: python scripts/validate_backend_contract.py
       - name: Guard-prefix lint (no declared guard maps to a dead route)
         run: python scripts/check_guard_prefixes.py
+      # The image installs requirements-runtime-lock.txt, so that file -- not
+      # requirements-lock.txt -- is what governs the shipped artifact. It is GENERATED
+      # by scripts/generate_runtime_lock.py and must stay current. --check re-resolves
+      # (needs network, ~2 min) which is why it is here and not in the unit suite; the
+      # suite has the offline guarantee instead, that every dependency declared in
+      # pyproject.toml is pinned in it.
+      - name: Runtime lockfile is current (the image installs this file)
+        run: python scripts/generate_runtime_lock.py --check
       # Structural guards on the BEAM umbrella. Both are pure-stdlib Python and
       # read only source, so they belong in this job rather than the BEAM one:
       # no toolchain needed, about a second to run, and a scaffold or a dead

@@ -1,4 +1,9 @@
 requirements-lock.txt
+# Generated from requirements-lock.txt by scripts/generate_runtime_lock.py; same
+# content and the same reason as the entry above. py.numeric.float-equality fires on
+# pins like `alembic==1.20.0`, reading the dotted version as float comparison. A
+# version pin is string equality, never a numeric one, and this file has no arithmetic.
+requirements-runtime-lock.txt
 tests/
 .pytest_cache/
 *.egg-info/
