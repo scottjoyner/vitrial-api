@@ -48,7 +48,19 @@ BEAM="$REPO/beam"
 GATE_IMAGE="server-api-beam-gate:local"
 BASE_IMAGE="docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim"
 
-IMAGE="${BEAM_IMAGE:-$GATE_IMAGE}"
+# BEAM_BASE_IMAGE_ONLY=1 forces the bare pinned image. It has to be applied HERE,
+# to the value IMAGE is chosen from -- reading it only inside the build block
+# (which is where it used to be read) leaves IMAGE already pointing at the gate
+# image, so the variable silently did nothing on any host where the gate image
+# existed. That is a documented knob that does not work, which is worse than no
+# knob: it is how you convince yourself the fallback path is exercised.
+if [ "${BEAM_BASE_IMAGE_ONLY:-0}" = "1" ]; then
+  IMAGE="$BASE_IMAGE"
+elif [ -n "${BEAM_IMAGE:-}" ]; then
+  IMAGE="$BEAM_IMAGE"
+else
+  IMAGE="$GATE_IMAGE"
+fi
 
 if [ ! -d "$BEAM" ]; then
   echo "beam gate: $BEAM does not exist" >&2
@@ -58,14 +70,12 @@ fi
 # Build the gate image on demand. This is a cached layer after the first build,
 # so the common case is a no-op; the fallback exists because an offline host
 # should still get format + compile + test rather than nothing.
-if [ "${BEAM_BASE_IMAGE_ONLY:-0}" != "1" ] && [ -z "${BEAM_IMAGE:-}" ]; then
-  if ! podman image exists "$GATE_IMAGE" 2>/dev/null; then
-    echo "beam gate: building $GATE_IMAGE (first run only)" >&2
-    if ! podman build -q -t "$GATE_IMAGE" -f "$BEAM/Dockerfile.gate" "$REPO" >/dev/null 2>&1; then
-      echo "beam gate: could not build the gate image; falling back to $BASE_IMAGE." >&2
-      echo "beam gate: the differential harness will report itself SKIPPED." >&2
-      IMAGE="$BASE_IMAGE"
-    fi
+if [ "$IMAGE" = "$GATE_IMAGE" ] && ! podman image exists "$GATE_IMAGE" 2>/dev/null; then
+  echo "beam gate: building $GATE_IMAGE (first run only)" >&2
+  if ! podman build -q -t "$GATE_IMAGE" -f "$BEAM/Dockerfile.gate" "$REPO" >/dev/null 2>&1; then
+    echo "beam gate: could not build the gate image; falling back to $BASE_IMAGE." >&2
+    echo "beam gate: the differential harness will report itself SKIPPED." >&2
+    IMAGE="$BASE_IMAGE"
   fi
 fi
 
