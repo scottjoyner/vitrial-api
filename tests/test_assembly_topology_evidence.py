@@ -14,7 +14,10 @@ from app.schemas import EntityType
 
 def v3_payload() -> dict:
     return {
+        "schemaVersion": 1,
         "id": "villa-camila-scope-02-v3-topology",
+        "sourceReferenceID": "villa-camila-quotation-001-2026-09-16",
+        "sourceScopeReference": "scope-2-v3",
         "itemID": "villa-camila-scope-02-v3-item",
         "configurationID": "villa-camila-scope-02-v3-configuration",
         "configurationVersion": 1,
@@ -58,7 +61,10 @@ def v3_payload() -> dict:
 
 def v4_payload() -> dict:
     return {
+        "schemaVersion": 1,
         "id": "villa-camila-scope-03-v4-topology",
+        "sourceReferenceID": "villa-camila-quotation-001-2026-09-16",
+        "sourceScopeReference": "scope-3-v4",
         "itemID": "villa-camila-scope-03-v4-item",
         "configurationID": "villa-camila-scope-03-v4-configuration",
         "configurationVersion": 1,
@@ -108,7 +114,10 @@ def v4_payload() -> dict:
 
 def v1_payload() -> dict:
     return {
+        "schemaVersion": 1,
         "id": "villa-camila-scope-08-v1-topology",
+        "sourceReferenceID": "villa-camila-quotation-001-2026-09-16",
+        "sourceScopeReference": "scope-8-v1",
         "itemID": "villa-camila-scope-08-v1-item",
         "configurationID": "villa-camila-scope-08-v1-configuration",
         "configurationVersion": 1,
@@ -151,7 +160,9 @@ def v1_payload() -> dict:
 @pytest.mark.parametrize("payload", [v3_payload(), v4_payload(), v1_payload()])
 def test_reference_evidence_shapes_validate_without_persistence(payload: dict):
     evidence = AssemblySectionTopologyEvidence.model_validate(payload)
+    assert evidence.schemaVersion == 1
     assert evidence.configurationVersion == 1
+    assert evidence.sourceReferenceID == "villa-camila-quotation-001-2026-09-16"
     assert evidence.itemID.startswith("villa-camila-")
 
 
@@ -224,6 +235,15 @@ def test_corner_evidence_requires_at_least_two_legs():
 def test_unknown_fields_fail_closed():
     payload = v3_payload()
     payload["syncEntityType"] = "assembly_topology"
+
+    with pytest.raises(ValidationError):
+        AssemblySectionTopologyEvidence.model_validate(payload)
+
+
+
+def test_unknown_schema_version_fails_closed():
+    payload = v3_payload()
+    payload["schemaVersion"] = 2
 
     with pytest.raises(ValidationError):
         AssemblySectionTopologyEvidence.model_validate(payload)
