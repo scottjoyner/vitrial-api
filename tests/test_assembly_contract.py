@@ -1,11 +1,13 @@
 import copy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
+from app.auth import Principal
 from app.assembly_contract import (
     AssemblySnapshotV1,
     validate_assembly_contract_mutation,
@@ -13,6 +15,13 @@ from app.assembly_contract import (
     validate_quotation_design_against_configuration_version,
     validate_quotation_line_design_snapshot,
 )
+from app.models import (
+    CanonicalItem,
+    CanonicalProject,
+    CanonicalProjectSector,
+    SyncEntity,
+)
+from app.ownership import AuthorizationRejected, EffectiveScope, authorize_record
 from app.schemas import EntityType
 
 
@@ -94,7 +103,7 @@ def test_quotation_design_snapshot_pins_frozen_configuration_and_reference_versi
     assert snapshot.referenceData.catalogVersionID == "configurator-catalog-v2"
     assert snapshot.referenceData.compatibilityRulesVersionID == "configurator-rules-v1"
     assert snapshot.referenceData.priceBookVersionID == "price-book-unconfigured-v1"
-    assert snapshot.bomSHA256 == "4" * 64
+    assert snapshot.bomSHA256 == "0da9e19412fe9a5b191e7cd309b18eed5d58c9d52364f212ed67dfa8e27dc07b"
     assert snapshot.renderDescriptor.configurationID == "configuration-window-1"
     assert snapshot.renderDescriptor.configurationVersion == 1
 
@@ -231,6 +240,21 @@ def test_quote_design_rejects_render_drift_from_canonical_configuration_version(
         )
 
 
+def test_quote_design_rejects_bom_digest_drift_from_canonical_configuration_version():
+    document = fixture_document()
+    configuration_version = {
+        "id": "configuration-window-1#v1",
+        "configuration": document["configuration"],
+    }
+    document["quotationLine"]["designSnapshot"]["bomSHA256"] = "f" * 64
+
+    with pytest.raises(ValueError, match="BOM digest differs from canonical"):
+        validate_quotation_design_against_configuration_version(
+            document["quotationLine"],
+            configuration_version,
+        )
+
+
 def test_quote_design_rejects_reference_provenance_drift_from_canonical_version():
     document = fixture_document()
     configuration_version = {
@@ -259,3 +283,147 @@ def test_quote_design_rejects_configuration_version_for_another_item():
             document["quotationLine"],
             configuration_version,
         )
+
+def _quotation_authority_principal() -> Principal:
+    return Principal(
+        user_id="user-1",
+        organization_id="org-1",
+        membership_id="membership-1",
+        session_id="session-1",
+        authorization_revision=7,
+        capabilities=frozenset({"quotation.create"}),
+        customer_ids=frozenset({"customer-1"}),
+        project_ids=frozenset({"project-1"}),
+        all_customers=False,
+        all_projects=False,
+    )
+
+
+class _QuotationAuthorityRows:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return list(self._rows)
+
+
+class _QuotationAuthorityDB:
+    def __init__(self, values, publications):
+        self.values = values
+        self.publications = publications
+
+    async def get(self, model, key):
+        return self.values.get((model, key))
+
+    async def scalars(self, _query):
+        return _QuotationAuthorityRows(self.publications)
+
+
+def _quotation_authority_db(document: dict) -> _QuotationAuthorityDB:
+    configuration_version_id = document["quotationLine"]["configurationVersionID"]
+    values = {
+        (CanonicalProject, ("org-1", "project-1")): CanonicalProject(
+            organization_id="org-1",
+            project_id="project-1",
+            customer_id="customer-1",
+        ),
+        (CanonicalProjectSector, ("org-1", "project-sector-1")): CanonicalProjectSector(
+            organization_id="org-1",
+            project_sector_id="project-sector-1",
+            project_id="project-1",
+            sector_id="sector-aluminum-glass-steel",
+        ),
+        (CanonicalItem, ("org-1", "item-window-1")): CanonicalItem(
+            organization_id="org-1",
+            item_id="item-window-1",
+            project_id="project-1",
+            project_sector_id="project-sector-1",
+        ),
+        (SyncEntity, ("org-1", "configuration_version", configuration_version_id)): SyncEntity(
+            organization_id="org-1",
+            entity_type="configuration_version",
+            entity_id=configuration_version_id,
+            payload_json={
+                "id": configuration_version_id,
+                "configuration": document["configuration"],
+            },
+        ),
+    }
+    publications = [
+        SimpleNamespace(
+            kind="catalog",
+            version_id="configurator-catalog-v2",
+            content_sha256="1" * 64,
+        ),
+        SimpleNamespace(
+            kind="compatibility_rules",
+            version_id="configurator-rules-v1",
+            content_sha256="2" * 64,
+        ),
+        SimpleNamespace(
+            kind="price_book",
+            version_id="price-book-unconfigured-v1",
+            content_sha256="3" * 64,
+        ),
+    ]
+    return _QuotationAuthorityDB(values, publications)
+
+
+async def _authorize_quotation_line(line: dict):
+    document = fixture_document()
+    actor = _quotation_authority_principal()
+    payload = {
+        "id": "quotation-acceptance",
+        "projectID": "project-1",
+        "customerID": "customer-1",
+        "status": "draft",
+        "lines": [line],
+        "events": [],
+    }
+    return await authorize_record(
+        _quotation_authority_db(document),
+        actor,
+        EffectiveScope.from_principal(actor),
+        entity_type="quotation",
+        entity_id="quotation-acceptance",
+        payload=payload,
+        deleted_at=None,
+        generic_entity_exists=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_authorize_record_accepts_canonical_bom_digest():
+    document = fixture_document()
+
+    plan = await _authorize_quotation_line(document["quotationLine"])
+
+    assert plan.entity_type == "quotation"
+    assert plan.project_id == "project-1"
+
+
+@pytest.mark.asyncio
+async def test_authorize_record_rejects_tampered_bom_digest():
+    document = fixture_document()
+    line = copy.deepcopy(document["quotationLine"])
+    line["designSnapshot"]["bomSHA256"] = "f" * 64
+
+    with pytest.raises(
+        AuthorizationRejected,
+        match="BOM digest differs from canonical ConfigurationVersion",
+    ):
+        await _authorize_quotation_line(line)
+
+
+@pytest.mark.asyncio
+async def test_authorize_record_preserves_legacy_line_without_design_snapshot():
+    line = {
+        "id": "legacy-line",
+        "itemID": "item-window-1",
+    }
+
+    plan = await _authorize_quotation_line(line)
+
+    assert plan.entity_type == "quotation"
+    assert plan.project_id == "project-1"
+

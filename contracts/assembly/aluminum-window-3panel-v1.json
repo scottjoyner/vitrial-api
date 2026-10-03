@@ -191,7 +191,7 @@
           "operation": null
         }
       ],
-      "bomSHA256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "bomSHA256": "0da9e19412fe9a5b191e7cd309b18eed5d58c9d52364f212ed67dfa8e27dc07b",
       "referenceData": {
         "catalogVersionID": "configurator-catalog-v2",
         "catalogContentSHA256": "1111111111111111111111111111111111111111111111111111111111111111",
