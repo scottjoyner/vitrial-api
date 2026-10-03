@@ -40,6 +40,85 @@ The deploy command validates configuration, pulls images, runs Alembic as a one-
 
 A deployment is **not** considered successful when `/health` passes but `/ready` reports degraded dependencies.
 
+## Designated Proxmox production host
+
+The Vitrial production virtualization target is tracked operationally in Jira `SCRUM-26`.
+The management address is intentionally **not duplicated in this public repository**. Proxmox
+port 8006 is a management-plane endpoint, not an application ingress endpoint.
+
+The existing production contract in this repository remains authoritative:
+
+- the application runtime is `deploy/compose.production.yml`;
+- Caddy is the only intended public edge on TCP 80/443;
+- PostgreSQL and S3-compatible object storage are external persistent providers;
+- a green read-only preflight never claims backup/PITR or object-store durability.
+
+### Phase 1 — capture host evidence before provisioning
+
+Run the inventory script **locally on the Proxmox host** as an administrator:
+
+```bash
+sudo bash scripts/proxmox_host_inventory.sh /root/vitrial-proxmox-inventory
+```
+
+The script is read-only. It captures Proxmox/node version data, cluster resources, storage
+status, existing QEMU/LXC guests, network addresses/routes/listeners, block-device layout,
+filesystem capacity, memory, and core Proxmox service state. It writes a SHA-256 manifest for
+the evidence directory. Review the output before sharing it outside the operator boundary.
+
+Do not provision production data until this evidence answers all of the following:
+
+1. Which storage class backs the Vitrial guest, and what capacity/failure domain does it have?
+2. Where do Proxmox guest backups land, and is at least one retained copy outside the guest's
+   own failure domain?
+3. Which bridge/VLAN carries the application guest, and can inbound 80/443 reach only the
+   intended TLS edge?
+4. Is management port 8006 restricted to the operator/admin path rather than exposed as part
+   of the Vitrial application surface?
+5. Is there enough CPU/RAM/storage headroom to reserve resources for the API guest without
+   creating host contention?
+6. Are there existing workloads whose restart/start-order requirements constrain this guest?
+
+### Phase 2 — production guest shape
+
+Prefer a dedicated QEMU VM for the Docker/Caddy application runtime rather than nesting Docker
+inside an LXC container. The initial sizing candidate is **2 vCPU, 4 GiB RAM, 40 GiB system
+disk**, but that is a bootstrap value, not a capacity claim; adjust it only from the captured
+host evidence and measured application load.
+
+Inside that guest:
+
+1. install a supported Linux distribution and current Docker Engine/Compose;
+2. place the repository checkout in an operator-controlled application directory;
+3. keep the populated production env outside Git (for example
+   `/etc/vitrial/vitrial.env`, mode `0600`);
+4. authenticate the guest to GHCR only if required to pull the digest-pinned API image;
+5. expose only Caddy's 80/443 from the guest;
+6. run `scripts/run_production_preflight.sh` before migrations or production promotion;
+7. use `scripts/deploy.sh` only after PostgreSQL/object-storage durability and restore
+   evidence have satisfied their separate release gates.
+
+A single-host PostgreSQL/RustFS deployment may still be useful for acceptance, but it does not
+satisfy the production durability gate because application and data share the same host failure
+domain. Hypervisor snapshots likewise do not replace PostgreSQL PITR or object-store recovery
+evidence.
+
+### Phase 3 — reboot and promotion evidence
+
+Before this host can satisfy the production-runtime gate, retain evidence that:
+
+- the Vitrial VM has an explicit Proxmox start order/autostart policy;
+- a controlled host/guest reboot restores the application runtime without operator-only
+  undocumented steps;
+- Caddy obtains/retains a trusted TLS path for the production API hostname;
+- the running API image matches the requested immutable digest;
+- `/health`, `/ready`, and `/api/v1/version` pass after restart;
+- the PostgreSQL and object-storage restore exercises remain independently proven.
+
+This host baseline closes infrastructure reproducibility only. Production promotion still
+depends on the durability, backup/restore, observability/concurrency, and final acceptance gates
+tracked separately from `SCRUM-26`.
+
 ## Rollback
 
 Keep the previous known-good env file with its prior immutable `API_IMAGE` digest. Application rollback is:
