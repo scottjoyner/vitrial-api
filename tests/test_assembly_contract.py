@@ -99,6 +99,7 @@ def test_quotation_design_snapshot_pins_frozen_configuration_and_reference_versi
 def test_nested_snapshot_must_bind_to_existing_configuration_identity():
     document = fixture_document()
     document["configuration"]["assembly"]["renderDescriptor"]["configurationID"] = "other-config"
+    document["configuration"]["assembly"]["bom"]["configurationID"] = "other-config"
 
     with pytest.raises(ValueError, match="configurationID does not match Configuration"):
         validate_configuration_assembly(document["configuration"])
