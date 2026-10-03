@@ -16,11 +16,11 @@ test ran the code path.
 
 Two properties are pinned deliberately:
 
-1. **Grace is honoured.** A row queued moments ago is NOT collected. The existing S3
-   test only passes when `EVIDENCE_GC_GRACE_SECONDS=0`, so it asserted a configuration
-   the deployment never ships (`settings.py` and both production env files use 86400).
-   Here the shipped default is asserted as the shipped default: fresh rows survive, and
-   only rows whose `not_before` has passed are collected.
+1. **Grace is honoured, independent of configuration.** A row whose `not_before` is in
+   the future is NOT collected; a row whose `not_before` has passed IS. Both use an
+   explicit `now`/grace rather than reading `settings`, because the integration job sets
+   `EVIDENCE_GC_GRACE_SECONDS=0` to give the S3 collector test something to collect --
+   pinning the ambient value tests the environment, not the invariant.
 2. **A still-referenced canonical version is skipped, not deleted.** That guard is the
    one preventing the collector from destroying live evidence.
 """
@@ -47,7 +47,6 @@ from app.models import (
     EvidenceObjectGC,
     Organization,
 )
-from app.settings import settings
 from app.storage import LocalObjectStore
 
 pytestmark = pytest.mark.skipif(
@@ -133,19 +132,23 @@ async def _queue(db, store: LocalObjectStore, *, key: str, grace: int, due_at: d
 
 @pytest.mark.asyncio
 async def test_a_freshly_queued_object_is_not_collected(db, local_store):
-    """The shipped 86400s grace means a new row is NOT due.
+    """A row inside its grace period must NOT be collected, whatever the configured grace.
 
-    Asserted against the real default rather than by overriding it. The S3 test can
-    only pass with `EVIDENCE_GC_GRACE_SECONDS=0`, which no deployment ships -- so it
-    verified a configuration that does not exist and left the shipped one unverified.
+    The grace is passed EXPLICITLY rather than read from `settings`. An earlier version of
+    this test asserted `settings.evidence_gc_grace_seconds == 86400` and it failed in CI,
+    correctly: the integration job sets `EVIDENCE_GC_GRACE_SECONDS=0` so the S3 collector
+    test has something to collect. Asserting an ambient configuration value is the wrong
+    thing to pin -- it tests the environment, not the invariant, and it breaks whenever a
+    job legitimately overrides a default for testability.
+
+    The invariant is what matters and it is environment-independent: a row whose
+    `not_before` is in the future survives; a row whose `not_before` has passed is
+    reclaimed. Both halves are covered here and in the test below.
     """
     await _clear(db)
     await _seed_org(db)
-    await _queue(db, local_store, key="blobs/fresh", grace=settings.evidence_gc_grace_seconds)
-
-    assert settings.evidence_gc_grace_seconds == 86400, (
-        "this test documents the shipped grace; update it deliberately if that changes"
-    )
+    # An hour out, so the row is unambiguously in the future regardless of settings.
+    await _queue(db, local_store, key="blobs/fresh", grace=3600)
 
     result = await collect_due_evidence_gc(db)
 
@@ -157,8 +160,10 @@ async def test_a_freshly_queued_object_is_not_collected(db, local_store):
 async def test_a_row_past_its_not_before_is_collected(db, local_store):
     """The other half: once due, the object is actually reclaimed.
 
-    `now` is passed explicitly so the row's due time is relative to a fixed instant
-    rather than racing wall-clock drift between seeding and collecting.
+    `now` is passed explicitly so the row's due time is relative to a fixed instant rather
+    than racing wall-clock drift between seeding and collecting, and so the result does not
+    depend on `EVIDENCE_GC_GRACE_SECONDS` in the ambient environment (the integration job
+    sets it to 0 precisely so a collector test has something to collect).
     """
     await _clear(db)
     await _seed_org(db)
