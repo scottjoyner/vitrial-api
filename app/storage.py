@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,7 @@ import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
+from app.observability import log_event
 from app.settings import settings
 
 
@@ -214,7 +216,33 @@ class S3ObjectStore(ObjectStore):
                 CopySource={"Bucket": self.bucket, "Key": staging},
                 MetadataDirective="COPY",
             )
-            await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=staging)
+            # Past this point the object is published, digest-verified and durable at its
+            # final content-addressed key. Removing the staging copy is housekeeping, and
+            # it used to be the whole difference between a 201 and a 503: this delete
+            # fell into the broad handler below, which retried the same failing delete
+            # inside a bare `except: pass` and then raised StorageError. `put_blob`
+            # converts that to a 503 raised *before* any EvidenceBlob row is added and
+            # before any GC row is queued -- so the client is told the upload failed
+            # while the object sits at its final key with nothing referencing it and
+            # nothing that will ever reclaim it. The upload did not fail; its cleanup
+            # did.
+            #
+            # A staging copy that survives is a bucket-lifecycle problem, so it is logged
+            # rather than raised: the key is a random uuid under `.staging/`, carries no
+            # organization, document or content identity, and is the one datum an
+            # operator needs in order to reap the orphan.
+            try:
+                await asyncio.to_thread(
+                    self.client.delete_object, Bucket=self.bucket, Key=staging
+                )
+            except Exception as exc:
+                log_event(
+                    "storage.staging_delete_failed",
+                    level=logging.WARNING,
+                    storageProvider=self.provider,
+                    stagingKey=staging,
+                    errorType=type(exc).__name__,
+                )
             return StoredObject(actual, size)
         except StorageDigestMismatch:
             if upload_id is not None:

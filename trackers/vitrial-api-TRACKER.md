@@ -4,14 +4,27 @@ title: "vitrial-api — reconciled work tracker"
 owner: vitrial-api
 category: TRACKER
 status: active
-date: 2026-10-02
+date: 2026-10-03
 ---
 
 # vitrial-api — Work Tracker
 
 > Reconciles GitHub issues against what has **actually shipped** on `main`
-> (HEAD `208afa4`, 2026-10-02). Only check a box when a commit in `git log` is
+> (HEAD `4865052`, 2026-10-03). Only check a box when a commit in `git log` is
 > evidence of it. Use `[~]` for the part-that-works, not `[x]`.
+
+> **Verification status of the rows below (2026-10-03).** `VITR-V008`, `-009`, `-010`,
+> `-011` and `-013` are marked Fixed on **static evidence only** — source reading plus
+> formula replay. No Python test was executed: `python -m pytest` fails collection with
+> `ModuleNotFoundError: No module named 'sqlalchemy'` (no venv in this workspace), and
+> PostgreSQL is unreachable (`psql -U vitrial -d vitrial` → `FATAL: Peer authentication
+> failed`; `docker ps` → `No such file or directory`). Every affected test file is also
+> gated on `POSTGRES_INTEGRATION=1` or `S3_INTEGRATION=1`. Treat "Fixed" here as
+> *correct-by-inspection, pending a green suite*, and re-run before relying on it.
+> The BEAM-side guards were run and passed (`scripts/check_beam_scaffold.py` exit 0,
+> `scripts/check_beam_orphans.py` exit 0, `scripts/validate_backend_contract.py` exit 0,
+> `compileall` exit 0, `elixirc` over `beam/apps/vitrial_sync/lib` exit 0).
+> Full state and next steps: `memory-seeds/vitrial-api-state-2026-10-03.md`.
 
 ## Legend
 
@@ -103,17 +116,17 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V001` | HIGH | V2 request size / aggregate ceiling missing; dead guard prefixes on three routes | **Fixed** in W1 (prefixes corrected, `SyncBatchV2` aggregate ceiling, guard lint in CI) |
 | `VITR-V002` | MED | Evidence header params unbounded while destination columns are bounded → 500 not 4xx | **Fixed** (`5f6178f`) |
 | `VITR-V003` | HIGH | Auth rate limiter evadable via spoofed left-most `X-Forwarded-For` | **Fixed** (`d0e1d93`) |
-| `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | **Fixed** (`33ccee4`) |
+| `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | **Not fixed** — `33ccee4` ("the first step of the VITR-V004 fix") only split out `_list_publications` and halved the per-manifest seed. All four GET helpers still call `ensure_baseline_publications` (`app/reference_data.py:511,541,551,595`), which still inserts and `commit()`s. Status corrected 2026-10-03. |
 | `VITR-V005` | MED | Evidence reference safety scan is O(all measurements + requirements) per delete | **Fixed** (`30b29ab`) |
 | `VITR-V006` | MED | Rejection outcome is `reason=<exception class name>`, not a code | **Fixed** (`257e725`) |
 | `VITR-V007` | **HIGH** | Evidence GC can delete the object an in-flight upload is publishing — silent data loss | **Fixed** (`76e11e5`) |
-| `VITR-V008` | MED | GET routes write and `commit()`; concurrent first reads raise an unhandled `IntegrityError` → 500 | Open |
-| `VITR-V009` | MED | `ownership.py`'s whole `delivery_execution` branch is unreachable; its tests drive dead, already-divergent code | Open |
-| `VITR-V010` | MED | GC rows that are blocked or failing are never backed off, and `attempts` is write-only | Open |
-| `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | Open |
+| `VITR-V008` | MED | GET routes write and `commit()`; concurrent first reads raise an unhandled `IntegrityError` → 500 | **Fixed** (race half) — `ensure_baseline_publications` catches 23505, rolls back and re-checks (`app/reference_data.py:417-477`); pinned by `tests/test_reference_baseline_seed_concurrency_postgres.py`. The write-on-GET half of the title is `VITR-V004` and is **not** fixed. Commit-worthy on its own: a 500 no client retry can resolve, with the first coverage of the four GET helpers under concurrency. |
+| `VITR-V009` | MED | `ownership.py`'s whole `delivery_execution` branch is unreachable; its tests drive dead, already-divergent code | **Fixed** — the dead branch and its helper `_current_quotation_id` are deleted, so `delivery_execution` falls through `authorize_record`'s closing `raise` and the generic gate now **fails closed** for delivery (`app/ownership.py:750-762`); `tests/test_delivery_execution_ownership.py` (11 tests against a gate no request reaches) removed, replaced by `tests/test_delivery_authorization_dispatch.py`. Commit-worthy on its own: it removes a second authorization gate rather than adding one. |
+| `VITR-V010` | MED | GC rows that are blocked or failing are never backed off, and `attempts` is write-only | **Fixed** — both retain paths now reschedule `not_before` through `_reschedule` (`app/evidence_gc.py:40`, called at `:160` and `:192`), so `attempts` is read as the backoff's input (300 s doubling, capped at 3600 s). **Give-up is deliberately not implemented** — abandoning a row means never reclaiming that object, which is a maintainer's call. |
+| `VITR-V011` | MED | Collector `commit()`s inside its row loop, releasing `SKIP LOCKED` rows; overlapping runs hit an uncaught `StaleDataError` | **Fixed** — one transaction for the whole run with a `SAVEPOINT` per row, so the `SKIP LOCKED` locks survive to the single commit at `app/evidence_gc.py:217` (`app/evidence_gc.py:118-217`); pinned by a two-collector test plus a structural no-commit-in-the-loop assertion. Commit-worthy on its own: it makes two shipped comments true that the ordering had made false. |
 | `VITR-V012` | LOW | The collector's happy-path test cannot pass under the shipped 86400s GC grace, so GC is effectively unexercised | **Fixed** (`0fab6f8`) |
 | `VITR-V014` | **HIGH** | `evidence_gc`'s `StorageError` handler reads `row.id` after `db.rollback()`, raising `MissingGreenlet` — a failing object store aborts the whole collection run | **Fixed** (`0fab6f8`) |
-| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | Open |
+| `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | **Fixed** — the post-publish staging delete is now best-effort and logs `storage.staging_delete_failed` instead of escalating to `StorageError` (`app/storage.py:219-246`); pinned by three S3-store tests in `tests/test_object_storage.py` that need no S3. Commit-worthy on its own: it moves a production-only code path (S3 is what both compose files ship) from untested to covered in the default suite. |
 
 `VITR-V007` is the serious one: a client received **201** for an upload whose object the
 collector had already deleted, and every later `GET`/`HEAD` on that document 404'd. Root
@@ -129,9 +142,14 @@ remain reachable. Fixing the *test* is the highest-leverage item here.
 
 `VITR-V009` deserves a note: `authorize_record` has one production caller, and delivery
 records never reach it — `tests/test_delivery_execution_ownership.py` (295 lines)
-validates a dead path that has already diverged (its tombstone branch has no capability
-check, which the live copy enforces). It is harmless today and is a booby trap for the
-next refactor.
+validated a dead path that had already diverged (its tombstone branch had no capability
+check, which the live copy enforces). It was harmless, and a booby trap for the
+next refactor. **Fixed 2026-10-03:** the branch, its helper and that test file are
+gone. The lesson it records is worth keeping: eleven green tests proved nothing about
+production because they called the function directly. The replacement asserts the
+*reachability* property — `authorize_record` refuses `delivery_execution` without
+touching the database, and holds no delivery branch at all — which is checkable
+without a stub session and cannot be satisfied by re-adding a gate nobody calls.
 
 **`VITR-V012` was the keystone.** Its fix immediately produced `VITR-V014`: the collector's
 `StorageError` handler read `row.id` *after* `db.rollback()`, and because a rollback
@@ -329,6 +347,150 @@ Per #28, none of these are defects — they are unshipped commitments:
       cannot re-resolve over the pins. Verified by mirroring the Dockerfile RUN into a
       fresh venv and booting it (`/health` 200, `/metrics` 404 gated, and
       `starlette.testclient` correctly refusing to import for want of httpx).
+- [x] **`VITR-V008` — baseline seed race → 500** (landed in the 2026-10-03 tracker+seed commit; commit-worthy
+      on its own). All four reference-data GET routes call `ensure_baseline_publications`,
+      whose check-then-insert had no lock, no `ON CONFLICT` and no retry. Under the engine's
+      default READ COMMITTED (`app/db.py:61`, no `isolation_level`), two concurrent first
+      reads of a newly-onboarded org both see the rows missing; the loser's `INSERT` violates
+      `reference_publications_pkey` at the `flush` in `_insert_publication`, and nothing in
+      `app/` catches `IntegrityError`, so the request 500'd. `app/transient_retry.py:37-39`
+      deliberately does not retry 23505 — correct for the push path, wrong shape here.
+      Fixed by splitting the seed body into `_seed_baseline_publications` and catching
+      `IntegrityError` around it: roll back (discarding the loser's own uncommitted rows) and
+      re-run the check. Safe because PostgreSQL blocks a duplicate inserter on the unique index
+      until the other transaction resolves, so a 23505 is only ever reported once the winner
+      has committed — the re-check then sees the rows and inserts nothing. One attempt of
+      retry, no backoff: a seed can be lost once, and only once.
+      **Test:** `tests/test_reference_baseline_seed_concurrency_postgres.py` — the four GET
+      helpers in four sessions at once, with `_insert_publication` wrapped in a barrier so all
+      four are provably past the check before any of them inserts. Without that gate the
+      SELECT→flush window is microseconds and the test would pass against the broken code most
+      of the time. Second test pins that the surviving rows are the winner's: one row per
+      bundled publication, digests equal to `publication_sha256`.
+      **Not covered:** `VITR-V004`'s actual complaint — a GET that writes is still a GET that
+      writes. Moving the seed to org creation is a design decision (what happens to orgs that
+      predate it), not a drive-by.
+- [x] **`VITR-V010` — the GC queue backs off** (landed in the 2026-10-03 tracker+seed commit; commit-worthy
+      on its own: it makes an existing column and an existing counter load-bearing, and
+      unblocks the head of the queue).
+      `not_before` is the collector's *only* selection predicate (`app/evidence_gc.py:110`),
+      and both retain paths committed the row with the `not_before` it was queued with —
+      already in the past by the time anything failed. A still-referenced skip and a
+      `StorageError` therefore both reselected the row on the very next run, forever,
+      while `attempts`/`last_error` were written and read by nothing. Under
+      `order_by(id)` with the shipped limit of 100 (`scripts/gc_evidence.py`), ~100
+      permanently blocked rows permanently occupy the head of the queue.
+      Fixed with `_reschedule(row, error=..., now=cutoff)` at both sites: increment
+      `attempts`, record `last_error`, push `not_before` out by
+      `min(300 * 2**(attempts-1), 3600)`. The exponent is clamped as well as the result,
+      so a long-lived row does not compute a bignum. `attempts` now has a reader.
+      **Tests** in `tests/test_evidence_gc_postgres.py` (the file whose docstring had
+      recorded this as "the open half of VITR-V010, deliberately not asserted here"):
+      the failure test now asserts `not_before > now` and then runs the collector again
+      one second later and asserts it selects *nothing* — the property, not the counter;
+      a new test covers the second retain path (a live measurement listing the document
+      in `evidenceReferences`), which had the identical defect; and a unit test pins
+      the delay sequence `300, 600, 1200, 2400, 3600, 3600`, i.e. doubling *and* the cap.
+      **Not done, deliberately:** a give-up after N attempts. It means never reclaiming
+      that object, which is an operator decision, not a drive-by. Also still open and
+      adjacent: `evidence_gc_backlog` is registered at `app/metrics.py:485` and never set,
+      so the backlog is invisible — a one-line counter that belongs with whatever
+      give-up policy is chosen.
+      **Not run:** no test in this file was executed (see above — no sqlalchemy, no
+      reachable PostgreSQL). The delay sequence was checked by replaying the formula
+      standalone: `[300, 600, 1200, 2400, 3600, 3600]`, and `attempts=10000 -> 3600`.
+- [x] **`VITR-V011` — the collector holds its locks for the whole run** (landed in the 2026-10-03 tracker+seed commit.
+      time of writing; commit-worthy on its own: the fix makes two shipped comments true
+      that the ordering had made false, and it needs no schema or contract change).
+      `collect_due_evidence_gc` selected its rows once with `FOR UPDATE SKIP LOCKED` and
+      then `commit()`ed *inside* the row loop — four times. A commit ends the transaction
+      and releases the locks on every row the run had selected but not yet reached, so an
+      overlapping run could take one of them, delete it and commit, and this run's later
+      write to it matched zero rows: `StaleDataError` on the UPDATE path (`attempts += 1`
+      has no `version_id_col`, so the rowcount check raises unconditionally) escaping
+      the collector and aborting the whole run, or a silently double-counted deletion on
+      the DELETE path. `scripts/run_evidence_gc.sh:51` and `deploy/README.md:190` both
+      claimed SKIP LOCKED made overlapping runs safe; for as long as the per-row commit
+      stood, that was false.
+      Fixed by making the run one transaction: a `SAVEPOINT` per row inside
+      `async with db.begin_nested()`, one `commit()` after the loop. The savepoint is
+      what keeps VITR-V014's recovery working — a failing object store rolls back only
+      its own row, and the locks and every row already processed survive. `row.id` is
+      still read before any rollback, since a savepoint rollback expires instances in
+      its scope exactly as a full one did.
+      **Tests:** `tests/test_evidence_gc_postgres.py` now has the two-collector test this
+      file never had. The first run is parked on its *second* row's store delete — the
+      exact instant the defect lived, after a per-row commit had released the lock on the
+      row not yet reached — and a second collector must then find nothing (`GCResult()`),
+      while the first reclaims both objects once each. Only the second store call blocks,
+      so the test terminates under the old code too (where the second run reclaims one
+      object and the assertion fails) instead of deadlocking. A second, dependency-free
+      AST test asserts no `commit()` inside the collector's loop and exactly one in the
+      function; run standalone against `git show HEAD:app/evidence_gc.py` it reports 4
+      commits inside the loop vs 0 now.
+      **Trade-off, stated rather than hidden:** the run now holds its row locks and its
+      organization locks until the end rather than per row, so a slow object store holds
+      them longer and an upload to one of those organizations waits longer. The
+      alternative — one transaction per row — restores that at the cost of re-selecting
+      per row and a `dry_run` that never reschedules; neither is free. Nothing in the
+      service takes organization locks in a different order within one transaction, so
+      the wider hold cannot deadlock against sync push or `put_blob`.
+- [x] **`VITR-V013` — a published upload is not failed by its own cleanup** (landed in the 2026-10-03 tracker+seed commit.
+      time of writing; commit-worthy on its own: it fixes a production-only path that had
+      no coverage at all, and it does so without needing S3 to prove it).
+      `S3ObjectStore.put_verified` stages to a multipart upload, verifies the digest,
+      publishes with `copy_object` to the final content-addressed key, and then deletes
+      the staging copy. That last delete used to fall into the broad `except Exception`,
+      which — with `upload_id` already cleared — retried the *same* failing delete inside a
+      bare `except: pass` and re-raised `StorageError`. `put_blob` converts that to a 503
+      at `app/evidence.py:160`, thrown **before** the `EvidenceBlob` row is added and
+      **before** any GC row is queued. The client is told the upload failed while the
+      object sits, durable and correct, at its final key with nothing referencing it and
+      nothing that will ever reclaim it.
+      Fixed by making the post-publish staging delete best-effort: it logs
+      `storage.staging_delete_failed` at WARNING (with the staging key, a random uuid
+      under `.staging/` that carries no org, document or content identity, and is the one
+      datum needed to reap the orphan) and returns normally. The swallow is deliberately
+      narrow — it wraps only that delete, after the publish, so pre-publish failures and
+      digest mismatches still raise.
+      **Tests:** `tests/test_object_storage.py` gains a duck-typed `FakeS3Client` (the
+      store only reaches boto3 through `asyncio.to_thread(self.client.<op>)`) and three
+      tests that run in the **default** suite — the old coverage of this store lived
+      entirely behind `S3_INTEGRATION=1` and Docker, which is why the defect survived:
+      a failed staging delete still returns the correct `StoredObject` with the object
+      published and exactly one delete attempted (the swallowed retry was the tell); a
+      failed `copy_object` still raises `StorageError` and publishes nothing; a digest
+      mismatch still never publishes. The first test fails on the pre-fix code, where the
+      same injected failure raises.
+      **Residual, unchanged and outside this fix:** a staging copy that survives is still
+      only reapable by a bucket lifecycle rule, and no such rule is configured in this
+      repo — nothing in `app/`, `scripts/` or `deploy/` reconciles `.staging/` orphans.
+      The log line is what makes them visible.
+- [x] **`VITR-V009` — one authority gate for delivery** (landed in the 2026-10-03 tracker+seed commit;
+      commit-worthy on its own). Deleted `authorize_record`'s `delivery_execution`
+      branch and its now-orphaned `_current_quotation_id`, and deleted
+      `tests/test_delivery_execution_ownership.py`. **The point is not the deletion.**
+      With the branch gone, `delivery_execution` matches no `if entity_type == ...`
+      arm and reaches the closing `raise AuthorizationRejected`, so the generic gate
+      now *fails closed* for delivery. Before this, a refactor that broke the dispatch
+      in `sync_service` would have let delivery records be authorized by the drifted
+      copy — no `delivery.manage` check on tombstones, tombstones of known executions
+      permitted. After it, the same break denies them.
+      **Tests:** `tests/test_delivery_authorization_dispatch.py` — (1) `authorize_record`
+      rejects `delivery_execution`, and the session raises on any attribute access, so
+      passing proves nothing was consulted; (2) `authorize_record` holds no
+      `delivery_execution` string literal at all, so the second gate cannot be
+      reintroduced quietly; (3) an AST check that every `authorize_record` call in
+      `sync_service.py` sits in the `else`-arm of a `DELIVERY_ENTITY_TYPE` branch.
+      Test (2) was run against the pre-fix `ownership.py` (`git show HEAD:app/ownership.py`)
+      and does fail there: delivery literal present `True` vs `False` after. Tests (1)
+      and (3) need pytest and a database; neither was run here.
+      **Not covered here:** the live gate's own rules stay covered by
+      `tests/test_delivery_execution_postgres.py`, which drives it through the push
+      path (`POSTGRES_INTEGRATION=1`). Every rule the deleted tests asserted —
+      capability, approved quotation, approval event, canonical active quotation,
+      Customer match, orphan refusal, payload identity, tombstone — is enforced there
+      in a stricter form; that file was not run in this session.
 - [ ] Session renewal story (today: fixed bearer TTL + manual revoke only). **Product
       decision, not engineering** — asked, awaiting an answer on whether sessions should
       slide-refresh or stay fixed-TTL with manual revoke.

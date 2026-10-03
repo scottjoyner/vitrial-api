@@ -2,9 +2,9 @@ defmodule VitrialSync.Admission do
   @moduledoc """
   The per-record push decision, in the order the server makes it.
 
-  `_apply_push_once` (`app/sync_service.py:213-437`) runs nine steps per record
-  and the first match wins. This module owns the first four, which are the ones
-  that need nothing but the record and three facts the storage layer can supply:
+  `_apply_push_once` (`app/sync_service.py:227-476`) runs nine steps per record
+  and the first match wins. This module owns the first four, which need nothing
+  but the record and three facts the storage layer can supply:
 
   | # | step | contract |
   |---|---|---|
@@ -14,13 +14,16 @@ defmodule VitrialSync.Admission do
   | 4 | payload decode | S-57 |
 
   Steps 5-8 (item-delete guard, lifecycle, authority, evidence GC) all need the
-  database and belong to the ownership and delivery verticals.
+  canonical world, and they live in `VitrialSync.Authority` and the modules it
+  dispatches to. `decide/3` runs the whole sequence, so a caller with a world can
+  ask for the per-record decision in one call and get the same rejection code the
+  reference would have emitted.
 
   ## Why the decisions are pulled out of the loop
 
   Three reasons, in order of weight:
 
-    * **The order is the contract.** Nine ordered steps in one 220-line function
+    * **The order is the contract.** Nine ordered steps in one 250-line function
       is a function nobody can reorder safely. As a pure function of a record and
       a context map, the ordering is the code.
     * **Step 2 writes nothing; step 3 spends the id.** Which steps write a
@@ -44,6 +47,14 @@ defmodule VitrialSync.Admission do
   An operator reading `idempotent_replay` in a `sync.mutation_result` event when
   a client insists it never got a rejection has been told something false. That
   is the entire reason the third reason exists.
+
+  ## What a rejection at step 5 or later still does
+
+  It still **spends** the `clientMutationID`, exactly as a stale revision does.
+  The reference writes a `SyncMutation` row for every rejection from step 3
+  onwards (`app/sync_service.py:390-393`), and `Outcome.writes_mutation_row?`
+  reports that for the later steps too. That is S-55a: a client must mint a new
+  id to retry anything that was rejected, not just a stale revision.
   """
 
   alias VitrialSync.{Fingerprint, Payload, Record}
@@ -251,5 +262,62 @@ defmodule VitrialSync.Admission do
       writes_mutation_row?: true,
       payload: nil
     }
+  end
+
+  @doc """
+  Steps 1-8: the whole per-record decision, with a canonical world in hand.
+
+  Steps 1-4 run first and unchanged, so their rejection reasons and their
+  `writes_mutation_row?` are the same as `decide/2` produces. If they admit the
+  record, steps 5-8 run in `VitrialSync.Authority` and either admit it or refuse
+  with one of the three authority/lifecycle codes.
+
+  `effects` carries what the push engine still has to do inside the transaction:
+  the canonical row upserts, the scope grant a self-created parent produces, and
+  the evidence GC row a tombstone enqueues. It is `nil` on a rejection, because
+  the reference's `except` clause rolls the whole `try` block back.
+
+      iex> alias VitrialSync.{Admission, Canonical, Record}
+      iex> record = %Record{id: "r1", entity_type: "customer", entity_id: "c1",
+      ...>   updated_at: "2026-10-02T00:00:00Z", payload: ~s({"id": "c1"}), client_mutation_id: "m1"}
+      iex> principal = %Canonical.Principal{organization_id: "org", user_id: "u1",
+      ...>   membership_id: "m1", session_id: "s1", authorization_revision: 1,
+      ...>   capabilities: MapSet.new(["customer.create"])}
+      iex> world = %Canonical.World{
+      ...>   membership: %Canonical.Membership{active: true, organization_id: "org", user_id: "u1"},
+      ...>   organization: %Canonical.Organization{authorization_revision: 1}}
+      iex> Admission.decide(record, Admission.empty_context(), nil, principal, world)
+      {:ok, %{authority: :generic, evidence_gc: nil, ownership: %{authorization_revision_bump?: true, scope_grant: %{customer_ids: ["c1"], project_ids: []}, upserts: [{:customer, "c1", nil}]}, plan: %VitrialSync.Ownership.Plan{customer_id: "c1", deleted_at: nil, entity_id: "c1", entity_type: "customer", is_create: true, item_id: nil, project_id: nil, project_sector_id: nil, sector_id: nil}}}
+
+      iex> alias VitrialSync.{Admission, Canonical, Record}
+      iex> record = %Record{id: "r2", entity_type: "customer", entity_id: "c1",
+      ...>   updated_at: "2026-10-02T00:00:00Z", payload: ~s({}), client_mutation_id: "m2",
+      ...>   deleted_at: "2026-10-02T00:00:00Z"}
+      iex> principal = %Canonical.Principal{organization_id: "org", capabilities: MapSet.new(["customer.edit"])}
+      iex> Admission.decide(record, Admission.empty_context(), nil, principal, Canonical.empty_world())
+      {:rejected, "authorization_rejected"}
+  """
+  @spec decide(
+          Record.t(),
+          context(),
+          VitrialSync.Canonical.Entity.t() | nil,
+          VitrialSync.Canonical.Principal.t(),
+          VitrialSync.Canonical.World.t()
+        ) ::
+          {:ok, VitrialSync.Authority.effects()}
+          | {:rejected, String.t()}
+          | {:rejected, String.t(), non_neg_integer() | nil}
+          | %Outcome{}
+  def decide(%Record{} = record, context, current, principal, world) do
+    case decide(record, context) do
+      %Outcome{status: :rejected} = outcome ->
+        # Steps 1-4 keep their own return shape: the outcome carries
+        # `result_revision` and `writes_mutation_row?`, and a caller already
+        # written against `decide/2` reads those.
+        outcome
+
+      %Outcome{status: :accepted, payload: payload} ->
+        VitrialSync.Authority.decide(record, payload, current, principal, world)
+    end
   end
 end

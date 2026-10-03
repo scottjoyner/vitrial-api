@@ -130,37 +130,6 @@ def _normalized(value) -> str | None:
     return value or None
 
 
-async def _current_quotation_id(
-    db: AsyncSession,
-    principal: Principal,
-    entity_id: str,
-    payload: dict,
-    *,
-    deleting: bool,
-) -> str:
-    """Resolve — and pin — the quotation a stored delivery execution belongs to.
-
-    The canonical child row records the owning Project but not the Quotation, so
-    the linkage is read back from the committed payload. Reading it from storage
-    rather than trusting the incoming payload is what makes the immutability
-    check meaningful: a client cannot re-point an execution at another quotation
-    by simply restating quotationID.
-    """
-    current = await db.get(
-        SyncEntity,
-        (principal.organization_id, "delivery_execution", entity_id),
-    )
-    if current is None or not isinstance(current.payload_json, dict):
-        raise AuthorizationRejected("existing delivery execution has no canonical payload")
-    stored = _normalized(current.payload_json.get("quotationID"))
-    if stored is None:
-        raise AuthorizationRejected("existing delivery execution lacks a canonical Quotation")
-    supplied = _normalized(payload.get("quotationID"))
-    if not deleting and supplied is not None and supplied != stored:
-        raise AuthorizationRejected("Delivery execution Quotation ownership is immutable")
-    return stored
-
-
 def _require_current_provenance(principal: Principal, payload: dict) -> None:
     expected = {
         "actorID": principal.user_id,
@@ -778,76 +747,18 @@ async def authorize_record(
             project_id=project.project_id,
         )
 
-    if entity_type == "delivery_execution":
-        canonical = await db.get(
-            CanonicalProjectChild,
-            (principal.organization_id, entity_type, entity_id),
-        )
-        if canonical is None:
-            if generic_entity_exists:
-                raise AuthorizationRejected("existing delivery execution lacks canonical ownership")
-            if deleting:
-                raise AuthorizationRejected("cannot tombstone an unknown delivery execution")
-            _require_identity(payload, entity_id, deleting=False)
-            quotation_id = _value(payload, "quotationID")
-        else:
-            quotation_id = await _current_quotation_id(
-                db, principal, entity_id, payload, deleting=deleting
-            )
-            _require_identity(payload, entity_id, deleting=deleting)
-
-        # The parent quotation must itself be canonical, active and in scope. A
-        # delivery execution is meaningless without the commercial document it
-        # executes, so this is checked on create and on every later update.
-        quotation = await db.get(
-            CanonicalProjectChild,
-            (principal.organization_id, "quotation", quotation_id),
-        )
-        if quotation is None or quotation.deleted_at is not None:
-            raise AuthorizationRejected("Delivery execution Quotation is not canonical and active")
-        # The canonical child row carries the Project linkage only; the
-        # commercial payload lives on the generic entity row, which is what the
-        # lifecycle validator reads too.
-        quotation_entity = await db.get(
-            SyncEntity,
-            (principal.organization_id, "quotation", quotation_id),
-        )
-        quotation_payload = (
-            quotation_entity.payload_json if quotation_entity is not None else None
-        )
-        if not isinstance(quotation_payload, dict):
-            raise AuthorizationRejected("Delivery execution Quotation payload is malformed")
-
-        project = await _project_for_scope(db, principal, scope, quotation.project_id)
-        if not deleting:
-            if payload.get("customerID") != project.customer_id:
-                raise AuthorizationRejected(
-                    "Delivery execution Customer does not match canonical Project"
-                )
-            # Mirrors the client's own DeliveryExecutionLifecycle.start: work
-            # cannot begin against a quotation the customer has not approved,
-            # and an approved status alone is not enough — the approval must be
-            # backed by its immutable event.
-            if quotation_payload.get("status") != "approved":
-                raise AuthorizationRejected(
-                    "Delivery execution Quotation must be approved"
-                )
-            quotation_events = quotation_payload.get("events")
-            if not isinstance(quotation_events, list) or not any(
-                isinstance(event, dict) and event.get("kind") == "approved"
-                for event in quotation_events
-            ):
-                raise AuthorizationRejected(
-                    "Delivery execution Quotation is approved without its approval event"
-                )
-            _require_capability(principal, "delivery.manage")
-
-        return OwnershipPlan(
-            "delivery_execution", entity_id, canonical is None, deleted_at,
-            customer_id=project.customer_id,
-            project_id=project.project_id,
-        )
-
+    # `delivery_execution` is absent by design, and the gap is the point.
+    # Delivery has its own, stricter authority gate -- `authorize_delivery_execution`
+    # (app/delivery_execution.py:701), which the push dispatches to before this
+    # function is ever called (app/sync_service.py:347-363). A second copy here was
+    # unreachable in production, and it drifted: it skipped the `delivery.manage`
+    # check on tombstones and permitted tombstoning a known execution, which the live
+    # gate refuses outright. It also lacked the live gate's payload-identity
+    # requirement, installation-evidence authority, quotation
+    # number/revision/currency/pricingVersion match and apply-time immutability
+    # checks. Falling through denies the write, which is the direction to fail: if
+    # the dispatch in sync_service is ever broken, delivery records are rejected
+    # rather than waved through a stale second authority.
     raise AuthorizationRejected(f"canonical authorization is not implemented for {entity_type}")
 
 

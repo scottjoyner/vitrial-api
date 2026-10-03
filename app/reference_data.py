@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import Field, JsonValue
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
@@ -311,6 +312,11 @@ BASELINE_PUBLICATIONS = (
     BASELINE_PRICE_BOOK,
 )
 
+# One retry is the whole bound: a lost seed race can only be lost once, and the
+# winner's rows are committed by the time the loser is told. See
+# `ensure_baseline_publications`.
+BASELINE_SEED_ATTEMPTS = 2
+
 
 def _canonical_material(request: ReferencePublicationCreate) -> bytes:
     material = request.model_dump(mode="json", exclude_none=False)
@@ -408,7 +414,8 @@ async def _insert_publication(
     return model
 
 
-async def ensure_baseline_publications(db: AsyncSession, principal: Principal) -> None:
+async def _seed_baseline_publications(db: AsyncSession, principal: Principal) -> bool:
+    """Insert the missing baselines and commit. Returns whether anything was created."""
     created = False
     for request in BASELINE_PUBLICATIONS:
         existing = await db.get(
@@ -425,11 +432,48 @@ async def ensure_baseline_publications(db: AsyncSession, principal: Principal) -
             created = True
     if created:
         await db.commit()
-        log_event(
-            "reference.baseline_seeded",
-            organizationRef=correlation_ref(principal.organization_id),
-            publicationCount=len(BASELINE_PUBLICATIONS),
-        )
+    return created
+
+
+async def ensure_baseline_publications(db: AsyncSession, principal: Principal) -> None:
+    """Seed the bundled baselines for an organization, tolerating a concurrent seed.
+
+    `_seed_baseline_publications` decides what to insert with a plain SELECT, and the
+    engine runs READ COMMITTED (`create_async_engine` with no `isolation_level`,
+    `app/db.py:61`), so two concurrent first reads of a freshly-onboarded
+    organization both observe the baseline rows missing and both insert them. The
+    loser's INSERT violates the `reference_publications` primary key
+    (`app/reference_models.py:22-25`) at the flush in `_insert_publication`, and with
+    no IntegrityError handler anywhere in `app/` that surfaced to the client as a 500.
+
+    `app/transient_retry.py` deliberately does not retry 23505, and correctly so --
+    on the push path it means the idempotency constraint did its job. Here the loser
+    has nothing to lose: PostgreSQL blocks a duplicate inserter on the unique index
+    until the other transaction resolves, so a violation is only reported once the
+    winner has committed. The loser therefore rolls back, discarding its own
+    uncommitted seed, and re-runs the check against committed state, where the rows
+    now exist and it inserts nothing.
+    """
+    for attempt in range(1, BASELINE_SEED_ATTEMPTS + 1):
+        try:
+            created = await _seed_baseline_publications(db, principal)
+        except IntegrityError:
+            await db.rollback()
+            if attempt == BASELINE_SEED_ATTEMPTS:
+                raise
+            log_event(
+                "reference.baseline_seed_race",
+                organizationRef=correlation_ref(principal.organization_id),
+                publicationCount=len(BASELINE_PUBLICATIONS),
+            )
+            continue
+        if created:
+            log_event(
+                "reference.baseline_seeded",
+                organizationRef=correlation_ref(principal.organization_id),
+                publicationCount=len(BASELINE_PUBLICATIONS),
+            )
+        return
 
 
 async def publish_reference(
