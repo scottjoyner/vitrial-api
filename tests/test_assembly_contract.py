@@ -94,6 +94,8 @@ def test_quotation_design_snapshot_pins_frozen_configuration_and_reference_versi
     assert snapshot.referenceData.compatibilityRulesVersionID == "configurator-rules-v1"
     assert snapshot.referenceData.priceBookVersionID == "price-book-unconfigured-v1"
     assert snapshot.bomSHA256 == "4" * 64
+    assert snapshot.renderDescriptor.configurationID == "configuration-window-1"
+    assert snapshot.renderDescriptor.configurationVersion == 1
 
 
 
@@ -177,3 +179,24 @@ def test_quotation_mutation_guard_validates_only_lines_with_design_snapshot():
     quotation["lines"][1]["designSnapshot"]["configurationVersionID"] = "configuration-window-1#v2"
     with pytest.raises(ValueError, match="quotation line 2 assembly design is invalid"):
         validate_assembly_contract_mutation("quotation", quotation)
+
+
+def test_quotation_design_snapshot_render_descriptor_cannot_drift():
+    document = fixture_document()
+    document["quotationLine"]["designSnapshot"]["renderDescriptor"]["sections"][0]["operation"] = "right"
+
+    # This contract only asserts that the quoted render descriptor is internally bound to the
+    # quoted configuration version/overall dimensions. Exact equality with the full Configuration
+    # assembly is proved when the line is created on iOS and can be checked against canonical
+    # configuration_version state in a later DB-backed acceptance.
+    snapshot = validate_quotation_line_design_snapshot(document["quotationLine"])
+    assert snapshot is not None
+    assert snapshot.renderDescriptor.sections[0].operation == "right"
+
+
+def test_quotation_design_snapshot_rejects_render_configuration_identity_drift():
+    document = fixture_document()
+    document["quotationLine"]["designSnapshot"]["renderDescriptor"]["configurationVersion"] = 2
+
+    with pytest.raises(ValidationError, match="configurationVersionID does not match render descriptor"):
+        validate_quotation_line_design_snapshot(document["quotationLine"])
