@@ -1,13 +1,16 @@
 name: Beam CI
 
 # Same principle as the GitLab fleet lanes: the build runs on a LOCAL
-# self-hosted runner (beam-ci-025) against the LOCAL toolchain — system
+# self-hosted runner (beam-org-025) against the LOCAL toolchain — system
 # OTP 28 + Elixir 1.19 + rebar3, never a downloaded runtime. The beam/
 # umbrella has zero hex deps, so this gate is fully offline-capable.
 #
-# push/workflow_dispatch only: this is a PUBLIC repo and the runner is
-# self-hosted, so pull_request must never trigger it (fork-PR code
-# execution) — same ruling as the caddy repo.
+# push/workflow_dispatch only. pull_request must never trigger this gate: the
+# runner is self-hosted, so building a PR would execute that PR's code on
+# beam-org-025. The original reason was that this repo was public, so anyone
+# could open a PR; it is private now, but the exclusion stays as defence in
+# depth, since a private repo is one settings change away from accepting
+# outside contributions again. Same ruling as the caddy repo.
 
 on:
   push:
