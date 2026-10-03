@@ -34,8 +34,6 @@ class AssemblyTopologyCell(StrictTopologyModel):
     column: int = Field(ge=0)
     rowSpan: int = Field(default=1, ge=1)
     columnSpan: int = Field(default=1, ge=1)
-    widthFraction: float | None = Field(default=None, gt=0)
-    heightFraction: float | None = Field(default=None, gt=0)
 
 
 class AssemblyCornerLegTopology(StrictTopologyModel):
@@ -67,6 +65,8 @@ class AssemblySectionTopologyEvidence(StrictTopologyModel):
     kind: TopologyKind
     rowCount: int = Field(default=0, ge=0)
     columnCount: int = Field(default=0, ge=0)
+    rowProportions: list[float] = Field(default_factory=list)
+    columnProportions: list[float] = Field(default_factory=list)
     cells: list[AssemblyTopologyCell] = Field(default_factory=list)
     cornerLegs: list[AssemblyCornerLegTopology] = Field(default_factory=list)
     constraints: list[AssemblyTopologyConstraint] = Field(default_factory=list)
@@ -80,6 +80,16 @@ class AssemblySectionTopologyEvidence(StrictTopologyModel):
                 raise ValueError("planarGrid topology requires positive rowCount and columnCount")
             if self.cornerLegs:
                 raise ValueError("planarGrid topology cannot include cornerLegs")
+            _validate_track_proportions(
+                self.rowProportions,
+                expected_count=self.rowCount,
+                axis="row",
+            )
+            _validate_track_proportions(
+                self.columnProportions,
+                expected_count=self.columnCount,
+                axis="column",
+            )
 
             placed: set[str] = set()
             for cell in self.cells:
@@ -96,6 +106,8 @@ class AssemblySectionTopologyEvidence(StrictTopologyModel):
                 raise ValueError("corner topology cannot include planar cells")
             if self.rowCount != 0 or self.columnCount != 0:
                 raise ValueError("corner topology does not use rowCount/columnCount")
+            if self.rowProportions or self.columnProportions:
+                raise ValueError("corner topology does not use row/column proportions")
             if len(self.cornerLegs) < 2:
                 raise ValueError("corner topology requires at least two legs")
 
@@ -106,6 +118,25 @@ class AssemblySectionTopologyEvidence(StrictTopologyModel):
                 seen_leg_ids.add(leg.id)
 
         return self
+
+
+
+
+
+def _validate_track_proportions(
+    values: list[float],
+    *,
+    expected_count: int,
+    axis: str,
+) -> None:
+    if not values:
+        return
+    if len(values) != expected_count:
+        raise ValueError(f"invalid {axis} proportions: expected {expected_count} tracks")
+    if any(value <= 0 for value in values):
+        raise ValueError(f"invalid {axis} proportions: values must be positive")
+    if abs(sum(values) - 1.0) > 1e-6:
+        raise ValueError(f"invalid {axis} proportions: values must sum to 1")
 
 
 class AssemblyTopologyRenderability(StrictTopologyModel):
@@ -139,17 +170,9 @@ def assess_topology_renderability(
 
     missing: list[str] = []
     if topology.kind == "planarGrid":
-        has_width_evidence = all(
-            cell.widthFraction is not None or cell.columnSpan == topology.columnCount
-            for cell in topology.cells
-        )
-        has_height_evidence = all(
-            cell.heightFraction is not None or cell.rowSpan == topology.rowCount
-            for cell in topology.cells
-        )
-        if not has_width_evidence:
+        if len(topology.columnProportions) != topology.columnCount:
             missing.append("Internal column widths/proportions")
-        if not has_height_evidence:
+        if len(topology.rowProportions) != topology.rowCount:
             missing.append("Internal row heights/proportions")
 
     if not missing:
