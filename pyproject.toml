@@ -36,8 +36,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3,<9",
-  "pytest-asyncio>=0.25,<1",
+  # pytest 9.0.3 is the floor, not 9.0: GHSA-6w46-j5rx-g56g (medium) is a local
+  # /tmp/pytest-of-{user} tmpdir handling flaw. pytest-asyncio must move in lockstep
+  # because 0.26 hard-pins pytest<9 -- upgrading only pytest yields an unsatisfiable
+  # environment, not a partial one. Suite verified green on 9.1.1 + 1.4.0 (339 passed).
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=1,<2",
   "httpx>=0.28,<1",
 ]
 
