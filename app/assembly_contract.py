@@ -290,3 +290,56 @@ def validate_assembly_contract_mutation(entity_type: str, payload: dict) -> None
                 validate_quotation_line_design_snapshot(line)
             except ValueError as exc:
                 raise ValueError(f"quotation line {index + 1} assembly design is invalid: {exc}") from exc
+
+
+def validate_quotation_design_against_configuration_version(
+    line: dict,
+    configuration_version_payload: dict,
+) -> None:
+    """Bind a quote-line design snapshot to the canonical frozen ConfigurationVersion.
+
+    This is deliberately a consistency check, not a new authority surface. The caller still
+    performs the existing quotation capability/project/item authorization.
+    """
+    snapshot = validate_quotation_line_design_snapshot(line)
+    if snapshot is None:
+        return
+
+    envelope_id = configuration_version_payload.get("id")
+    configuration = configuration_version_payload.get("configuration")
+    if not isinstance(envelope_id, str) or not isinstance(configuration, dict):
+        raise ValueError("canonical configuration_version payload is malformed")
+
+    if snapshot.configurationVersionID != envelope_id:
+        raise ValueError("quotation designSnapshot does not reference canonical ConfigurationVersion")
+
+    canonical = validate_configuration_assembly(configuration)
+    if canonical is None:
+        raise ValueError("canonical ConfigurationVersion has no frozen assembly snapshot")
+
+    line_item_id = line.get("itemID")
+    if not isinstance(line_item_id, str) or configuration.get("itemID") != line_item_id:
+        raise ValueError("quotation designSnapshot ConfigurationVersion belongs to another Item")
+
+    if snapshot.templateID != canonical.templateID or snapshot.templateVersion != canonical.templateVersion:
+        raise ValueError("quotation designSnapshot template differs from canonical ConfigurationVersion")
+    if snapshot.overall != canonical.overall:
+        raise ValueError("quotation designSnapshot dimensions differ from canonical ConfigurationVersion")
+    if snapshot.referenceData != canonical.referenceData:
+        raise ValueError("quotation designSnapshot reference provenance differs from canonical ConfigurationVersion")
+    if snapshot.renderDescriptor != canonical.renderDescriptor:
+        raise ValueError("quotation designSnapshot render descriptor differs from canonical ConfigurationVersion")
+
+    expected_summary = [
+        {"sectionType": section.sectionType, "operation": section.operation}
+        for section in canonical.sections
+    ]
+    actual_summary = [
+        {
+            "sectionType": entry.get("sectionType"),
+            "operation": entry.get("operation"),
+        }
+        for entry in snapshot.sectionSummary
+    ]
+    if actual_summary != expected_summary:
+        raise ValueError("quotation designSnapshot section summary differs from canonical ConfigurationVersion")
