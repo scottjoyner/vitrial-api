@@ -111,15 +111,17 @@
             "unit": "m",
             "wasteQuantity": 0
           }
-        ]
+        ],
+        "configurationID": "configuration-window-1",
+        "configurationVersion": 1,
+        "calculationBasis": "Deterministic planar reference geometry; not a fabrication cut list or procurement authority."
       },
       "renderDescriptor": {
         "schema": "vitrial.render.v1",
         "coordinateSystem": "normalized_opening",
         "overall": {
-          "width": 2400,
-          "height": 1650,
-          "unit": "mm"
+          "widthMM": 2400,
+          "heightMM": 1650
         },
         "sections": [
           {
@@ -155,7 +157,9 @@
               "height": 1
             }
           }
-        ]
+        ],
+        "configurationID": "configuration-window-1",
+        "configurationVersion": 1
       }
     }
   },
