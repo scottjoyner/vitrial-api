@@ -124,7 +124,7 @@ defmodule VitrialSync.Admission do
   Decide one record.
 
       iex> alias VitrialSync.{Admission, Record}
-      iex> record = %Record{id: "r1", entity_type: "customer", entity_id: "c1", updated_at: "2026-10-02T00:00:00Z", payload: ~s({})}
+      iex> record = %Record{id: "r1", entity_type: "customer", entity_id: "c1", updated_at: "2026-10-02T00:00:00Z", payload: ~s({}), client_mutation_id: "m1", base_server_revision: 0}
       iex> Admission.decide(record, Admission.empty_context()).reason
       "stale_revision"
   """
@@ -139,8 +139,21 @@ defmodule VitrialSync.Admission do
   # Step 1. Falsy is nil or "", because that is what Pydantic produces for both an
   # omitted field and an empty string, and the reference implementation branches
   # on `not record.clientMutationID` rather than on `is None`.
+  #
+  # `writes_mutation_row?: false`, and deliberately NOT via the shared `reject/2`
+  # helper: the reference `continue`s here (sync_service.py:243-249) BEFORE
+  # `_record_mutation` is ever reached, so no SyncMutation row is written for a
+  # record with no clientMutationID. Reporting `true` here would hand the caller
+  # a row carrying nil/"" into `SyncMutation.client_mutation_id`, which is
+  # `Mapped[str]` NOT NULL under a unique constraint (app/models.py:197,209).
   defp step_missing_id(%Record{client_mutation_id: id}) when id in [nil, ""],
-    do: reject("missing_client_mutation_id", nil)
+    do: %Outcome{
+      status: :rejected,
+      reason: "missing_client_mutation_id",
+      result_revision: nil,
+      writes_mutation_row?: false,
+      payload: nil
+    }
 
   defp step_missing_id(%Record{}), do: nil
 
@@ -275,7 +288,19 @@ defmodule VitrialSync.Admission do
   `effects` carries what the push engine still has to do inside the transaction:
   the canonical row upserts, the scope grant a self-created parent produces, and
   the evidence GC row a tombstone enqueues. It is `nil` on a rejection, because
-  the reference's `except` clause rolls the whole `try` block back.
+  the reference's `except` clause rolls the whole `try` block back. On an accept
+  it also carries `:payload` -- the decoded object, set HERE and not in
+  `VitrialSync.Authority`, so `VitrialSync.Batch` can build the canonical
+  upsert effect without a second decode.
+
+  `scope` (decide/6) is the batch's WORKING scope: `VitrialSync.Batch` derives
+  it from the principal once at entry, widens it after every accepted
+  customer/project create (`app/ownership.py:865`/`:884`), and feeds it here for
+  every subsequent record -- that threading is what lets one batch create a
+  parent and then a child under it. decide/5 derives it from the principal
+  (`Canonical.Scope.from_principal/1`), which is the entry scope: the right
+  shape for a single-record caller, and what a batch would wrongly freeze every
+  record at.
 
       iex> alias VitrialSync.{Admission, Canonical, Record}
       iex> record = %Record{id: "r1", entity_type: "customer", entity_id: "c1",
@@ -287,7 +312,7 @@ defmodule VitrialSync.Admission do
       ...>   membership: %Canonical.Membership{active: true, organization_id: "org", user_id: "u1"},
       ...>   organization: %Canonical.Organization{authorization_revision: 1}}
       iex> Admission.decide(record, Admission.empty_context(), nil, principal, world)
-      {:ok, %{authority: :generic, evidence_gc: nil, ownership: %{authorization_revision_bump?: true, scope_grant: %{customer_ids: ["c1"], project_ids: []}, upserts: [{:customer, "c1", nil}]}, plan: %VitrialSync.Ownership.Plan{customer_id: "c1", deleted_at: nil, entity_id: "c1", entity_type: "customer", is_create: true, item_id: nil, project_id: nil, project_sector_id: nil, sector_id: nil}}}
+      {:ok, %{authority: :generic, evidence_gc: nil, ownership: %{authorization_revision_bump?: true, scope_grant: %{customer_ids: ["c1"], project_ids: []}, upserts: [{:customer, "c1", nil}]}, payload: %{"id" => "c1"}, plan: %VitrialSync.Ownership.Plan{customer_id: "c1", deleted_at: nil, entity_id: "c1", entity_type: "customer", is_create: true, item_id: nil, project_id: nil, project_sector_id: nil, sector_id: nil}}}
 
       iex> alias VitrialSync.{Admission, Canonical, Record}
       iex> record = %Record{id: "r2", entity_type: "customer", entity_id: "c1",
@@ -306,9 +331,23 @@ defmodule VitrialSync.Admission do
         ) ::
           {:ok, VitrialSync.Authority.effects()}
           | {:rejected, String.t()}
-          | {:rejected, String.t(), non_neg_integer() | nil}
           | %Outcome{}
   def decide(%Record{} = record, context, current, principal, world) do
+    decide(record, context, current, principal, Canonical.Scope.from_principal(principal), world)
+  end
+
+  @spec decide(
+          Record.t(),
+          context(),
+          VitrialSync.Canonical.Entity.t() | nil,
+          VitrialSync.Canonical.Principal.t(),
+          VitrialSync.Canonical.Scope.t(),
+          VitrialSync.Canonical.World.t()
+        ) ::
+          {:ok, VitrialSync.Authority.effects()}
+          | {:rejected, String.t()}
+          | %Outcome{}
+  def decide(%Record{} = record, context, current, principal, scope, world) do
     case decide(record, context) do
       %Outcome{status: :rejected} = outcome ->
         # Steps 1-4 keep their own return shape: the outcome carries
@@ -316,8 +355,24 @@ defmodule VitrialSync.Admission do
         # written against `decide/2` reads those.
         outcome
 
+      # Step 2's accepted replay also stops here, and the distinguishing fact is
+      # `payload: nil`. The reference `continue`s for all three step-2 reasons
+      # (sync_service.py:292) before it ever reaches the authority steps, so an
+      # accepted replay must NOT be handed to Authority with a nil payload --
+      # doing so turns `idempotent_replay` into `authorization_rejected`, which
+      # is a false statement to the client: the mutation WAS applied, and this
+      # response is the original answer, not a fresh rejection.
+      #
+      # Matched on the step, not on `status`, because an accepted outcome from
+      # step 4 carries a real decoded payload and must go on to Authority.
+      %Outcome{status: :accepted, payload: nil} = outcome ->
+        outcome
+
       %Outcome{status: :accepted, payload: payload} ->
-        VitrialSync.Authority.decide(record, payload, current, principal, world)
+        case Authority.decide(record, payload, current, principal, scope, world) do
+          {:ok, effects} -> {:ok, Map.put(effects, :payload, payload)}
+          {:rejected, _code} = rejected -> rejected
+        end
     end
   end
 end

@@ -53,6 +53,28 @@ defmodule VitrialSync.AdmissionTest do
       assert outcome.result_revision == nil
     end
 
+    test "and no SyncMutation row is written for it", %{record: record, context: context} do
+      # The reference `continue`s at sync_service.py:243-249 BEFORE reaching
+      # `_record_mutation`, so a record with no key produces no mutation row.
+      # Reporting `writes_mutation_row?: true` would hand the caller a row
+      # carrying nil/"" into `SyncMutation.client_mutation_id`, which is NOT NULL
+      # under a unique constraint (app/models.py:197,209) — the row is not merely
+      # unwanted, it is uninsertable.
+      #
+      # The parity corpus CANNOT catch this: `step1_client_mutation_id_absent`
+      # yields a valid oracle outcome, so an outcome-shape comparison passes while
+      # the emitted effects are wrong. Hence a hand-written regression here.
+      for key <- [nil, ""] do
+        outcome =
+          Admission.decide(record.(client_mutation_id: key), context.(nil, nil, false, nil))
+
+        assert outcome.reason == "missing_client_mutation_id"
+
+        assert outcome.writes_mutation_row? == false,
+               "client_mutation_id=#{inspect(key)} must not produce a mutation row"
+      end
+    end
+
     test "an empty-string key is rejected the same way, because Pydantic allows it through",
          %{record: record, context: context} do
       # clientMutationID has max_length but NO min_length in app/schemas.py, so
@@ -400,4 +422,88 @@ defmodule VitrialSync.AdmissionTest do
       end
     end
   end
+
+  describe "decide/5 must not reinterpret a step-2 outcome" do
+    test "an accepted replay stays a replay and is not re-decided by Authority",
+         %{record: record, context: context, prior: prior} do
+      # The reference `continue`s for all THREE step-2 reasons
+      # (sync_service.py:292) before it reaches the authority steps. decide/5 used
+      # to match only `:rejected` and hand every accepted outcome to Authority
+      # with `payload: nil`, so an accepted replay came back
+      # `{:rejected, "authorization_rejected"}` — a false statement to the client,
+      # because the mutation WAS applied and this response is the original answer
+      # rather than a fresh rejection.
+      record = record.(client_mutation_id: "replay-1", base_server_revision: 3)
+      ctx = context.(prior.("customer", "c1", 3, "accepted", 7), nil, false, nil)
+
+      outcome = Admission.decide(record, ctx)
+
+      assert outcome.status == :accepted
+      assert outcome.reason == "idempotent_replay"
+      assert outcome.result_revision == 7
+      assert outcome.payload == nil
+
+      assert %Admission.Outcome{status: :accepted, reason: "idempotent_replay"} =
+               Admission.decide(record, ctx, nil, principal(), world())
+    end
+
+    test "the spent-id and collision arms stay rejected through decide/5 too",
+         %{record: record, context: context, prior: prior} do
+      # Those two reached the `:rejected` clause by luck. Pinning all three means
+      # a future change to the clause shape cannot silently drop one.
+      #
+      # The two arms differ by WHICH FACT disagrees, not by the prior's status: a
+      # collision is a prior row for a DIFFERENT request, while a spent id is the
+      # same request whose row says it was rejected. Varying `result_status` alone
+      # would exercise one arm twice — and did, which is why this caught itself.
+      spent = record.(client_mutation_id: "spent-1", base_server_revision: 3)
+      collision = record.(client_mutation_id: "spent-1", base_server_revision: 3)
+
+      assert %Admission.Outcome{status: :rejected, reason: "rejected_mutation_id_reuse"} =
+               Admission.decide(
+                 spent,
+                 context.(prior.("customer", "c1", 3, "rejected", 7), nil, false, nil),
+                 nil,
+                 principal(),
+                 world()
+               )
+
+      assert %Admission.Outcome{status: :rejected, reason: "mutation_id_collision"} =
+               Admission.decide(
+                 collision,
+                 context.(
+                   prior.("customer", "a-different-entity", 3, "accepted", 7),
+                   nil,
+                   false,
+                   nil
+                 ),
+                 nil,
+                 principal(),
+                 world()
+               )
+    end
+
+    test "a step-4 accept still reaches Authority, because it carries a payload",
+         %{record: record, context: context} do
+      # The short-circuit keys on `payload: nil`, not on `status` — otherwise this
+      # fix would break every genuine acceptance by refusing to run the authority
+      # steps on it. An empty capability set must still be refused by Authority.
+      outcome =
+        Admission.decide(
+          record.(client_mutation_id: "fresh-1"),
+          context.(nil, nil, false, nil),
+          nil,
+          principal(),
+          world()
+        )
+
+      assert outcome == {:rejected, "authorization_rejected"}
+    end
+  end
+
+  defp principal do
+    %VitrialSync.Canonical.Principal{organization_id: "org", capabilities: MapSet.new()}
+  end
+
+  defp world, do: %VitrialSync.Canonical.World{}
 end
