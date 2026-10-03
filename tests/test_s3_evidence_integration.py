@@ -11,6 +11,7 @@ from app.auth import Principal
 from app.db import SessionFactory
 from app.evidence import put_blob
 from app.evidence_gc import collect_due_evidence_gc, queue_blob_gc
+from app.metrics import evidence_gc_total
 from app.models import (
     CanonicalCustomer,
     CanonicalItem,
@@ -134,6 +135,13 @@ async def test_s3_stream_replace_and_canonical_gc():
 
         result = await collect_due_evidence_gc(db, limit=20)
         assert result.deleted >= 1
+        # The GC metrics must agree with the value this same call returns. Asserted
+        # here rather than in a unit test because this is the only place a real
+        # reclamation happens -- a mock would check the counter, not the accounting.
+        assert evidence_gc_total.value(result="deleted") >= result.deleted
+        assert evidence_gc_total.value(result="dry_run") == 0, (
+            "a real collection is not a rehearsal"
+        )
         assert not await store.exists(original_key)
         assert await store.exists(replacement_key)
         current = await db.get(EvidenceBlob, (org_id, document_id))

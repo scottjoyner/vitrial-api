@@ -338,6 +338,30 @@ def test_drain_gauge_reflects_the_lifecycle_transition():
     drain_state.reset()
 
 
+def test_gc_counter_labelling_vocabulary_is_closed():
+    """GC outcomes must be one of four fixed labels, not free text.
+
+    The result label comes from a branch, so it is bounded by construction -- asserting
+    the vocabulary here is what stops a future `result=f"failed: {exc}"` from quietly
+    minting a series per distinct error message.
+    """
+    from app.metrics import evidence_gc_total
+
+    allowed = {"deleted", "dry_run", "skipped", "failed"}
+    for label in allowed:
+        evidence_gc_total.inc(amount=1, result=label)
+    assert {key[0] for key in evidence_gc_total.series_keys()} <= allowed
+
+
+def test_dry_run_gc_is_labelled_apart_from_real_deletion():
+    """A rehearsal must never inflate the reclamation rate an operator alerts on."""
+    from app.metrics import evidence_gc_total
+
+    evidence_gc_total.inc(amount=7, result="dry_run")
+    assert evidence_gc_total.value(result="dry_run") == 7
+    assert evidence_gc_total.value(result="deleted") == 0
+
+
 def test_sync_rejection_codes_are_the_only_sync_label_vocabulary():
     """The aggregate must key on the stable vocabulary, not exception class names."""
     from typing import get_args

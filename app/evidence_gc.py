@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.metrics import evidence_gc_total
 from app.models import CanonicalItemChild, EvidenceBlob, EvidenceObjectGC, Organization, SyncEntity
 from app.settings import settings
 from app.storage import StorageError, store_for_provider
@@ -132,5 +133,23 @@ async def collect_due_evidence_gc(
                 retry.last_error = str(exc)[:1024]
                 await db.commit()
             failed += 1
+
+    # Counted once per run from the returned totals rather than at each of the three
+    # increment sites. Incrementing inline would be the obvious approach and it is
+    # wrong in a way that only shows up under failure: a new branch added later, or an
+    # exception path that skips a site, leaves the counter describing a run that did
+    # not happen. The totals here are the same numbers the caller already receives, so
+    # the metric cannot disagree with the return value.
+    #
+    # A `dry_run` reports what WOULD be deleted and increments the same `deleted`
+    # counter, so it is labelled separately rather than merged. Folding it in would
+    # inflate the reclamation rate -- which is the number an operator alerts on --
+    # purely by someone rehearsing a collection.
+    if deleted:
+        evidence_gc_total.inc(amount=deleted, result="dry_run" if dry_run else "deleted")
+    if skipped:
+        evidence_gc_total.inc(amount=skipped, result="skipped")
+    if failed:
+        evidence_gc_total.inc(amount=failed, result="failed")
 
     return GCResult(deleted=deleted, skipped=skipped, failed=failed)

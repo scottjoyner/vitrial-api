@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterable, AsyncIterator
 
 from fastapi import HTTPException
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
 from app.evidence_gc import queue_blob_gc
+from app.metrics import evidence_gc_total
+from app.metrics import object_store_operation_duration_seconds
 from app.models import CanonicalItemChild, EvidenceBlob, Organization
 from app.ownership import AuthorizationRejected, require_item_access
 from app.settings import settings
@@ -105,18 +108,33 @@ async def put_blob(
 
     store = current_store()
     new_key = object_key_for(principal.organization_id, document_id, expected_sha256)
+    # Timed at the store boundary, not around the handler, because this is a streamed
+    # write of up to 100 MiB: handler latency would fold in authorization and DB work
+    # and hide the object-store latency that actually dominates this route. Recorded in
+    # `finally` so a failed upload is still observed -- a store that times out or rejects
+    # is precisely when its latency is worth having.
+    _store_started = time.perf_counter()
     try:
-        stored = await store.put_verified(new_key, chunks, expected_sha256)
-    except EvidenceBlobTooLarge as exc:
-        raise HTTPException(413, "evidence blob exceeds configured upload limit") from exc
-    except StorageDigestMismatch as exc:
-        raise HTTPException(409, "content digest mismatch") from exc
-    except StorageError as exc:
-        # S3ObjectStore deliberately wraps arbitrary streaming failures after aborting
-        # multipart state. Preserve the size-limit semantic through that cleanup layer.
-        if isinstance(exc.__cause__, EvidenceBlobTooLarge):
+        try:
+            stored = await store.put_verified(new_key, chunks, expected_sha256)
+        except EvidenceBlobTooLarge as exc:
             raise HTTPException(413, "evidence blob exceeds configured upload limit") from exc
-        raise HTTPException(503, "evidence object storage unavailable") from exc
+        except StorageDigestMismatch as exc:
+            raise HTTPException(409, "content digest mismatch") from exc
+        except StorageError as exc:
+            # S3ObjectStore deliberately wraps arbitrary streaming failures after aborting
+            # multipart state. Preserve the size-limit semantic through that cleanup layer.
+            if isinstance(exc.__cause__, EvidenceBlobTooLarge):
+                raise HTTPException(413, "evidence blob exceeds configured upload limit") from exc
+            raise HTTPException(503, "evidence object storage unavailable") from exc
+    finally:
+        # One observation for every outcome, including each rejection branch. Splitting
+        # this across the except arms was the first attempt and it silently undercounts:
+        # a new exception arm added later would not be timed, and a store that reliably
+        # times out would look fast. `finally` makes coverage structural.
+        object_store_operation_duration_seconds.observe(
+            time.perf_counter() - _store_started, operation="put_verified"
+        )
 
     # Serialize only the canonical pointer switch with sync/tombstones. Concurrent uploads may
     # stream in parallel, but every published version sees the previous committed version and

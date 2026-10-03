@@ -241,9 +241,16 @@ Per #28, none of these are defects — they are unshipped commitments:
       mid-upload); `deploy.sh` awaits the replaced container and fails on non-zero exit.
       Proven by `tests/test_graceful_drain.py`, including two planted-defect controls.
       Commit `04a612d`. This was the one item whose absence was a real defect.
-- [ ] Metrics endpoint: request rate/latency/status, auth failures, sync accepted/rejected,
-      DB pool saturation, S3 latency, GC backlog, page sizes. Now unblocked by W6 —
-      rejections carry stable codes, so the counter has something stable to count.
+- [x] **Metrics endpoint** — `app/metrics.py` (hand-rolled Prometheus exposition, no new
+      dependency: the image is security-scanned and carries a live Dependabot advisory, so
+      a dep for ~120 lines is a poor trade). `GET /metrics` is `include_in_schema=False`
+      and gated on `require_admin_key`; route names + status classes + rejection codes are
+      reconnaissance even without a body. Request rate/latency/status by **route template**,
+      sync outcomes keyed on the stable W6 rejection codes, pool saturation (honest under
+      NullPool: reports 0, not the configured size), drain state, series-drop counter.
+      Commit `91434e0`, 22 tests, two planted-defect controls confirmed red.
+- [ ] Page-size distribution and S3/object-store latency histograms are declared in
+      `app/metrics.py` but not yet recorded at their call sites (evidence PUT, pull paging).
 - [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
 - [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
 - [ ] W3 follow-up: acceptance assertion so a mis-set trust proxy fails fast.
