@@ -83,8 +83,22 @@ async def collect_due_evidence_gc(
     deleted = skipped = failed = 0
     for row in rows:
         # Share the same organization lock used by sync publication and evidence pointer swaps.
-        # This prevents a collector from deleting the version an in-flight transaction is making
-        # canonical, while still allowing large uploads to stream without holding the lock.
+        #
+        # What this lock actually buys, stated precisely because the earlier comment here
+        # claimed more than it delivered: it serializes this DELETE against an upload's
+        # pointer SWITCH. It does NOT protect an upload's WRITE, because `put_blob`
+        # streams the object to storage BEFORE it takes this lock -- deliberately, so a
+        # 100 MiB upload does not hold a transaction and a connection for its duration.
+        #
+        # So there is a real window: an upload writes key K, and a collector holding this
+        # lock can delete K before the upload acquires it. Reachable because keys are
+        # content-addressed -- re-uploading byte-identical content reuses the key a
+        # superseded version used, which may still carry a pending GC row.
+        #
+        # `put_blob` closes it from the other side: under this same lock it cancels any
+        # pending GC row for the key it is about to publish, then verifies the object
+        # still exists before committing the pointer. The two locks are what make each
+        # side safe, which is why neither half is sufficient alone. See VITR-V007.
         await db.scalar(
             select(Organization).where(Organization.id == row.organization_id).with_for_update()
         )

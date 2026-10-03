@@ -4,14 +4,19 @@ import time
 from collections.abc import AsyncIterable, AsyncIterator
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
 from app.evidence_gc import queue_blob_gc
 from app.metrics import evidence_gc_total
 from app.metrics import object_store_operation_duration_seconds
-from app.models import CanonicalItemChild, EvidenceBlob, Organization
+from app.models import (
+    CanonicalItemChild,
+    EvidenceBlob,
+    EvidenceObjectGC,
+    Organization,
+)
 from app.ownership import AuthorizationRejected, require_item_access
 from app.settings import settings
 from app.storage import (
@@ -60,6 +65,32 @@ async def _evidence_metadata(
     if refresh:
         statement = statement.execution_options(populate_existing=True)
     return await db.scalar(statement)
+
+
+async def _cancel_gc_for_key(
+    db: AsyncSession,
+    organization_id: str,
+    storage_provider: str,
+    object_key: str,
+) -> int:
+    """Drop pending GC rows for a key that is being made canonical again.
+
+    Called while holding the organization row lock, which is the same lock the collector
+    takes before deleting. That mutual exclusion is what makes cancelling safe: the
+    collector either runs first (and `put_blob` then finds the object gone via
+    `store.exists`) or runs after (and finds no row to process).
+
+    Returns the number of rows cancelled, so a caller or test can observe whether there
+    was anything to cancel rather than assuming the repair happened.
+    """
+    result = await db.execute(
+        delete(EvidenceObjectGC).where(
+            EvidenceObjectGC.organization_id == organization_id,
+            EvidenceObjectGC.storage_provider == storage_provider,
+            EvidenceObjectGC.object_key == object_key,
+        )
+    )
+    return int(result.rowcount or 0)
 
 
 async def _discard_candidate(store, key: str, *, preserve: bool) -> None:
@@ -177,6 +208,28 @@ async def put_blob(
         raise HTTPException(409, "evidence ownership mismatch")
 
     canonical_item_id = model.item_id if model is not None else item_id
+
+    # Object keys are content-addressed, so re-uploading byte-identical content
+    # produces the SAME key a previous version used -- and that key may still have a
+    # pending GC row from when it was superseded. This upload is about to make it
+    # canonical again, so under the org lock (which the collector also takes) cancel
+    # that row. Without this the collector can delete the object between the write
+    # above and the commit below, and the client gets a 201 for an object that no
+    # longer exists. See VITR-V007 in the tracker for the full interleaving.
+    await _cancel_gc_for_key(db, principal.organization_id, store.provider, new_key)
+
+    # The collector may already have deleted the object before we acquired the lock --
+    # it holds the same row lock, so cancelling the row afterwards cannot undo a delete
+    # that already committed. Verify under the lock and fail loudly rather than commit
+    # a pointer to a missing object. One HEAD against a 100 MiB streamed upload is
+    # negligible, and the alternative is silent data loss.
+    if not await store.exists(new_key):
+        await db.rollback()
+        await _discard_candidate(store, new_key, preserve=candidate_is_canonical)
+        raise HTTPException(
+            503, "evidence object storage unavailable; retry the upload"
+        )
+
     try:
         await require_item_access(
             db,
