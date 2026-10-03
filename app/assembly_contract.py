@@ -190,7 +190,22 @@ def validate_configuration_assembly(payload: dict) -> AssemblySnapshotV1 | None:
         return None
     if not isinstance(raw, dict):
         raise ValueError("configuration assembly payload must be an object")
-    return AssemblySnapshotV1.model_validate(raw)
+    snapshot = AssemblySnapshotV1.model_validate(raw)
+    configuration_id = payload.get("id")
+    if isinstance(configuration_id, str):
+        if snapshot.renderDescriptor.configurationID != configuration_id:
+            raise ValueError("render descriptor configurationID does not match Configuration")
+        if snapshot.bom.configurationID != configuration_id:
+            raise ValueError("BOM configurationID does not match Configuration")
+
+    configuration_version = payload.get("version")
+    if isinstance(configuration_version, int) and not isinstance(configuration_version, bool):
+        if snapshot.renderDescriptor.configurationVersion != configuration_version:
+            raise ValueError("render descriptor configurationVersion does not match Configuration")
+        if snapshot.bom.configurationVersion != configuration_version:
+            raise ValueError("BOM configurationVersion does not match Configuration")
+
+    return snapshot
 
 
 def validate_quotation_line_design_snapshot(
@@ -201,4 +216,10 @@ def validate_quotation_line_design_snapshot(
         return None
     if not isinstance(raw, dict):
         raise ValueError("quotation line designSnapshot must be an object")
-    return QuotationAssemblyDesignSnapshotV1.model_validate(raw)
+    snapshot = QuotationAssemblyDesignSnapshotV1.model_validate(raw)
+    version_id = line.get("configurationVersionID")
+    if isinstance(version_id, str) and snapshot.configurationVersionID != version_id:
+        raise ValueError(
+            "quotation designSnapshot configurationVersionID does not match quotation line"
+        )
+    return snapshot
