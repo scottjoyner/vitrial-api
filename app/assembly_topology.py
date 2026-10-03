@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Literal
+import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -19,7 +20,7 @@ class StrictTopologyModel(BaseModel):
 
 
 class DimensionPayload(StrictTopologyModel):
-    value: float = Field(gt=0)
+    value: float = Field(gt=0, allow_inf_nan=False)
     unit: DimensionUnit = "cm"
 
     @property
@@ -133,8 +134,8 @@ def _validate_track_proportions(
         return
     if len(values) != expected_count:
         raise ValueError(f"invalid {axis} proportions: expected {expected_count} tracks")
-    if any(value <= 0 for value in values):
-        raise ValueError(f"invalid {axis} proportions: values must be positive")
+    if any(not math.isfinite(value) or value <= 0 for value in values):
+        raise ValueError(f"invalid {axis} proportions: values must be finite and positive")
     if abs(sum(values) - 1.0) > 1e-6:
         raise ValueError(f"invalid {axis} proportions: values must sum to 1")
 
