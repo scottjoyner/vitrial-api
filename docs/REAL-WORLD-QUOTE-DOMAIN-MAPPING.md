@@ -379,16 +379,20 @@ quotes or current authority.
 
 ## 12A. Cross-repo implementation evidence
 
-iOS draft PR #95 implements the first read-only experiment boundary described here:
+iOS PR #95 merged the first read-only experiment boundary described here:
 
 - deterministic real-quote assembly fixtures;
 - configuration-derived reference BOM output;
 - a shared customer/AR projection tied to the same configuration revision;
 - a tempered-glass final-measurement release assessment.
 
-No API entity, sync schema, capability, or delivery transition changes are introduced by that PR.
-Treat its output as experiment evidence until an API contract change is separately specified and
-accepted.
+iOS draft PR #98 adds an ephemeral scan/opening binding and RealityKit planar preview. It binds
+local scene placement to an explicit Item Measurement and the current ItemConfiguration, rejects
+measurement/configuration drift, and does not persist an Opening entity.
+
+No API entity, sync schema, capability, quotation authority, delivery transition, or production
+authority changes are introduced by either slice. Treat the scan/opening result as local experiment
+evidence until independent per-opening mutation/history proves a server-side entity is necessary.
 
 ## 13. Proposed read-only experiment before any schema change
 
