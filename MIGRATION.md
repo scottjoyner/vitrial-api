@@ -33,21 +33,41 @@ vocabulary, the UBS gate and branch-staleness audit) that came across.
 | --- | --- | --- |
 | `origin` | `astrix-group-accounts/server-api` | this repository |
 | `vitrial-source` | `../vitrial-api` (local path) | the source tree, kept so the two can be diffed |
-| `fork` | `nezter/vitrial-api` | carried over from the source clone; the local BEAM CI runner lives there |
+| `fork` | `nezter/vitrial-api` | carried over from the source clone. A public fork with no `beam/` tree; nothing here references it |
 | `up` | `scottjoyner/vitrial-api` | carried over from the source clone; upstream of the fork |
 
-`fork` and `up` name the *vitrial-api* repository, not this one. They are retained
-deliberately: `beam.yml` gates the BEAM build on the `nezter/vitrial-api` fork,
-which is the only one of the two that has a runner registered. Removing them would
-break the documented way to run the BEAM lane. Renaming them to say what they are
-is a reasonable follow-up, but it is a judgement call about which repository the
-fork relationship should point at, so it has not been made unilaterally.
+`fork` and `up` name the *vitrial-api* repository, not this one. Both are carried
+over from the source clone unchanged.
 
-## Not pushed
+> **Corrected 2026-10-03.** This section previously claimed that `beam.yml` gates
+> the BEAM build on the `nezter/vitrial-api` fork, "which is the only one of the
+> two that has a runner registered", and that removing the remotes "would break
+> the documented way to run the BEAM lane". Both claims were wrong.
+> `beam.yml` `actions/checkout`s **this** repository and runs `mix` inside
+> `beam/`; it never names the fork. The self-hosted runner (`beam-org-025`,
+> labels `self-hosted,Linux,X64,beam-ci`) is registered **here**, on
+> `astrix-group-accounts/server-api`, and is online. A code search for `nezter`
+> across this repository and `vitrialuminios-del-valle-ios` returns no hits.
+>
+> The practical consequence: these two remotes are decorative, not load-bearing.
+> Removing them breaks nothing in the BEAM lane.
 
-`main` is ahead of `origin/main` by the migration commits. Nothing has been pushed
-to `astrix-group-accounts/server-api`. Publishing to the organisation's repository
-is someone else's call, so it is left to them.
+## Published
+
+> **Corrected 2026-10-03.** This section previously read "Not pushed" — `main`
+> was ahead of `origin/main` by the migration commits, and publishing was
+> deliberately left to someone else. That is no longer the state.
+>
+> `main` is published to `astrix-group-accounts/server-api` and is **31 commits
+> ahead of** `scottjoyner/vitrial-api`'s `main`. The merge base of the two *is*
+> `scottjoyner/vitrial-api`'s `main`, so the organisation copy is a strict
+> fast-forward: there are no commits that exist only on the personal repository,
+> and nothing to reconcile.
+
+Note that "private" is currently a property of the repository setting rather than
+of the code: `scottjoyner/vitrial-api` is public and `nezter/vitrial-api` is a
+public fork of it, so this tree has been world-readable through both for as long as
+they have existed.
 
 ## What this repository is
 
@@ -69,7 +89,26 @@ thing here that contradicts the standing rule that nothing lands as a skeleton,
 and it came across with the migration rather than being created by it. Two
 options, both someone else's call: build them out, or drop the seven from the
 umbrella until there is code for them. `vitrial_web` is not purely inert — it has
-endpoint configuration in `beam/config/`.
+endpoint configuration in `beam/config/`, binding `VitrialWeb.Endpoint` to a
+Cowboy listener in `beam/config/{config,dev,prod,test}.exs`.
+
+> **Corrected 2026-10-03.** The framing above — that the scaffolds "contradict the
+> standing rule that nothing lands as a skeleton", leaving a binary choice to
+> build them out or drop them — no longer describes the repository. The scaffolds
+> are now governed in CI rather than carried as documentation debt:
+>
+> - `beam/apps/PLANNED_APPS.txt` is a declaration registry. Every scaffold must
+>   appear there naming the commit that created it and one sentence on what it is
+>   for, and `scripts/check_beam_scaffold.py` fails the build on any scaffold that
+>   is not declared. The registry is self-invalidating: once an app gains a real
+>   module or a real test its line must be deleted, and CI enforces that too.
+> - `beam/apps/ORPHAN_EXEMPT.txt` and `scripts/check_beam_orphans.py` fail the
+>   build on a module that nothing calls and no test names — so dead code cannot
+>   sit in the umbrella reading as finished.
+>
+> The standing rule is therefore machine-checked rather than merely asserted. The
+> remaining judgement is much narrower than "scaffold or no scaffold": it is
+> whether these seven are the right seven.
 
 The BEAM port is differential against the Python, not derived from it: the
 harnesses execute the real Python (its functions AST-lifted and run, or its real
