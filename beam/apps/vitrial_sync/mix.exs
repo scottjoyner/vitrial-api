@@ -10,6 +10,17 @@ defmodule VitrialSync.MixProject do
   # independently auditable ones. `mix new` writes them when the parent is an
   # umbrella; they are repeated here because dropping them silently reverts this
   # app to a private _build and a private mix.lock.
+  #
+  # `elixirc_paths` is the fifth path key, and for the same kind of reason. It is
+  # the only thing that puts `test/support/` on the compile path, which is where
+  # `VitrialSync.PythonReference` lives -- the wrapper that runs the Python
+  # parity oracle from `parity_oracle.py`. Without it that module is not
+  # compiled and the differential suite fails with
+  # `VitrialSync.PythonReference.load!/0 is undefined (module
+  # VitrialSync.PythonReference is not available)`, which reads like a typo
+  # rather than a missing project setting and lands the whole suite as a file
+  # nothing executes. `mix format --check-formatted` already covers
+  # `test/support/`, so format is not affected either way.
 
   def project do
     [
@@ -21,9 +32,16 @@ defmodule VitrialSync.MixProject do
       config_path: "../../config/config.exs",
       deps_path: "../../deps",
       lockfile: "../../mix.lock",
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps()
     ]
   end
+
+  # `test/support` is test-only. Compiling it into :dev or :prod would ship the
+  # oracle's `System.cmd` plumbing in a release, pointing at a reference tree
+  # that is not there.
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   def application do
     [

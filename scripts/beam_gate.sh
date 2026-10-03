@@ -11,6 +11,26 @@
 # green run here means the same thing a green CI run means. `:z` relabels for
 # SELinux; without it the bind mount is unreadable inside the container.
 #
+# ## The image, and why it is not just the pinned one
+#
+# `beam/Dockerfile.gate` builds the pinned hexpm/elixir image PLUS python3 and
+# pydantic. The differential harness under `test/support/` AST-lifts the Python
+# reference out of `app/` and executes it; in the bare pinned image there is no
+# python3, so the harness skips itself and `mix test` reports all-green with the
+# oracle skipped. A gate that skips its own oracle cannot fail, which is the
+# defect class this repository keeps closing. The image adds the ability to
+# execute the oracle and relaxes nothing.
+#
+# Set BEAM_IMAGE to override. Set BEAM_BASE_IMAGE_ONLY=1 to force the bare pinned
+# image — useful for proving the fallback path, and it will report the harness as
+# SKIPPED rather than silently pretending the oracle ran.
+#
+# ## The mount
+#
+# The repo ROOT is mounted, not just `beam/`, because the oracle reads `app/`
+# from outside the umbrella. Mounting only `beam/` makes `repo_root()` resolve to
+# `/` and the harness skips for a reason that looks like a code problem.
+#
 # Exit codes are the three steps' own, first failure wins:
 #   0  format clean, compiled with no warnings, all tests passed
 #   1  `mix format --check-formatted` found unformatted sources
@@ -23,14 +43,30 @@
 # guard cannot see one, so this step is not redundant with it.
 set -uo pipefail
 
-IMAGE="${BEAM_IMAGE:-docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim}"
-
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BEAM="$REPO/beam"
+GATE_IMAGE="server-api-beam-gate:local"
+BASE_IMAGE="docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim"
+
+IMAGE="${BEAM_IMAGE:-$GATE_IMAGE}"
 
 if [ ! -d "$BEAM" ]; then
   echo "beam gate: $BEAM does not exist" >&2
   exit 4
+fi
+
+# Build the gate image on demand. This is a cached layer after the first build,
+# so the common case is a no-op; the fallback exists because an offline host
+# should still get format + compile + test rather than nothing.
+if [ "${BEAM_BASE_IMAGE_ONLY:-0}" != "1" ] && [ -z "${BEAM_IMAGE:-}" ]; then
+  if ! podman image exists "$GATE_IMAGE" 2>/dev/null; then
+    echo "beam gate: building $GATE_IMAGE (first run only)" >&2
+    if ! podman build -q -t "$GATE_IMAGE" -f "$BEAM/Dockerfile.gate" "$REPO" >/dev/null 2>&1; then
+      echo "beam gate: could not build the gate image; falling back to $BASE_IMAGE." >&2
+      echo "beam gate: the differential harness will report itself SKIPPED." >&2
+      IMAGE="$BASE_IMAGE"
+    fi
+  fi
 fi
 
 if ! podman image exists "$IMAGE" 2>/dev/null; then
@@ -38,10 +74,11 @@ if ! podman image exists "$IMAGE" 2>/dev/null; then
   exit 4
 fi
 
+# -v "$REPO":/w — the repo root, so `app/` is reachable from inside.
 run_beam() {
   podman run --rm \
-    -v "$BEAM":/w:z \
-    -w /w \
+    -v "$REPO":/w:z \
+    -w /w/beam \
     "$IMAGE" \
     bash -c "$1"
 }
@@ -60,7 +97,8 @@ fi
 
 echo "beam gate: test"
 # The summary line is what a reader wants; `-q` keeps the rest out of the log
-# without hiding a failure, which prints its own traceback regardless.
+# without hiding a failure, which prints its own traceback regardless. The
+# harness's own SKIPPED/RUN banner goes to stderr and is preserved.
 if ! run_beam 'mix test 2>&1 | tail -40'; then
   echo "beam gate: FAILED at test (exit 3)" >&2
   exit 3

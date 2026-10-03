@@ -185,29 +185,107 @@ defmodule VitrialSync.CanonicalJSON do
 
   defp encode_value(value, path), do: raise(Unsupported, value: value, path: path)
 
-  # Python renders floats with `repr`, which is the shortest string that
-  # round-trips -- the same algorithm Erlang's `:short` uses, and the two agree on
-  # every value tested. They differ only in scientific notation:
+  # Python renders floats with `repr`. Both languages produce the same shortest
+  # round-tripping digit string -- Erlang's `:short` and CPython's `repr` use the
+  # same algorithm -- so the digits are not in question. What differs is the
+  # THRESHOLD at which each switches to scientific notation, and it is not the
+  # same threshold:
   #
-  #     Erlang [:short]   Python repr
-  #     1.0e22            1e+22
-  #     1.0e-5            1e-05
+  #     value         Erlang [:short]   Python repr
+  #     1.0e15        1.0e15            1000000000000000.0
+  #     1.0e16        1.0e16            1e+16
+  #     1.0e-4        0.0001            0.0001
+  #     1.0e-5        1.0e-5            1e-05
   #
-  # So: drop a trailing ".0" from an integral mantissa, and render the exponent
-  # with a mandatory sign and at least two digits. The magnitude at which Erlang
-  # switches to scientific notation already matches Python's.
+  # CPython switches when `decpt <= -4 or decpt > 16`, where `decpt` counts the
+  # digits before the decimal point. This used to assume -- and its comment said
+  # so -- that the magnitudes already matched, which they do not: 1.0e15 through
+  # 1.0e16 is a band where Erlang says `1e+15` and Python says
+  # `1000000000000000.0`, and 1.5e10 and every other value in [1e10, 1e16) with a
+  # fractional part sits in it too. The differential harness found this: a
+  # payload of `{"a": 1.5e10}` canonicalized to `{"a":1.5e+10}` here and
+  # `{"a":15000000000.0}` in `app/idempotency.py`.
+  #
+  # So the digits are taken from Erlang and the FORMAT decision is made here,
+  # against CPython's rule rather than Erlang's.
   defp float(value) do
-    case String.split(:erlang.float_to_binary(value, [:short]), "e") do
-      [fixed] ->
-        fixed
+    {sign, magnitude} = split_sign(:erlang.float_to_binary(value, [:short]))
+    {mantissa, exponent} = split_exponent(magnitude)
+    {digits, decpt} = split_point(mantissa, exponent)
 
-      [mantissa, exponent] ->
-        mantissa =
-          if String.ends_with?(mantissa, ".0"),
-            do: String.trim_trailing(mantissa, ".0"),
-            else: mantissa
+    if decpt <= -4 or decpt > 16 do
+      sign <> scientific(digits, decpt)
+    else
+      sign <> fixed(digits, decpt)
+    end
+  end
 
-        mantissa <> "e" <> python_exponent(exponent)
+  defp split_sign("-" <> rest), do: {"-", rest}
+  defp split_sign(rest), do: {"", rest}
+
+  defp split_exponent(magnitude) do
+    case String.split(magnitude, "e") do
+      [one] -> {one, 0}
+      [mantissa, exponent] -> {mantissa, String.to_integer(exponent)}
+    end
+  end
+
+  # `{digits, decpt}` where the value is `0.<digits> * 10^decpt`, which is the
+  # form CPython's own `format_float_short` reports and the form its `repr`
+  # threshold is written against. Leading zeros are left in place: stripping
+  # them would move the decimal point, and `fixed/2` does that itself where it
+  # is needed.
+  defp split_point(mantissa, exponent) do
+    {head, tail} =
+      case :binary.match(mantissa, ".") do
+        {position, 1} ->
+          {:binary.part(mantissa, 0, position),
+           :binary.part(mantissa, position + 1, byte_size(mantissa) - position - 1)}
+
+        :nomatch ->
+          {mantissa, ""}
+      end
+
+    {head <> tail, byte_size(head) + exponent}
+  end
+
+  defp fixed(digits, decpt) do
+    {digits, decpt} = strip_leading_zeros(digits, decpt)
+
+    cond do
+      decpt <= 0 ->
+        "0." <> String.duplicate("0", -decpt) <> digits
+
+      decpt >= byte_size(digits) ->
+        digits <> String.duplicate("0", decpt - byte_size(digits)) <> ".0"
+
+      true ->
+        binary_part(digits, 0, decpt) <>
+          "." <> binary_part(digits, decpt, byte_size(digits) - decpt)
+    end
+  end
+
+  defp strip_leading_zeros(<<0, rest::binary>>, decpt), do: strip_leading_zeros(rest, decpt - 1)
+  defp strip_leading_zeros(digits, decpt), do: {digits, decpt}
+
+  defp scientific(digits, decpt) do
+    trimmed = trim_trailing_zeros(digits)
+
+    mantissa =
+      case trimmed do
+        <<single>> -> <<single>>
+        <<first, rest::binary>> -> <<first, ?., rest::binary>>
+      end
+
+    mantissa <> "e" <> python_exponent(Integer.to_string(decpt - 1))
+  end
+
+  # `1.0e22` -> `1`, not `1.0`: Python's `repr` writes one digit before the point
+  # in scientific notation and the rest after it, whatever the digit string was.
+  defp trim_trailing_zeros(digits) do
+    case String.trim_trailing(digits, "0") do
+      "" -> "0"
+      trimmed -> trimmed
     end
   end
 

@@ -1,0 +1,29 @@
+# The BEAM gate's container, plus a Python the differential harness can use.
+#
+# Why this exists: `beam/apps/vitrial_sync/test/support/` contains a differential
+# harness that AST-lifts the Python reference out of `app/`, executes it, and
+# compares the answers against the Elixir. That harness is the only thing making
+# the parity claims in ARCHITECTURE.md §2.1 mean anything — but the pinned
+# hexpm/elixir slim image ships NO python3, so in that image the harness skips
+# itself and `mix test` reports 532 passed with 23 skipped. A gate that skips its
+# own oracle is a gate that cannot fail, which is the exact defect class this
+# repository has been closing all along.
+#
+# So the gate image is the pinned BEAM image plus python3 and pydantic. Nothing
+# else changes: same OTP, same Elixir, same Debian release, so the compile and
+# the 532 existing tests are the same tests the CI job runs. This ADDS the
+# ability to execute the oracle; it does not relax anything.
+#
+# Build:  podman build -t server-api-beam-gate:local -f beam/Dockerfile.gate .
+# The gate script builds this on demand and falls back to the base image with a
+# loud warning when it cannot, so an offline host still gets format+compile+test.
+FROM docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim
+
+# python3: the harness's interpreter. pydantic: the reference's own dependency,
+# and without it every oracle call fails in a way that looks like a parity
+# mismatch rather than a missing module.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-pip \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir --break-system-packages "pydantic>=2,<3"
