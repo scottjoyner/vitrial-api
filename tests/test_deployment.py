@@ -196,6 +196,64 @@ def test_edge_bounds_the_request_body_before_it_reaches_the_api():
         assert "max_size {$CADDY_MAX_REQUEST_BODY}" in caddyfile, name
 
 
+def test_both_caddyfiles_overwrite_x_forwarded_for_rather_than_append_to_it():
+    """The rate limiter trusts the left-most XFF entry, so the edge must OVERWRITE it.
+
+    Caddy appends the TCP peer to any client-supplied `X-Forwarded-For` by default. The
+    app reads the *left-most* entry (`app.rate_limit.client_key_for`), which under
+    append semantics is the attacker-controlled one -- so without `header_up
+    X-Forwarded-For {remote_host}` a caller sets `X-Forwarded-For: 1.2.3.4` and gets a
+    fresh rate-limit bucket per request, making the throttle a no-op.
+
+    Both files are asserted for the same reason as the body ceiling above: the smoke
+    file is the only Caddyfile CI ever boots, so a control that lived solely in the
+    production file would be exercised by nothing.
+    """
+    for name in ("Caddyfile", "Caddyfile.smoke"):
+        caddyfile = (ROOT / "deploy" / name).read_text(encoding="utf-8")
+        assert "header_up X-Forwarded-For {remote_host}" in caddyfile, (
+            f"{name} must overwrite X-Forwarded-For, not let Caddy append to it"
+        )
+
+
+def test_no_caddyfile_uses_a_placeable_that_preserves_client_supplied_xff():
+    """Reject the plausible-but-wrong forms, not just absence of the right one.
+
+    Asserting only that the correct directive is present would still pass on a file that
+    also carries `{http.request.header.X-Forwarded-For}`, which re-injects whatever the
+    client sent. Both spellings are "overwriting XFF" to a reader skimming a diff and
+    they have opposite security properties, so each is rejected explicitly.
+    """
+    for name in ("Caddyfile", "Caddyfile.smoke"):
+        caddyfile = (ROOT / "deploy" / name).read_text(encoding="utf-8")
+        for hostile in (
+            "{http.request.header.X-Forwarded-For}",
+            "{http.request.header.X-Forwarded-For>0}",
+        ):
+            assert hostile not in caddyfile, (
+                f"{name} re-injects the client-supplied header via {hostile}, "
+                "which is exactly the spoofing this control exists to prevent"
+            )
+
+
+def test_the_trusted_proxy_assumption_is_documented_where_the_rate_limiter_depends_on_it():
+    """The control above is an edge config; the dependency lives in Python.
+
+    If `client_key_for` is ever changed to prefer the peer address, the Caddy control
+    becomes decorative -- so the two ends are asserted to still agree. Pinning the
+    preference order here is what keeps the deployment change load-bearing rather than
+    cargo-culted.
+    """
+    source = (ROOT / "app" / "rate_limit.py").read_text(encoding="utf-8")
+    # Left-most XFF entry first, peer address only as fallback.
+    xff = source.index('request.headers.get("x-forwarded-for")')
+    peer = source.index("request.client")
+    assert xff < peer, (
+        "client_key_for must prefer the proxy-supplied XFF entry; if the order flips, "
+        "the Caddy header_up control no longer protects the throttle"
+    )
+
+
 def test_api_container_runs_a_single_worker_deliberately():
     """--workers multiplies the database connection budget, so it is not a knob.
 
