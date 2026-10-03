@@ -57,7 +57,7 @@ defmodule VitrialSync.Admission do
   id to retry anything that was rejected, not just a stale revision.
   """
 
-  alias VitrialSync.{Fingerprint, Payload, Record}
+  alias VitrialSync.{Authority, Canonical, Fingerprint, Payload, Record}
 
   defmodule Outcome do
     @moduledoc """

@@ -40,7 +40,7 @@ defmodule VitrialSync.Authority do
   (`app/sync_service.py:384-389`) catches exactly four classes and the five steps
   between them raise exactly those.
 
-  ## What `decide/5` returns on success
+  ## What `decide/6` returns on success
 
   The effects the caller has to apply inside the same transaction:
 
@@ -54,6 +54,21 @@ defmodule VitrialSync.Authority do
   The scope grant is what lets a batch create a parent and then a child that
   depends on it; the GC request is the row to insert in the same transaction as
   the tombstone. Nothing here writes, because a pure function cannot.
+
+  The type also carries an optional `:payload`, and `VitrialSync.Admission` --
+  not this module -- sets it: the decoded object rides along on the accept
+  effects so `VitrialSync.Batch` can build the canonical upsert without a
+  second decode. Authority never reads it and never sets it.
+
+  ## Which scope
+
+  `decide/6` takes the caller's `Canonical.Scope` and uses it for the authority
+  checks. `VitrialSync.Batch` threads its WORKING scope -- the entry scope
+  widened after each accepted create (`app/ownership.py:865`/`:884`) -- so a
+  record later in the batch is authorized against what the batch itself made
+  canonical. `decide/5` derives the scope from the principal, which is the
+  entry scope; it delegates, so the two arities cannot disagree about
+  anything else.
   """
 
   alias VitrialSync.{
@@ -68,10 +83,13 @@ defmodule VitrialSync.Authority do
   }
 
   @type effects :: %{
-          authority: :generic | :delivery,
-          plan: Ownership.Plan.t() | nil,
-          ownership: map() | nil,
-          evidence_gc: EvidenceGC.request() | nil
+          required(:authority) => :generic | :delivery,
+          required(:plan) => Ownership.Plan.t() | nil,
+          required(:ownership) => map() | nil,
+          required(:evidence_gc) => EvidenceGC.request() | nil,
+          # Set by `VitrialSync.Admission`, never by this module: the decoded
+          # payload riding along for `VitrialSync.Batch`'s canonical upsert.
+          optional(:payload) => VitrialSync.Payload.t() | nil
         }
 
   @doc """
@@ -103,8 +121,28 @@ defmodule VitrialSync.Authority do
         ) ::
           {:ok, effects()} | {:rejected, RejectionCode.t()}
   def decide(%Record{} = record, payload, current, principal, %Canonical.World{} = world) do
+    decide(record, payload, current, principal, Canonical.Scope.from_principal(principal), world)
+  end
+
+  @spec decide(
+          Record.t(),
+          map(),
+          Canonical.Entity.t() | nil,
+          Canonical.Principal.t(),
+          Canonical.Scope.t(),
+          Canonical.World.t()
+        ) ::
+          {:ok, effects()} | {:rejected, RejectionCode.t()}
+  def decide(
+        %Record{} = record,
+        payload,
+        current,
+        principal,
+        %Canonical.Scope{} = scope,
+        %Canonical.World{} = world
+      ) do
     with :ok <- step_item_delete_guard(record, world) do
-      case step_authority(record, payload, current, principal, world) do
+      case step_authority(record, payload, current, principal, scope, world) do
         {:ok, effects} ->
           case EvidenceGC.decide(record, world) do
             {:ok, request} -> {:ok, Map.put(effects, :evidence_gc, request)}
@@ -125,12 +163,12 @@ defmodule VitrialSync.Authority do
   end
 
   # Steps 6 and 7. `app/sync_service.py:334-374`.
-  defp step_authority(record, payload, current, principal, world) do
+  defp step_authority(record, payload, current, principal, scope, world) do
     with :ok <- step_lifecycle(record, payload, current, principal, world) do
       if Delivery.delivery_entity?(record.entity_type) do
-        delivery_authority(record, payload, current, principal, world)
+        delivery_authority(record, payload, current, principal, scope, world)
       else
-        generic_authority(record, payload, current, principal, world)
+        generic_authority(record, payload, current, principal, scope, world)
       end
     end
   end
@@ -145,9 +183,7 @@ defmodule VitrialSync.Authority do
     end
   end
 
-  defp delivery_authority(record, payload, current, principal, world) do
-    scope = Canonical.Scope.from_principal(principal)
-
+  defp delivery_authority(record, payload, current, principal, scope, world) do
     with {:ok, project_id} <-
            Delivery.authorize(
              record.entity_id,
@@ -171,8 +207,7 @@ defmodule VitrialSync.Authority do
     end
   end
 
-  defp generic_authority(record, payload, current, principal, world) do
-    scope = Canonical.Scope.from_principal(principal)
+  defp generic_authority(record, payload, current, principal, scope, world) do
     generic_entity_exists = not is_nil(current)
 
     with {:ok, plan} <-
