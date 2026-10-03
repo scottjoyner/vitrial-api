@@ -24,6 +24,8 @@ def v3_payload() -> dict:
         "kind": "planarGrid",
         "rowCount": 3,
         "columnCount": 1,
+        "rowProportions": [],
+        "columnProportions": [1.0],
         "cells": [
             {
                 "id": "v3-top",
@@ -71,6 +73,8 @@ def v4_payload() -> dict:
         "kind": "planarGrid",
         "rowCount": 2,
         "columnCount": 2,
+        "rowProportions": [],
+        "columnProportions": [],
         "cells": [
             {
                 "id": "v4-slide-left",
@@ -124,6 +128,8 @@ def v1_payload() -> dict:
         "kind": "corner",
         "rowCount": 0,
         "columnCount": 0,
+        "rowProportions": [],
+        "columnProportions": [],
         "cells": [],
         "cornerLegs": [
             {"id": "v1-leg-a", "length": {"value": 156, "unit": "cm"}, "sectionIDs": []},
@@ -206,6 +212,22 @@ def test_v1_corner_envelope_preserves_both_source_lengths_without_leaf_mapping_g
 def test_topology_is_not_a_v1_sync_entity_type():
     assert "assembly_topology" not in set(get_args(EntityType))
     assert "opening" not in set(get_args(EntityType))
+
+
+
+
+
+def test_track_proportions_must_match_grid_and_normalize():
+    payload = v4_payload()
+    payload["rowProportions"] = [0.5, 0.5]
+    payload["columnProportions"] = [0.7]
+
+    with pytest.raises(ValidationError, match="invalid column proportions"):
+        AssemblySectionTopologyEvidence.model_validate(payload)
+
+    payload["columnProportions"] = [0.7, 0.4]
+    with pytest.raises(ValidationError, match="must sum to 1"):
+        AssemblySectionTopologyEvidence.model_validate(payload)
 
 
 def test_planar_cells_cannot_escape_declared_grid():
