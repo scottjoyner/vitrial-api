@@ -420,6 +420,29 @@ The experiment therefore keeps `assembly_topology` and `opening` out of the V1 s
 including ownership, offline conflict behavior, revision/freeze semantics, and backward
 compatibility.
 
+## 12C. Operator-verified topology dimension experiment
+
+PR #68 merged the non-canonical topology evidence shape. Draft PR #69 adds the next pure
+verification seam without introducing persistence or authority.
+
+The experiment separates source facts from field verification:
+
+```text
+source topology evidence
+  + exact configuration geometry context
+  + operator dimensional verification
+  -> derived verified geometry
+```
+
+For planar assemblies, operator row heights and column widths must reconcile to the current opening
+dimensions. For corner assemblies, measured leg lengths must reconcile to the existing source-backed
+corner envelope, every configured section must be assigned exactly once, per-section widths must
+reconcile to each leg, and the corner junction angle must be explicitly verified.
+
+If field evidence differs from the current topology/configuration, the verifier fails closed. The
+result must flow through the existing Measurement -> Configuration revision path; the experiment
+does not mutate canonical records.
+
 ## 13. Proposed read-only experiment before any schema change
 
 Use Villa Camila fixtures to build a pure contract prototype that answers, for each quoted Item:
