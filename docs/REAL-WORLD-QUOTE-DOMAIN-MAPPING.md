@@ -394,6 +394,32 @@ No API entity, sync schema, capability, quotation authority, delivery transition
 authority changes are introduced by either slice. Treat the scan/opening result as local experiment
 evidence until independent per-opening mutation/history proves a server-side entity is necessary.
 
+## 12B. 2-D / corner topology experiment
+
+The next cross-repo evidence slice is intentionally still **non-canonical**.
+
+iOS stacked PR #100 introduces a read-only `AssemblySectionTopology` projection for the real
+Villa Camila V3, V4, and V1 cases. The API experiment in this branch mirrors that evidence shape
+with strict Pydantic validation and no route, database table, sync entity, or mutation surface.
+
+The evidence separates:
+
+- semantic topology (rows, columns, spans, corner legs);
+- exact Item/configuration revision identity;
+- source-backed constraints;
+- dimensional readiness;
+- missing dimensional evidence required before AR/fabrication geometry is safe.
+
+This is important because the source establishes relationships that the current flat section list
+cannot represent, but it does **not** provide every internal dimension. In particular, the
+experiment must not invent V3 internal panel heights, V4 row heights/upper-leaf widths, or the
+stored-section-to-corner-leg mapping for V1.
+
+The experiment therefore keeps `assembly_topology` and `opening` out of the V1 sync
+`EntityType` vocabulary. Promotion to canonical state requires the acceptance criteria below,
+including ownership, offline conflict behavior, revision/freeze semantics, and backward
+compatibility.
+
 ## 13. Proposed read-only experiment before any schema change
 
 Use Villa Camila fixtures to build a pure contract prototype that answers, for each quoted Item:
