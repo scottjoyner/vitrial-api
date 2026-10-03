@@ -2,6 +2,7 @@ defmodule VitrialSync.AuthorityTest do
   use ExUnit.Case, async: true
 
   alias VitrialSync.{Authority, Canonical, Ownership, Record}
+
   alias VitrialSync.Canonical.{
     Customer,
     Entity,
@@ -45,7 +46,9 @@ defmodule VitrialSync.AuthorityTest do
       world(
         customers: [%Customer{customer_id: "c1"}],
         projects: [%Project{project_id: "p1", customer_id: "c1"}],
-        project_sectors: [%ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}],
+        project_sectors: [
+          %ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}
+        ],
         items: [%Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1"}],
         item_children: [%ItemChild{entity_type: "evidence", entity_id: "e1", item_id: "i1"}],
         membership: %Membership{active: true, organization_id: "org", user_id: "u1"},
@@ -157,7 +160,12 @@ defmodule VitrialSync.AuthorityTest do
         item_world(
           item_children: [
             %ItemChild{entity_type: "evidence", entity_id: "e1", item_id: "i1"},
-            %ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1", deleted_at: @t0}
+            %ItemChild{
+              entity_type: "item_audit_event",
+              entity_id: "a1",
+              item_id: "i1",
+              deleted_at: @t0
+            }
           ]
         )
 
@@ -175,7 +183,12 @@ defmodule VitrialSync.AuthorityTest do
       only_audit =
         item_world(
           item_children: [
-            %ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1", deleted_at: @t0}
+            %ItemChild{
+              entity_type: "item_audit_event",
+              entity_id: "a1",
+              item_id: "i1",
+              deleted_at: @t0
+            }
           ]
         )
 
@@ -192,7 +205,9 @@ defmodule VitrialSync.AuthorityTest do
     test "the guard only ever looks at item tombstones" do
       guarded =
         item_world(
-          item_children: [%ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1"}]
+          item_children: [
+            %ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1"}
+          ]
         )
 
       assert {:rejected, "authorization_rejected"} =
@@ -343,7 +358,8 @@ defmodule VitrialSync.AuthorityTest do
   # ---------------------------------------------------------------------------
 
   describe "step 8: evidence GC, S-62" do
-    defp evidence_tombstone, do: record(%{entity_type: "evidence", entity_id: "e1", deleted_at: @t0})
+    defp evidence_tombstone,
+      do: record(%{entity_type: "evidence", entity_id: "e1", deleted_at: @t0})
 
     test "an evidence tombstone with a blob row enqueues the GC row" do
       with_blob =
@@ -416,7 +432,11 @@ defmodule VitrialSync.AuthorityTest do
             %EvidenceBlob{document_id: "e1", storage_provider: "s3", object_key: "org/e1.pdf"}
           ],
           entities: [
-            %Entity{entity_type: "measurement", entity_id: "m1", payload: %{"evidenceReferences" => ["e1"]}}
+            %Entity{
+              entity_type: "measurement",
+              entity_id: "m1",
+              payload: %{"evidenceReferences" => ["e1"]}
+            }
           ]
         )
 

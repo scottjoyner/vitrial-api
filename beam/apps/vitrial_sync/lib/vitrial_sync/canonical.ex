@@ -347,7 +347,10 @@ defmodule VitrialSync.Canonical do
   @doc "The `SyncEntity.payload_json` reading four call sites share."
   @spec payload_object(Entity.t() | nil) :: map() | nil
   def payload_object(nil), do: nil
-  def payload_object(%Entity{payload: payload}) when is_map(payload) and not is_struct(payload), do: payload
+
+  def payload_object(%Entity{payload: payload}) when is_map(payload) and not is_struct(payload),
+    do: payload
+
   def payload_object(%Entity{}), do: nil
 
   @doc """
@@ -430,7 +433,7 @@ defmodule VitrialSync.Canonical do
   defp references_evidence?(_payload, _evidence_id), do: false
 
   defp jsonb_array_contains?(values, evidence_id) when is_list(values) do
-    Enum.any?(values, &is_binary(&1) and &1 == evidence_id)
+    Enum.any?(values, &(is_binary(&1) and &1 == evidence_id))
   end
 
   defp jsonb_array_contains?(_values, _evidence_id), do: false

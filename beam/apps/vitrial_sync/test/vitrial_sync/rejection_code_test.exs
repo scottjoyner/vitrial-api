@@ -32,7 +32,9 @@ defmodule VitrialSync.RejectionCodeTest do
       # app/rejection_codes.py:57-59: `getattr(exc, "rejection_code", None)`
       # first. No exception in the current tree sets one, but the precedence is
       # part of the contract for when one does.
-      assert RejectionCode.for_exception("AuthorizationRejected", "delete_blocked") == "delete_blocked"
+      assert RejectionCode.for_exception("AuthorizationRejected", "delete_blocked") ==
+               "delete_blocked"
+
       assert RejectionCode.for_exception("SomethingNew", "delete_blocked") == "delete_blocked"
     end
 

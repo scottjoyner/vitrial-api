@@ -91,7 +91,11 @@ defmodule VitrialSync.EvidenceGC do
       {:ok, %{document_id: "e1", storage_provider: "s3", object_key: "org/e1.pdf", reason: "metadata_tombstone", grace_seconds: 86400}}
   """
   @spec decide(Record.t(), Canonical.World.t(), non_neg_integer()) :: {:ok, request() | nil}
-  def decide(%Record{} = record, %Canonical.World{} = world, grace_seconds \\ @default_grace_seconds) do
+  def decide(
+        %Record{} = record,
+        %Canonical.World{} = world,
+        grace_seconds \\ @default_grace_seconds
+      ) do
     if record.entity_type == @entity_type and not is_nil(record.deleted_at) do
       case Canonical.evidence_blob(world, record.entity_id) do
         nil ->

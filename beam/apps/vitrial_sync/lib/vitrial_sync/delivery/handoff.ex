@@ -61,21 +61,26 @@ defmodule VitrialSync.Delivery.Handoff do
   defp validated(_value, {:error, _message} = error), do: error
 
   @materials_frozen MapSet.new([
-                 "procurement",
-                 "production",
-                 "readyForInstallation",
-                 "scheduled",
-                 "installed",
-                 "complete"
-               ])
+                      "procurement",
+                      "production",
+                      "readyForInstallation",
+                      "scheduled",
+                      "installed",
+                      "complete"
+                    ])
   @procurement_frozen MapSet.new([
-                  "production",
-                  "readyForInstallation",
-                  "scheduled",
-                  "installed",
-                  "complete"
-                ])
-  @procurement_requirement_statuses MapSet.new(["unconfirmed", "ordered", "shortage", "available"])
+                        "production",
+                        "readyForInstallation",
+                        "scheduled",
+                        "installed",
+                        "complete"
+                      ])
+  @procurement_requirement_statuses MapSet.new([
+                                      "unconfirmed",
+                                      "ordered",
+                                      "shortage",
+                                      "available"
+                                    ])
   @production_frozen MapSet.new(["readyForInstallation", "scheduled", "installed", "complete"])
   @production_step_statuses MapSet.new(["pending", "inProgress", "complete"])
   @installation_editable MapSet.new(["readyForInstallation", "scheduled"])
@@ -83,9 +88,15 @@ defmodule VitrialSync.Delivery.Handoff do
 
   @pre_production MapSet.new(["engineeringReview", "materialsRequired", "procurement"])
 
-  @materials_messages {"delivery materials plan provenance is incomplete", "delivery materials plan organization is invalid", "delivery materials plan does not match authenticated provenance"}
-  @procurement_messages {"delivery procurement plan provenance is incomplete", "delivery procurement plan organization is invalid", "delivery procurement plan does not match authenticated provenance"}
-  @production_messages {"delivery production plan provenance is incomplete", "delivery production plan organization is invalid", "delivery production plan does not match authenticated provenance"}
+  @materials_messages {"delivery materials plan provenance is incomplete",
+                       "delivery materials plan organization is invalid",
+                       "delivery materials plan does not match authenticated provenance"}
+  @procurement_messages {"delivery procurement plan provenance is incomplete",
+                         "delivery procurement plan organization is invalid",
+                         "delivery procurement plan does not match authenticated provenance"}
+  @production_messages {"delivery production plan provenance is incomplete",
+                        "delivery production plan organization is invalid",
+                        "delivery production plan does not match authenticated provenance"}
 
   @doc "`MATERIALS_FROZEN_STATUSES`, `app/delivery_execution.py:44-51`."
   @spec materials_frozen_statuses() :: MapSet.t(String.t())
@@ -127,10 +138,17 @@ defmodule VitrialSync.Delivery.Handoff do
 
     cond do
       MapSet.member?(@materials_frozen, current_status) ->
-        freeze(plan, current_plan, "delivery materials plan is immutable after Procurement starts")
+        freeze(
+          plan,
+          current_plan,
+          "delivery materials plan is immutable after Procurement starts"
+        )
 
       current_status == "engineeringReview" ->
-        reject_unless_nil(plan, "enter Materials Required before authoring the delivery materials plan")
+        reject_unless_nil(
+          plan,
+          "enter Materials Required before authoring the delivery materials plan"
+        )
 
       current_status != "materialsRequired" ->
         :ok
@@ -141,8 +159,7 @@ defmodule VitrialSync.Delivery.Handoff do
             {:error, "save a delivery materials plan before starting Procurement"}
 
           not Value.py_eq?(plan, current_plan) ->
-            {:error,
-             "delivery materials plan must be saved before the Procurement transition"}
+            {:error, "delivery materials plan must be saved before the Procurement transition"}
 
           true ->
             :ok
@@ -174,9 +191,14 @@ defmodule VitrialSync.Delivery.Handoff do
 
   defp validate_materials_plan(plan, principal) do
     with :ok <- positive_revision(plan, "delivery materials plan"),
-         :ok <- required_string(plan, "updatedAt", "delivery materials plan updatedAt is required"),
+         :ok <-
+           required_string(plan, "updatedAt", "delivery materials plan updatedAt is required"),
          {:ok, requirements} <-
-           non_empty_list(plan, "requirements", "delivery materials plan requires at least one material"),
+           non_empty_list(
+             plan,
+             "requirements",
+             "delivery materials plan requires at least one material"
+           ),
          {:ok, _seen} <- unique_ids(requirements, "id", "delivery material requirement"),
          :ok <- materials_requirements(requirements) do
       validated(plan, Provenance.check(plan, principal, false, @materials_messages))
@@ -185,9 +207,15 @@ defmodule VitrialSync.Delivery.Handoff do
 
   defp materials_requirements(requirements) do
     Enum.reduce_while(requirements, :ok, fn requirement, :ok ->
-      with :ok <- required_string(requirement, "description", "delivery material description is required"),
+      with :ok <-
+             required_string(
+               requirement,
+               "description",
+               "delivery material description is required"
+             ),
            :ok <- required_string(requirement, "unit", "delivery material unit is required"),
-           {:ok, quantity} <- decimal(Map.get(requirement, "quantity"), "delivery material quantity"),
+           {:ok, quantity} <-
+             decimal(Map.get(requirement, "quantity"), "delivery material quantity"),
            :ok <- optional_string(requirement, "note", "delivery material note is invalid") do
         if Decimal.positive?(quantity) do
           {:cont, :ok}
@@ -205,9 +233,14 @@ defmodule VitrialSync.Delivery.Handoff do
   @doc "`_validate_procurement_handoff`, `app/delivery_execution.py:452-544`."
   @spec procurement(map(), map() | nil, map(), String.t()) :: :ok | {:error, String.t()}
   def procurement(payload, current_payload, principal, status) do
-    with {:ok, materials_plan} <- validate_materials_plan(Map.get(payload, "materialsPlan"), principal),
+    with {:ok, materials_plan} <-
+           validate_materials_plan(Map.get(payload, "materialsPlan"), principal),
          {:ok, plan} <-
-           validate_procurement_plan(Map.get(payload, "procurementPlan"), materials_plan, principal),
+           validate_procurement_plan(
+             Map.get(payload, "procurementPlan"),
+             materials_plan,
+             principal
+           ),
          :ok <- procurement_stage(plan, status),
          {:ok, current_plan} <- current_procurement_plan(current_payload, principal) do
       procurement_transition(payload, plan, current_payload, current_plan, status, principal)
@@ -265,10 +298,17 @@ defmodule VitrialSync.Delivery.Handoff do
 
     cond do
       MapSet.member?(@procurement_frozen, current_status) ->
-        freeze(plan, current_plan, "delivery procurement plan is immutable after Production starts")
+        freeze(
+          plan,
+          current_plan,
+          "delivery procurement plan is immutable after Production starts"
+        )
 
       MapSet.member?(@pre_production, current_status) ->
-        reject_unless_nil(plan, "enter Procurement before authoring delivery procurement readiness")
+        reject_unless_nil(
+          plan,
+          "enter Procurement before authoring delivery procurement readiness"
+        )
 
       current_status != "procurement" ->
         :ok
@@ -279,8 +319,7 @@ defmodule VitrialSync.Delivery.Handoff do
             {:error, "save delivery procurement readiness before starting Production"}
 
           not Value.py_eq?(plan, current_plan) ->
-            {:error,
-             "delivery procurement plan must be saved before the Production transition"}
+            {:error, "delivery procurement plan must be saved before the Production transition"}
 
           true ->
             require_production_ready(plan)
@@ -320,9 +359,14 @@ defmodule VitrialSync.Delivery.Handoff do
              materials_plan,
              "delivery procurement plan materials revision does not match frozen materials"
            ),
-         :ok <- required_string(plan, "updatedAt", "delivery procurement plan updatedAt is required"),
+         :ok <-
+           required_string(plan, "updatedAt", "delivery procurement plan updatedAt is required"),
          {:ok, requirements} <-
-           non_empty_list(plan, "requirements", "delivery procurement plan requires every frozen material") do
+           non_empty_list(
+             plan,
+             "requirements",
+             "delivery procurement plan requires every frozen material"
+           ) do
       frozen = frozen_materials(materials_plan)
 
       with {:ok, _seen} <- procurement_requirements(requirements, frozen),
@@ -345,7 +389,7 @@ defmodule VitrialSync.Delivery.Handoff do
   # CI job runs, so a clause no caller can reach is a red build, not a style note.
   defp frozen_materials(materials_plan) do
     Enum.reduce(List.wrap(Map.get(materials_plan, "requirements") || []), %{}, fn requirement,
-                                                                                   acc ->
+                                                                                  acc ->
       case Value.normalized(Map.get(requirement, "id")) do
         nil -> acc
         id -> Map.put(acc, id, requirement)
@@ -371,12 +415,21 @@ defmodule VitrialSync.Delivery.Handoff do
 
   defp procurement_requirement(requirement, frozen) do
     with {:ok, id} <-
-           required_id(requirement, "requirementID", "delivery procurement requirement id is required"),
+           required_id(
+             requirement,
+             "requirementID",
+             "delivery procurement requirement id is required"
+           ),
          :ok <- require_frozen_material(id, frozen),
          :ok <- valid_procurement_status(requirement),
          :ok <- valid_lead_time(requirement),
          :ok <- valid_expected_availability(requirement),
-         :ok <- optional_string(requirement, "note", "delivery procurement requirement note is invalid") do
+         :ok <-
+           optional_string(
+             requirement,
+             "note",
+             "delivery procurement requirement note is invalid"
+           ) do
       shortage = valid_shortage(requirement, frozen, id)
       if shortage == :ok, do: {:ok, id}, else: shortage
     end
@@ -415,8 +468,13 @@ defmodule VitrialSync.Delivery.Handoff do
   # `if expected_available_at is not None and _normalized(expected_available_at) is None`
   defp valid_expected_availability(requirement) do
     case Map.get(requirement, "expectedAvailableAt") do
-      nil -> :ok
-      value -> if is_nil(Value.normalized(value)), do: {:error, "delivery procurement expected availability is invalid"}, else: :ok
+      nil ->
+        :ok
+
+      value ->
+        if is_nil(Value.normalized(value)),
+          do: {:error, "delivery procurement expected availability is invalid"},
+          else: :ok
     end
   end
 
@@ -455,9 +513,14 @@ defmodule VitrialSync.Delivery.Handoff do
     missing = MapSet.difference(expected, seen)
 
     cond do
-      MapSet.equal?(seen, expected) -> :ok
-      MapSet.size(missing) > 0 -> {:error, "delivery procurement plan is missing frozen material requirements"}
-      true -> {:error, "delivery procurement plan requirements do not match frozen materials"}
+      MapSet.equal?(seen, expected) ->
+        :ok
+
+      MapSet.size(missing) > 0 ->
+        {:error, "delivery procurement plan is missing frozen material requirements"}
+
+      true ->
+        {:error, "delivery procurement plan requirements do not match frozen materials"}
     end
   end
 
@@ -527,7 +590,11 @@ defmodule VitrialSync.Delivery.Handoff do
 
     cond do
       MapSet.member?(@production_frozen, current_status) ->
-        freeze(plan, current_plan, "delivery production plan is immutable after Ready for Installation")
+        freeze(
+          plan,
+          current_plan,
+          "delivery production plan is immutable after Ready for Installation"
+        )
 
       MapSet.member?(@pre_production, current_status) ->
         reject_unless_nil(plan, "enter Production before authoring delivery production work")
@@ -584,9 +651,14 @@ defmodule VitrialSync.Delivery.Handoff do
                procurement_plan,
                "delivery production plan procurement revision does not match frozen procurement"
              ),
-           :ok <- required_string(plan, "updatedAt", "delivery production plan updatedAt is required"),
+           :ok <-
+             required_string(plan, "updatedAt", "delivery production plan updatedAt is required"),
            {:ok, steps} <-
-             non_empty_list(plan, "steps", "delivery production plan requires at least one production step"),
+             non_empty_list(
+               plan,
+               "steps",
+               "delivery production plan requires at least one production step"
+             ),
            {:ok, _seen} <- unique_ids(steps, "id", "delivery production step"),
            :ok <- production_steps(steps) do
         validated(plan, Provenance.check(plan, principal, false, @production_messages))
@@ -657,7 +729,8 @@ defmodule VitrialSync.Delivery.Handoff do
     cond do
       status in ["engineeringReview", "materialsRequired", "procurement", "production"] and
           not is_nil(schedule) ->
-        {:error, "delivery installation schedule can only be authored after Production is complete"}
+        {:error,
+         "delivery installation schedule can only be authored after Production is complete"}
 
       status in ["scheduled", "installed", "complete"] and is_nil(schedule) ->
         {:error, "save delivery installation schedule before moving work to Scheduled"}
@@ -757,7 +830,8 @@ defmodule VitrialSync.Delivery.Handoff do
             {:error, "delivery installation schedule is immutable after installation is recorded"}
 
           not Value.py_eq?(completion, current_completion) ->
-            {:error, "delivery installation completion is immutable after installation is recorded"}
+            {:error,
+             "delivery installation completion is immutable after installation is recorded"}
 
           not Value.py_eq?(closeout, current_closeout) ->
             {:error, "delivery closeout is immutable after delivery is Complete"}
@@ -801,7 +875,12 @@ defmodule VitrialSync.Delivery.Handoff do
         :ok
 
       true ->
-        scheduled_transition(payload, schedule, completion, current_schedule, current_completion,
+        scheduled_transition(
+          payload,
+          schedule,
+          completion,
+          current_schedule,
+          current_completion,
           principal
         )
     end
@@ -1020,12 +1099,24 @@ defmodule VitrialSync.Delivery.Handoff do
                  "delivery installation schedule production revision does not match frozen Production"
                ),
              :ok <-
-               required_string(schedule, "scheduledFor", "delivery installation scheduledFor is required"),
-             :ok <- required_string(schedule, "updatedAt", "delivery installation schedule updatedAt is required"),
+               required_string(
+                 schedule,
+                 "scheduledFor",
+                 "delivery installation scheduledFor is required"
+               ),
+             :ok <-
+               required_string(
+                 schedule,
+                 "updatedAt",
+                 "delivery installation schedule updatedAt is required"
+               ),
              :ok <- validate_installer_assignment(Map.get(schedule, "installerAssignment")),
              :ok <-
                optional_string(schedule, "note", "delivery installation schedule note is invalid") do
-          validated(schedule, Provenance.check(schedule, principal, false, installation_messages("schedule")))
+          validated(
+            schedule,
+            Provenance.check(schedule, principal, false, installation_messages("schedule"))
+          )
         end
     end
   end
@@ -1096,13 +1187,29 @@ defmodule VitrialSync.Delivery.Handoff do
                "delivery installation completion schedule revision does not match saved schedule"
              ),
            :ok <-
-             required_string(completion, "completedAt", "delivery installation completedAt is required"),
+             required_string(
+               completion,
+               "completedAt",
+               "delivery installation completedAt is required"
+             ),
            :ok <-
-             required_string(completion, "updatedAt", "delivery installation completion updatedAt is required"),
-           :ok <- optional_string(completion, "note", "delivery installation completion note is invalid"),
+             required_string(
+               completion,
+               "updatedAt",
+               "delivery installation completion updatedAt is required"
+             ),
+           :ok <-
+             optional_string(
+               completion,
+               "note",
+               "delivery installation completion note is invalid"
+             ),
            {:ok, _references} <-
              validated_references(Map.get(completion, "evidenceReferences"), "completion", true) do
-        validated(completion, Provenance.check(completion, principal, false, installation_messages("completion")))
+        validated(
+          completion,
+          Provenance.check(completion, principal, false, installation_messages("completion"))
+        )
       end
     end
   end
@@ -1134,14 +1241,18 @@ defmodule VitrialSync.Delivery.Handoff do
       {:error, "delivery closeout completion revision does not match installed completion"}
     else
       with :ok <- required_string(closeout, "closedAt", "delivery closeout closedAt is required"),
-           :ok <- required_string(closeout, "updatedAt", "delivery closeout updatedAt is required"),
+           :ok <-
+             required_string(closeout, "updatedAt", "delivery closeout updatedAt is required"),
            :ok <- optional_string(closeout, "note", "delivery closeout note is invalid"),
            {:ok, references} <-
              validated_references(Map.get(closeout, "evidenceReferences"), "closeout", false) do
         if references == [] and is_nil(Value.normalized(Map.get(closeout, "note"))) do
           {:error, "delivery closeout requires a final note or at least one evidence reference"}
         else
-          validated(closeout, Provenance.check(closeout, principal, false, installation_messages("closeout")))
+          validated(
+            closeout,
+            Provenance.check(closeout, principal, false, installation_messages("closeout"))
+          )
         end
       end
     end
@@ -1198,7 +1309,6 @@ defmodule VitrialSync.Delivery.Handoff do
   # shared field helpers
   # ---------------------------------------------------------------------------
 
-  
   defp freeze(proposed, current, message) do
     if Value.py_ne?(proposed, current), do: {:error, message}, else: :ok
   end

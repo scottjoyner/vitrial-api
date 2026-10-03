@@ -60,14 +60,17 @@ defmodule VitrialSync.EvidenceGCTest do
       world = %Canonical.World{evidence_blobs: [blob()]}
 
       for type <- ["customer", "item", "measurement", "quotation", "delivery_execution"] do
-        assert EvidenceGC.decide(record(%{entity_type: type, deleted_at: "t"}), world) == {:ok, nil},
+        assert EvidenceGC.decide(record(%{entity_type: type, deleted_at: "t"}), world) ==
+                 {:ok, nil},
                type
       end
     end
 
     test "a blob belonging to a different document is not used" do
       world = %Canonical.World{
-        evidence_blobs: [%EvidenceBlob{document_id: "e2", storage_provider: "s3", object_key: "k"}]
+        evidence_blobs: [
+          %EvidenceBlob{document_id: "e2", storage_provider: "s3", object_key: "k"}
+        ]
       }
 
       assert EvidenceGC.decide(record(deleted_at: "t"), world) == {:ok, nil}

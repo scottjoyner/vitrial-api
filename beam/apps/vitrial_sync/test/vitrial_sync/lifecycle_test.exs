@@ -46,7 +46,13 @@ defmodule VitrialSync.LifecycleTest do
   end
 
   defp decide(record, payload, current_row \\ nil, principal_arg \\ nil, world \\ nil) do
-    Lifecycle.decide(record, payload, principal_arg, current_row, world || Canonical.empty_world())
+    Lifecycle.decide(
+      record,
+      payload,
+      principal_arg,
+      current_row,
+      world || Canonical.empty_world()
+    )
   end
 
   # --- blocker fixtures -------------------------------------------------------
@@ -67,7 +73,13 @@ defmodule VitrialSync.LifecycleTest do
   end
 
   defp blocker_updated(overrides \\ %{}) do
-    %{"id" => "e2", "kind" => "updated", "blockerID" => "b1", "itemID" => "i1", "description" => "changed"}
+    %{
+      "id" => "e2",
+      "kind" => "updated",
+      "blockerID" => "b1",
+      "itemID" => "i1",
+      "description" => "changed"
+    }
     |> Map.merge(provenance())
     |> Map.merge(overrides)
   end
@@ -220,12 +232,18 @@ defmodule VitrialSync.LifecycleTest do
     end
 
     test "an unknown event kind is refused" do
-      assert decide(blocker_record(), blocker_payload([blocker_created(%{"kind" => "escalated"})])) ==
+      assert decide(
+               blocker_record(),
+               blocker_payload([blocker_created(%{"kind" => "escalated"})])
+             ) ==
                {:rejected, "lifecycle_rejected", "blocker event kind is invalid"}
     end
 
     test "every event must carry the blocker's own identity" do
-      assert decide(blocker_record(), blocker_payload([blocker_created(%{"blockerID" => "other"})])) ==
+      assert decide(
+               blocker_record(),
+               blocker_payload([blocker_created(%{"blockerID" => "other"})])
+             ) ==
                {:rejected, "lifecycle_rejected", "blocker event identity is invalid"}
 
       assert decide(blocker_record(), blocker_payload([blocker_created(%{"itemID" => "other"})])) ==
@@ -264,15 +282,20 @@ defmodule VitrialSync.LifecycleTest do
       # `previous_snapshot` is the *immediately preceding* event, whatever its
       # kind, and the six snapshot fields are the material ones. An update that
       # restates the previous event's description is a no-op and is refused.
-      assert decide(blocker_record(), blocker_payload([blocker_created(), blocker_updated()])) == :ok
+      assert decide(blocker_record(), blocker_payload([blocker_created(), blocker_updated()])) ==
+               :ok
 
       no_change = blocker_updated(%{"description" => "waiting on steel"})
+
       assert decide(blocker_record(), blocker_payload([blocker_created(), no_change])) ==
-               {:rejected, "lifecycle_rejected", "blocker updated event must record a material field change"}
+               {:rejected, "lifecycle_rejected",
+                "blocker updated event must record a material field change"}
 
       unchanged = blocker_created(%{"id" => "e0", "description" => "changed"})
+
       assert decide(blocker_record(), blocker_payload([unchanged, blocker_updated()])) ==
-               {:rejected, "lifecycle_rejected", "blocker updated event must record a material field change"}
+               {:rejected, "lifecycle_rejected",
+                "blocker updated event must record a material field change"}
     end
 
     test "resolving before creation is refused" do
@@ -302,7 +325,8 @@ defmodule VitrialSync.LifecycleTest do
       resolved = blocker_created(%{"id" => "e2", "kind" => "resolved"})
 
       assert decide(blocker_record(), blocker_payload([blocker_created(), resolved])) ==
-               {:rejected, "lifecycle_rejected", "blocker status does not match lifecycle history"}
+               {:rejected, "lifecycle_rejected",
+                "blocker status does not match lifecycle history"}
     end
 
     test "the payload status must equal the state the history reaches" do
@@ -310,7 +334,8 @@ defmodule VitrialSync.LifecycleTest do
         blocker_payload([blocker_created()], %{"status" => "resolved", "resolvedAt" => @now})
 
       assert decide(blocker_record(), payload) ==
-               {:rejected, "lifecycle_rejected", "blocker status does not match lifecycle history"}
+               {:rejected, "lifecycle_rejected",
+                "blocker status does not match lifecycle history"}
     end
   end
 
@@ -319,7 +344,8 @@ defmodule VitrialSync.LifecycleTest do
       event = blocker_created(%{"description" => "event description"})
 
       assert decide(blocker_record(), blocker_payload([event], %{"description" => "payload"})) ==
-               {:rejected, "lifecycle_rejected", "blocker latest event description does not match snapshot"}
+               {:rejected, "lifecycle_rejected",
+                "blocker latest event description does not match snapshot"}
     end
 
     test "a field the last event omits is not compared at all" do
@@ -332,7 +358,12 @@ defmodule VitrialSync.LifecycleTest do
     end
 
     test "the six snapshot keys are the ones checked" do
-      event = blocker_created(%{"responsiblePerson" => "ada", "vendorSupplier" => "acme", "critical" => true})
+      event =
+        blocker_created(%{
+          "responsiblePerson" => "ada",
+          "vendorSupplier" => "acme",
+          "critical" => true
+        })
 
       payload =
         blocker_payload([event], %{
@@ -342,7 +373,8 @@ defmodule VitrialSync.LifecycleTest do
         })
 
       assert decide(blocker_record(), payload) ==
-               {:rejected, "lifecycle_rejected", "blocker latest event responsiblePerson does not match snapshot"}
+               {:rejected, "lifecycle_rejected",
+                "blocker latest event responsiblePerson does not match snapshot"}
     end
 
     test "critical is compared as a value, so 1 satisfies true" do
@@ -364,7 +396,8 @@ defmodule VitrialSync.LifecycleTest do
     test "an existing history cannot be rewritten" do
       stored = blocker_row(blocker_payload([blocker_created(), blocker_updated()]))
 
-      rewritten = blocker_payload([blocker_created(), blocker_updated(%{"description" => "quietly"})])
+      rewritten =
+        blocker_payload([blocker_created(), blocker_updated(%{"description" => "quietly"})])
 
       assert decide(blocker_record(), rewritten, stored) ==
                {:rejected, "lifecycle_rejected", "blocker history is immutable"}
@@ -378,7 +411,13 @@ defmodule VitrialSync.LifecycleTest do
     end
 
     test "an empty canonical history is not malformed, because `or []` applies" do
-      stored = blocker_row(%{"events" => nil, "status" => "open", "description" => "d", "itemID" => "i1"})
+      stored =
+        blocker_row(%{
+          "events" => nil,
+          "status" => "open",
+          "description" => "d",
+          "itemID" => "i1"
+        })
 
       assert decide(blocker_record(), blocker_payload([blocker_created()]), stored) == :ok
     end
@@ -386,14 +425,19 @@ defmodule VitrialSync.LifecycleTest do
     test "appending is allowed" do
       stored = blocker_row(blocker_payload([blocker_created()]))
 
-      assert decide(blocker_record(), blocker_payload([blocker_created(), blocker_updated()]), stored) ==
+      assert decide(
+               blocker_record(),
+               blocker_payload([blocker_created(), blocker_updated()]),
+               stored
+             ) ==
                :ok
     end
 
     test "the appended tail, and only the tail, must carry current provenance (S-120)" do
       stored = blocker_row(blocker_payload([blocker_created()]))
 
-      stale = blocker_payload([blocker_created(), blocker_updated(%{"authorizationRevision" => 3})])
+      stale =
+        blocker_payload([blocker_created(), blocker_updated(%{"authorizationRevision" => 3})])
 
       assert decide(blocker_record(), stale, stored, principal()) ==
                {:rejected, "lifecycle_rejected",
@@ -408,7 +452,9 @@ defmodule VitrialSync.LifecycleTest do
 
     test "a protected-field change with no appended event is refused" do
       stored =
-        blocker_row(blocker_payload([blocker_created(), blocker_updated()], %{"critical" => true}))
+        blocker_row(
+          blocker_payload([blocker_created(), blocker_updated()], %{"critical" => true})
+        )
 
       unchanged_history = blocker_payload([blocker_created(), blocker_updated()])
 
@@ -418,7 +464,9 @@ defmodule VitrialSync.LifecycleTest do
 
     test "restating the same protected fields with no append is allowed" do
       stored =
-        blocker_row(blocker_payload([blocker_created(), blocker_updated()], %{"critical" => true}))
+        blocker_row(
+          blocker_payload([blocker_created(), blocker_updated()], %{"critical" => true})
+        )
 
       same = blocker_payload([blocker_created(), blocker_updated()], %{"critical" => true})
 
@@ -488,7 +536,12 @@ defmodule VitrialSync.LifecycleTest do
     test "sent is reachable from the draft closure, and only once" do
       # The state set starts as {draft}; its no-event closure is {draft, ready},
       # which is what makes a first `sent` legal without any earlier event.
-      assert decide(quotation_record(), quote_payload("sent", [quote_event("e1", "sent")]), nil, principal()) ==
+      assert decide(
+               quotation_record(),
+               quote_payload("sent", [quote_event("e1", "sent")]),
+               nil,
+               principal()
+             ) ==
                :ok
 
       twice = [quote_event("e1", "sent"), quote_event("e2", "sent")]
@@ -503,17 +556,28 @@ defmodule VitrialSync.LifecycleTest do
       assert decide(quotation_record(), quote_payload("approved", chain), nil, principal()) == :ok
 
       assert decide(quotation_record(), quote_payload("sent", chain), nil, principal()) ==
-               {:rejected, "lifecycle_rejected", "quotation status is not reachable from lifecycle history"}
+               {:rejected, "lifecycle_rejected",
+                "quotation status is not reachable from lifecycle history"}
     end
 
     test "approved with no preceding sent is an invalid sequence" do
-      assert decide(quotation_record(), quote_payload("approved", [quote_event("e1", "approved")]), nil, principal()) ==
+      assert decide(
+               quotation_record(),
+               quote_payload("approved", [quote_event("e1", "approved")]),
+               nil,
+               principal()
+             ) ==
                {:rejected, "lifecycle_rejected", "quotation lifecycle event sequence is invalid"}
     end
 
     test "rejected and superseded both follow sent" do
       after_sent = fn kind, status ->
-        decide(quotation_record(), quote_payload(status, [quote_event("e1", "sent"), quote_event("e2", kind)]), nil, principal())
+        decide(
+          quotation_record(),
+          quote_payload(status, [quote_event("e1", "sent"), quote_event("e2", kind)]),
+          nil,
+          principal()
+        )
       end
 
       assert after_sent.("rejected", "rejected") == :ok
@@ -524,7 +588,9 @@ defmodule VitrialSync.LifecycleTest do
       stored = quotation_row(quote_payload("sent", [quote_event("e1", "sent")]))
 
       appended = [quote_event("e1", "sent"), quote_event("e2", "approved")]
-      assert decide(quotation_record(), quote_payload("approved", appended), stored, principal()) == :ok
+
+      assert decide(quotation_record(), quote_payload("approved", appended), stored, principal()) ==
+               :ok
 
       stale = [
         quote_event("e1", "sent"),
@@ -542,14 +608,20 @@ defmodule VitrialSync.LifecycleTest do
       payload = %{"status" => "draft", "revision" => 1, "supersedesQuotationID" => "q0"}
 
       assert decide(quotation_record(), payload, nil, principal()) ==
-               {:rejected, "lifecycle_rejected", "quotation revision 1 cannot supersede another quotation"}
+               {:rejected, "lifecycle_rejected",
+                "quotation revision 1 cannot supersede another quotation"}
     end
 
     test "a revision below 1 is refused, and a boolean is not a revision" do
       assert decide(quotation_record(), %{"status" => "draft", "revision" => 0}, nil, principal()) ==
                {:rejected, "lifecycle_rejected", "quotation revision must be at least 1"}
 
-      assert decide(quotation_record(), %{"status" => "draft", "revision" => true}, nil, principal()) ==
+      assert decide(
+               quotation_record(),
+               %{"status" => "draft", "revision" => true},
+               nil,
+               principal()
+             ) ==
                {:rejected, "lifecycle_rejected", "quotation revision must be at least 1"}
     end
 
@@ -575,44 +647,62 @@ defmodule VitrialSync.LifecycleTest do
       tombstoned = %Canonical.World{entities: [%{predecessor() | deleted_at: "t"}]}
 
       assert decide(quotation_record(), replacement_payload(), nil, principal(), tombstoned) ==
-               {:rejected, "lifecycle_rejected", "quotation predecessor is not canonical and active"}
+               {:rejected, "lifecycle_rejected",
+                "quotation predecessor is not canonical and active"}
 
-      assert decide(quotation_record(), replacement_payload(), nil, principal(), Canonical.empty_world()) ==
-               {:rejected, "lifecycle_rejected", "quotation predecessor is not canonical and active"}
+      assert decide(
+               quotation_record(),
+               replacement_payload(),
+               nil,
+               principal(),
+               Canonical.empty_world()
+             ) ==
+               {:rejected, "lifecycle_rejected",
+                "quotation predecessor is not canonical and active"}
     end
 
     test "a predecessor with a non-object payload is not canonical" do
       world = %Canonical.World{entities: [%{predecessor() | payload: nil}]}
 
       assert decide(quotation_record(), replacement_payload(), nil, principal(), world) ==
-               {:rejected, "lifecycle_rejected", "quotation predecessor is not canonical and active"}
+               {:rejected, "lifecycle_rejected",
+                "quotation predecessor is not canonical and active"}
     end
 
     test "a predecessor on another Project or Customer is refused" do
       wrong_project = %Canonical.World{entities: [predecessor(%{"projectID" => "p2"})]}
 
       assert decide(quotation_record(), replacement_payload(), nil, principal(), wrong_project) ==
-               {:rejected, "lifecycle_rejected", "quotation predecessor belongs to another Project"}
+               {:rejected, "lifecycle_rejected",
+                "quotation predecessor belongs to another Project"}
 
       wrong_customer = %Canonical.World{entities: [predecessor(%{"customerID" => "c2"})]}
 
       assert decide(quotation_record(), replacement_payload(), nil, principal(), wrong_customer) ==
-               {:rejected, "lifecycle_rejected", "quotation predecessor belongs to another Customer"}
+               {:rejected, "lifecycle_rejected",
+                "quotation predecessor belongs to another Customer"}
     end
 
     test "the predecessor revision must be exactly one less" do
       world = %Canonical.World{entities: [predecessor(%{"revision" => 7})]}
 
       assert decide(quotation_record(), replacement_payload(), nil, principal(), world) ==
-               {:rejected, "lifecycle_rejected", "quotation predecessor revision is not contiguous"}
+               {:rejected, "lifecycle_rejected",
+                "quotation predecessor revision is not contiguous"}
     end
   end
 
   describe "quotation: an update, app/lifecycle.py:298-311" do
     test "the revision and the supersession identity are both immutable" do
-      stored = quotation_row(%{"status" => "draft", "revision" => 1, "supersedesQuotationID" => nil})
+      stored =
+        quotation_row(%{"status" => "draft", "revision" => 1, "supersedesQuotationID" => nil})
 
-      assert decide(quotation_record(), %{"status" => "draft", "revision" => 2}, stored, principal()) ==
+      assert decide(
+               quotation_record(),
+               %{"status" => "draft", "revision" => 2},
+               stored,
+               principal()
+             ) ==
                {:rejected, "lifecycle_rejected", "quotation revision is immutable"}
 
       rebased = %{"status" => "draft", "revision" => 1, "supersedesQuotationID" => "q0"}
@@ -676,14 +766,24 @@ defmodule VitrialSync.LifecycleTest do
     test "a corrupt canonical status is refused rather than read as unlocked" do
       stored = quotation_row(%{"status" => "nonsense", "revision" => 1})
 
-      assert decide(quotation_record(), %{"status" => "draft", "revision" => 1}, stored, principal()) ==
+      assert decide(
+               quotation_record(),
+               %{"status" => "draft", "revision" => 1},
+               stored,
+               principal()
+             ) ==
                {:rejected, "lifecycle_rejected", "canonical quotation status is invalid"}
     end
 
     test "a corrupt canonical revision is refused too, rather than read as 1" do
       stored = quotation_row(%{"status" => "draft", "revision" => 0})
 
-      assert decide(quotation_record(), %{"status" => "draft", "revision" => 0}, stored, principal()) ==
+      assert decide(
+               quotation_record(),
+               %{"status" => "draft", "revision" => 0},
+               stored,
+               principal()
+             ) ==
                {:rejected, "lifecycle_rejected", "quotation revision must be at least 1"}
     end
   end

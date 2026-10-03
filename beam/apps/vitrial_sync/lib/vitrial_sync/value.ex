@@ -129,7 +129,8 @@ defmodule VitrialSync.Value do
   is always `:required`, an empty list is `:required` only when the history is
   mandatory, and a list holding a non-object is `:malformed` either way.
   """
-  @spec event_list(term(), boolean()) :: {:ok, [map()]} | {:error, :required} | {:error, :malformed}
+  @spec event_list(term(), boolean()) ::
+          {:ok, [map()]} | {:error, :required} | {:error, :malformed}
   def event_list(value, required) do
     cond do
       is_nil(value) and not required -> {:ok, []}

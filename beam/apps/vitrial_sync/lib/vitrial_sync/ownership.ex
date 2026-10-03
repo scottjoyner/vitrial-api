@@ -138,16 +138,91 @@ defmodule VitrialSync.Ownership do
           boolean(),
           Canonical.World.t()
         ) :: {:ok, Plan.t()} | {:error, String.t()}
-  def authorize(entity_type, entity_id, payload, deleted_at, principal, scope, generic_entity_exists, world) do
+  def authorize(
+        entity_type,
+        entity_id,
+        payload,
+        deleted_at,
+        principal,
+        scope,
+        generic_entity_exists,
+        world
+      ) do
     deleting = not is_nil(deleted_at)
 
     case entity_type do
-      "customer" -> authorize_customer(entity_id, payload, deleting, principal, scope, generic_entity_exists, world, deleted_at)
-      "project" -> authorize_project(entity_id, payload, deleting, principal, scope, generic_entity_exists, world, deleted_at)
-      "project_sector" -> authorize_project_sector(entity_id, payload, deleting, principal, scope, generic_entity_exists, world, deleted_at)
-      "item" -> authorize_item(entity_id, payload, deleting, principal, scope, generic_entity_exists, world, deleted_at)
-      "quotation" -> authorize_quotation(entity_id, payload, deleting, principal, scope, generic_entity_exists, world, deleted_at)
-      other -> authorize_other(other, entity_id, payload, deleting, principal, scope, generic_entity_exists, world, deleted_at)
+      "customer" ->
+        authorize_customer(
+          entity_id,
+          payload,
+          deleting,
+          principal,
+          scope,
+          generic_entity_exists,
+          world,
+          deleted_at
+        )
+
+      "project" ->
+        authorize_project(
+          entity_id,
+          payload,
+          deleting,
+          principal,
+          scope,
+          generic_entity_exists,
+          world,
+          deleted_at
+        )
+
+      "project_sector" ->
+        authorize_project_sector(
+          entity_id,
+          payload,
+          deleting,
+          principal,
+          scope,
+          generic_entity_exists,
+          world,
+          deleted_at
+        )
+
+      "item" ->
+        authorize_item(
+          entity_id,
+          payload,
+          deleting,
+          principal,
+          scope,
+          generic_entity_exists,
+          world,
+          deleted_at
+        )
+
+      "quotation" ->
+        authorize_quotation(
+          entity_id,
+          payload,
+          deleting,
+          principal,
+          scope,
+          generic_entity_exists,
+          world,
+          deleted_at
+        )
+
+      other ->
+        authorize_other(
+          other,
+          entity_id,
+          payload,
+          deleting,
+          principal,
+          scope,
+          generic_entity_exists,
+          world,
+          deleted_at
+        )
     end
   end
 
@@ -156,9 +231,29 @@ defmodule VitrialSync.Ownership do
   # is the direction to fail." A `delivery_execution` that somehow reached this
   # path -- S-60 dispatches it elsewhere, and SUSPECT-6 records what drifted when
   # it did not -- is refused by the same arm.
-  defp authorize_other(entity_type, entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_other(
+         entity_type,
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     if MapSet.member?(@item_child_types, entity_type) do
-      authorize_item_child(entity_type, entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at)
+      authorize_item_child(
+        entity_type,
+        entity_id,
+        payload,
+        deleting,
+        principal,
+        scope,
+        generic_exists,
+        world,
+        deleted_at
+      )
     else
       {:error, "canonical authorization is not implemented for #{entity_type}"}
     end
@@ -168,13 +263,29 @@ defmodule VitrialSync.Ownership do
   # customer -- app/ownership.py:369-390
   # ---------------------------------------------------------------------------
 
-  defp authorize_customer(entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_customer(
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     case Canonical.customer(world, entity_id) do
       nil ->
         with :ok <- absent_canonical("Customer", generic_exists, deleting),
              :ok <- capability(principal, "customer.create"),
              :ok <- identity(payload, entity_id, false) do
-          {:ok, %Plan{entity_type: "customer", entity_id: entity_id, is_create: true, deleted_at: deleted_at, customer_id: entity_id}}
+          {:ok,
+           %Plan{
+             entity_type: "customer",
+             entity_id: entity_id,
+             is_create: true,
+             deleted_at: deleted_at,
+             customer_id: entity_id
+           }}
         end
 
       canonical ->
@@ -182,7 +293,14 @@ defmodule VitrialSync.Ownership do
              :ok <- in_scope_customer(scope, canonical),
              :ok <- identity(payload, entity_id, deleting) do
           with :ok <- delete_safe_customer(world, canonical, deleting) do
-            {:ok, %Plan{entity_type: "customer", entity_id: entity_id, is_create: false, deleted_at: deleted_at, customer_id: canonical.customer_id}}
+            {:ok,
+             %Plan{
+               entity_type: "customer",
+               entity_id: entity_id,
+               is_create: false,
+               deleted_at: deleted_at,
+               customer_id: canonical.customer_id
+             }}
           end
         end
     end
@@ -210,7 +328,16 @@ defmodule VitrialSync.Ownership do
   # project -- app/ownership.py:392-419
   # ---------------------------------------------------------------------------
 
-  defp authorize_project(entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_project(
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     case Canonical.project(world, entity_id) do
       nil ->
         with :ok <- absent_canonical("Project", generic_exists, deleting),
@@ -219,16 +346,38 @@ defmodule VitrialSync.Ownership do
              {:ok, customer_id} <- value(payload, "customerID"),
              :ok <- active_customer(world, customer_id),
              :ok <- customer_in_scope(scope, customer_id) do
-          {:ok, %Plan{entity_type: "project", entity_id: entity_id, is_create: true, deleted_at: deleted_at, customer_id: customer_id, project_id: entity_id}}
+          {:ok,
+           %Plan{
+             entity_type: "project",
+             entity_id: entity_id,
+             is_create: true,
+             deleted_at: deleted_at,
+             customer_id: customer_id,
+             project_id: entity_id
+           }}
         end
 
       canonical ->
         with :ok <- capability(principal, "project.edit"),
              {:ok, _canonical_project} <- project_for_scope(world, scope, canonical.project_id),
              :ok <- identity(payload, entity_id, deleting),
-             :ok <- immutable(payload, "customerID", canonical.customer_id, "Project Customer ownership is immutable") do
+             :ok <-
+               immutable(
+                 payload,
+                 "customerID",
+                 canonical.customer_id,
+                 "Project Customer ownership is immutable"
+               ) do
           with :ok <- delete_safe_project(world, canonical.project_id, deleting) do
-            {:ok, %Plan{entity_type: "project", entity_id: entity_id, is_create: false, deleted_at: deleted_at, customer_id: canonical.customer_id, project_id: canonical.project_id}}
+            {:ok,
+             %Plan{
+               entity_type: "project",
+               entity_id: entity_id,
+               is_create: false,
+               deleted_at: deleted_at,
+               customer_id: canonical.customer_id,
+               project_id: canonical.project_id
+             }}
           end
         end
     end
@@ -263,7 +412,16 @@ defmodule VitrialSync.Ownership do
   # project_sector -- app/ownership.py:421-455
   # ---------------------------------------------------------------------------
 
-  defp authorize_project_sector(entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_project_sector(
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     case Canonical.project_sector(world, entity_id) do
       nil ->
         with :ok <- absent_canonical("ProjectSector", generic_exists, deleting),
@@ -289,8 +447,20 @@ defmodule VitrialSync.Ownership do
         with :ok <- capability(principal, "project.edit"),
              {:ok, project} <- project_for_scope(world, scope, canonical.project_id),
              :ok <- identity(payload, entity_id, deleting),
-             :ok <- immutable(payload, "projectID", canonical.project_id, "ProjectSector Project ownership is immutable"),
-             :ok <- immutable(payload, "sectorID", canonical.sector_id, "ProjectSector Sector identity is immutable") do
+             :ok <-
+               immutable(
+                 payload,
+                 "projectID",
+                 canonical.project_id,
+                 "ProjectSector Project ownership is immutable"
+               ),
+             :ok <-
+               immutable(
+                 payload,
+                 "sectorID",
+                 canonical.sector_id,
+                 "ProjectSector Sector identity is immutable"
+               ) do
           with :ok <- delete_safe_sector(world, canonical.project_sector_id, deleting) do
             {:ok,
              %Plan{
@@ -322,7 +492,16 @@ defmodule VitrialSync.Ownership do
   # item -- app/ownership.py:457-515
   # ---------------------------------------------------------------------------
 
-  defp authorize_item(entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_item(
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     case Canonical.item(world, entity_id) do
       nil ->
         with :ok <- absent_canonical("Item", generic_exists, deleting),
@@ -331,7 +510,13 @@ defmodule VitrialSync.Ownership do
              {:ok, project_id} <- value(payload, "projectID"),
              {:ok, sector_id} <- value(payload, "projectSectorID"),
              {:ok, project} <- project_for_scope(world, scope, project_id),
-             {:ok, sector} <- sector_of_project(world, sector_id, project_id, "Item ProjectSector is not canonical for its Project") do
+             {:ok, sector} <-
+               sector_of_project(
+                 world,
+                 sector_id,
+                 project_id,
+                 "Item ProjectSector is not canonical for its Project"
+               ) do
           {:ok,
            %Plan{
              entity_type: "item",
@@ -356,8 +541,20 @@ defmodule VitrialSync.Ownership do
                  "Item canonical ProjectSector is missing or inactive"
                ),
              :ok <- identity(payload, entity_id, deleting),
-             :ok <- immutable(payload, "projectID", canonical.project_id, "Item Project ownership is immutable"),
-             :ok <- immutable(payload, "projectSectorID", canonical.project_sector_id, "Item ProjectSector ownership is immutable") do
+             :ok <-
+               immutable(
+                 payload,
+                 "projectID",
+                 canonical.project_id,
+                 "Item Project ownership is immutable"
+               ),
+             :ok <-
+               immutable(
+                 payload,
+                 "projectSectorID",
+                 canonical.project_sector_id,
+                 "Item ProjectSector ownership is immutable"
+               ) do
           with :ok <- delete_safe_item(world, canonical.item_id, deleting) do
             {:ok,
              %Plan{
@@ -406,7 +603,17 @@ defmodule VitrialSync.Ownership do
   # item children -- app/ownership.py:517-659
   # ---------------------------------------------------------------------------
 
-  defp authorize_item_child(entity_type, entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_item_child(
+         entity_type,
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     canonical = Canonical.item_child(world, entity_type, entity_id)
 
     with :ok <- append_only_guard(entity_type, canonical, generic_exists, deleting),
@@ -416,7 +623,15 @@ defmodule VitrialSync.Ownership do
          {:ok, item, project} <- item_for_scope(world, scope, item_id),
          :ok <- item_child_capability(entity_type, payload, principal, item_id, item, deleting) do
       with :ok <- item_child_references(entity_type, entity_id, payload, item_id, world, deleting),
-           :ok <- configuration_status_capability(world, entity_type, entity_id, payload, principal, deleting),
+           :ok <-
+             configuration_status_capability(
+               world,
+               entity_type,
+               entity_id,
+               payload,
+               principal,
+               deleting
+             ),
            :ok <- blocker_history(entity_type, entity_id, payload, item_id, principal, deleting) do
         {:ok,
          %Plan{
@@ -465,7 +680,8 @@ defmodule VitrialSync.Ownership do
     end
   end
 
-  defp resolve_item_id(_entity_type, _entity_id, payload, nil, _world), do: value(payload, "itemID")
+  defp resolve_item_id(_entity_type, _entity_id, payload, nil, _world),
+    do: value(payload, "itemID")
 
   defp resolve_item_id(entity_type, _entity_id, payload, canonical, _world) do
     supplied_item = supplied_item_id(entity_type, payload)
@@ -513,7 +729,15 @@ defmodule VitrialSync.Ownership do
 
   defp item_child_capability("item_audit_event", payload, principal, item_id, item, _deleting) do
     with :ok <- audit_capability(payload, principal),
-         :ok <- audit_snapshot(Map.get(payload, "after"), item_id, item, "resulting", "item audit resulting Item identity is invalid", "item audit parent relationship is not canonical"),
+         :ok <-
+           audit_snapshot(
+             Map.get(payload, "after"),
+             item_id,
+             item,
+             "resulting",
+             "item audit resulting Item identity is invalid",
+             "item audit parent relationship is not canonical"
+           ),
          :ok <- audit_before(payload, item_id, item) do
       Provenance.require_current(payload, principal)
     end
@@ -568,7 +792,14 @@ defmodule VitrialSync.Ownership do
         :ok
 
       before ->
-        audit_snapshot(before, item_id, item, "prior", "item audit prior Item identity is invalid", "item audit prior parent relationship is not canonical")
+        audit_snapshot(
+          before,
+          item_id,
+          item,
+          "prior",
+          "item audit prior Item identity is invalid",
+          "item audit prior parent relationship is not canonical"
+        )
     end
   end
 
@@ -635,7 +866,14 @@ defmodule VitrialSync.Ownership do
     else
       with {:ok, requirements} <- reference_list(configuration, "customerRequirements"),
            {:ok, blockers} <- reference_list(configuration, "blockerIDs") do
-        with :ok <- require_references(%{"customerRequirements" => requirements}, item_id, "customerRequirements", "customer_requirement", world) do
+        with :ok <-
+               require_references(
+                 %{"customerRequirements" => requirements},
+                 item_id,
+                 "customerRequirements",
+                 "customer_requirement",
+                 world
+               ) do
           require_references(%{"blockerIDs" => blockers}, item_id, "blockerIDs", "blocker", world)
         end
       end
@@ -675,18 +913,28 @@ defmodule VitrialSync.Ownership do
     end
   end
 
-  defp configuration_status_capability(_world, _entity_type, _entity_id, _payload, _principal, _deleting),
-    do: :ok
+  defp configuration_status_capability(
+         _world,
+         _entity_type,
+         _entity_id,
+         _payload,
+         _principal,
+         _deleting
+       ),
+       do: :ok
 
   # `_current_payload/4`, `app/ownership.py:245-256`: the stored payload if it is
   # an object, and `nil` otherwise.
   defp current_configuration_status(world, configuration_id) do
     case Canonical.entity(world, "configuration", configuration_id) do
-      nil -> nil
-      row -> case Canonical.payload_object(row) do
-        nil -> nil
-        payload -> Map.get(payload, "status")
-      end
+      nil ->
+        nil
+
+      row ->
+        case Canonical.payload_object(row) do
+          nil -> nil
+          payload -> Map.get(payload, "status")
+        end
     end
   end
 
@@ -726,7 +974,7 @@ defmodule VitrialSync.Ownership do
           {:halt, {:error, "blocker event organization is invalid"}}
 
         is_nil(Map.get(event, "actorID")) or is_nil(Map.get(event, "membershipID")) or
-            is_nil(Map.get(event, "sessionID")) or is_nil(Map.get(event, "authorizationRevision")) ->
+          is_nil(Map.get(event, "sessionID")) or is_nil(Map.get(event, "authorizationRevision")) ->
           {:halt, {:error, "blocker event provenance is incomplete"}}
 
         true ->
@@ -739,10 +987,20 @@ defmodule VitrialSync.Ownership do
   # quotation -- app/ownership.py:661-758
   # ---------------------------------------------------------------------------
 
-  defp authorize_quotation(entity_id, payload, deleting, principal, scope, generic_exists, world, deleted_at) do
+  defp authorize_quotation(
+         entity_id,
+         payload,
+         deleting,
+         principal,
+         scope,
+         generic_exists,
+         world,
+         deleted_at
+       ) do
     canonical = Canonical.project_child(world, "quotation", entity_id)
 
-    with {:ok, project_id} <- quotation_project(canonical, entity_id, payload, deleting, generic_exists),
+    with {:ok, project_id} <-
+           quotation_project(canonical, entity_id, payload, deleting, generic_exists),
          {:ok, project} <- project_for_scope(world, scope, project_id),
          :ok <- quotation_body(entity_id, project, payload, deleting, principal, scope, world) do
       {:ok,
@@ -766,7 +1024,13 @@ defmodule VitrialSync.Ownership do
 
   defp quotation_project(canonical, entity_id, payload, deleting, _generic_exists) do
     with :ok <- identity(payload, entity_id, deleting),
-         :ok <- immutable(payload, "projectID", canonical.project_id, "Quotation Project ownership is immutable") do
+         :ok <-
+           immutable(
+             payload,
+             "projectID",
+             canonical.project_id,
+             "Quotation Project ownership is immutable"
+           ) do
       {:ok, canonical.project_id}
     end
   end
@@ -845,7 +1109,8 @@ defmodule VitrialSync.Ownership do
         :ok
 
       snapshot when not object?(snapshot) ->
-        {:error, "Quotation assembly design does not match canonical ConfigurationVersion: quotation line designSnapshot must be an object"}
+        {:error,
+         "Quotation assembly design does not match canonical ConfigurationVersion: quotation line designSnapshot must be an object"}
 
       snapshot ->
         case Map.get(line, "configurationVersionID") do
@@ -880,8 +1145,7 @@ defmodule VitrialSync.Ownership do
       %Canonical.Entity{deleted_at: nil} = row ->
         case Canonical.payload_object(row) do
           nil ->
-            {:error,
-             "Quotation assembly ConfigurationVersion is not canonical and active"}
+            {:error, "Quotation assembly ConfigurationVersion is not canonical and active"}
 
           payload ->
             {:ok, payload}
@@ -920,7 +1184,8 @@ defmodule VitrialSync.Ownership do
   end
 
   defp snapshot_item_matches(_snapshot, {configuration, _assembly}, line) do
-    if is_binary(Map.get(line, "itemID")) and Map.get(configuration, "itemID") == Map.get(line, "itemID") do
+    if is_binary(Map.get(line, "itemID")) and
+         Map.get(configuration, "itemID") == Map.get(line, "itemID") do
       :ok
     else
       {:error,
@@ -931,10 +1196,12 @@ defmodule VitrialSync.Ownership do
   defp snapshot_fields_match(snapshot, {_configuration, assembly}) do
     checks = [
       {"templateID", Map.get(assembly, "templateID"), Map.get(snapshot, "templateID")},
-      {"templateVersion", Map.get(assembly, "templateVersion"), Map.get(snapshot, "templateVersion")},
+      {"templateVersion", Map.get(assembly, "templateVersion"),
+       Map.get(snapshot, "templateVersion")},
       {"overall", Map.get(assembly, "overall"), Map.get(snapshot, "overall")},
       {"referenceData", Map.get(assembly, "referenceData"), Map.get(snapshot, "referenceData")},
-      {"renderDescriptor", Map.get(assembly, "renderDescriptor"), Map.get(snapshot, "renderDescriptor")}
+      {"renderDescriptor", Map.get(assembly, "renderDescriptor"),
+       Map.get(snapshot, "renderDescriptor")}
     ]
 
     Enum.reduce_while(checks, :ok, fn {label, canonical, proposed}, :ok ->
@@ -951,12 +1218,18 @@ defmodule VitrialSync.Ownership do
   defp section_summary_matches(snapshot, {_configuration, assembly}) do
     expected =
       Enum.map(List.wrap(Map.get(assembly, "sections")), fn section ->
-        %{"sectionType" => Map.get(section, "sectionType"), "operation" => Map.get(section, "operation")}
+        %{
+          "sectionType" => Map.get(section, "sectionType"),
+          "operation" => Map.get(section, "operation")
+        }
       end)
 
     actual =
       Enum.map(List.wrap(Map.get(snapshot, "sectionSummary")), fn entry ->
-        %{"sectionType" => Map.get(entry, "sectionType"), "operation" => Map.get(entry, "operation")}
+        %{
+          "sectionType" => Map.get(entry, "sectionType"),
+          "operation" => Map.get(entry, "operation")
+        }
       end)
 
     if Value.py_eq?(actual, expected) do
@@ -971,7 +1244,10 @@ defmodule VitrialSync.Ownership do
     case Map.get(payload, "events") do
       events when is_list(events) ->
         with :ok <- well_formed_quotation_events(events, principal) do
-          if Value.member?(Map.get(payload, "status"), MapSet.new(["sent", "approved", "rejected", "superseded"])) do
+          if Value.member?(
+               Map.get(payload, "status"),
+               MapSet.new(["sent", "approved", "rejected", "superseded"])
+             ) do
             require_transition_provenance(events, principal)
           else
             :ok
@@ -979,7 +1255,10 @@ defmodule VitrialSync.Ownership do
         end
 
       nil ->
-        if Value.member?(Map.get(payload, "status"), MapSet.new(["sent", "approved", "rejected", "superseded"])) do
+        if Value.member?(
+             Map.get(payload, "status"),
+             MapSet.new(["sent", "approved", "rejected", "superseded"])
+           ) do
           {:error, "Quotation lifecycle transition requires provenance"}
         else
           :ok
@@ -1375,7 +1654,9 @@ defmodule VitrialSync.Ownership do
   end
 
   defp customer_row(%Plan{} = plan), do: {:customer, plan.entity_id, plan.deleted_at}
-  defp project_row(%Plan{} = plan), do: {:project, plan.entity_id, plan.customer_id, plan.deleted_at}
+
+  defp project_row(%Plan{} = plan),
+    do: {:project, plan.entity_id, plan.customer_id, plan.deleted_at}
 
   defp project_sector_row(%Plan{} = plan),
     do: {:project_sector, plan.entity_id, plan.project_id, plan.sector_id, plan.deleted_at}

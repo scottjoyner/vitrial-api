@@ -5,7 +5,16 @@ defmodule VitrialSync.CanonicalTest do
   alias VitrialSync.Canonical.{ItemChild, Membership, Organization, Principal, Scope}
 
   defp principal(attrs \\ []) do
-    struct!(%Principal{user_id: "u1", organization_id: "org", membership_id: "m1", session_id: "s1", authorization_revision: 3}, attrs)
+    struct!(
+      %Principal{
+        user_id: "u1",
+        organization_id: "org",
+        membership_id: "m1",
+        session_id: "s1",
+        authorization_revision: 3
+      },
+      attrs
+    )
   end
 
   describe "Scope, app/ownership.py:30-55" do
@@ -38,7 +47,8 @@ defmodule VitrialSync.CanonicalTest do
     end
 
     test "from_principal copies the principal's own scope fields" do
-      scope = Scope.from_principal(principal(all_customers: true, customer_ids: MapSet.new(["c1"])))
+      scope =
+        Scope.from_principal(principal(all_customers: true, customer_ids: MapSet.new(["c1"])))
 
       assert scope.all_customers
       assert scope.customer_ids == MapSet.new(["c1"])
@@ -102,7 +112,9 @@ defmodule VitrialSync.CanonicalTest do
       sidecar: sidecar,
       other_item: other
     } do
-      world = %Canonical.World{item_children: [%{audit | deleted_at: "t"}, %{sidecar | deleted_at: "t"}, other]}
+      world = %Canonical.World{
+        item_children: [%{audit | deleted_at: "t"}, %{sidecar | deleted_at: "t"}, other]
+      }
 
       refute Canonical.item_has_live_audit_history?(world, "i1")
       refute Canonical.item_has_live_sidecars?(world, "i1")
@@ -125,13 +137,26 @@ defmodule VitrialSync.CanonicalTest do
 
   describe "project_has_live_children?/2 -- _ensure_project_delete_safe" do
     test "a sector, an item or a project child of any type all block" do
-      sector = %Canonical.ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}
+      sector = %Canonical.ProjectSector{
+        project_sector_id: "ps1",
+        project_id: "p1",
+        sector_id: "s1"
+      }
+
       item = %Canonical.Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1"}
       child = %Canonical.ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}
 
-      assert Canonical.project_has_live_children?(%Canonical.World{project_sectors: [sector]}, "p1")
+      assert Canonical.project_has_live_children?(
+               %Canonical.World{project_sectors: [sector]},
+               "p1"
+             )
+
       assert Canonical.project_has_live_children?(%Canonical.World{items: [item]}, "p1")
-      assert Canonical.project_has_live_children?(%Canonical.World{project_children: [child]}, "p1")
+
+      assert Canonical.project_has_live_children?(
+               %Canonical.World{project_children: [child]},
+               "p1"
+             )
 
       refute Canonical.project_has_live_children?(
                %Canonical.World{project_children: [%{child | deleted_at: "t"}]},
@@ -162,7 +187,9 @@ defmodule VitrialSync.CanonicalTest do
 
     test "both reference keys are searched" do
       references = measurement(%{}, %{"evidenceReferences" => ["e1"]})
-      ids = measurement(%{type: "customer_requirement", id: "r1"}, %{"evidenceReferenceIDs" => ["e1"]})
+
+      ids =
+        measurement(%{type: "customer_requirement", id: "r1"}, %{"evidenceReferenceIDs" => ["e1"]})
 
       assert Canonical.evidence_referenced?(%Canonical.World{entities: [references]}, "e1")
       assert Canonical.evidence_referenced?(%Canonical.World{entities: [ids]}, "e1")

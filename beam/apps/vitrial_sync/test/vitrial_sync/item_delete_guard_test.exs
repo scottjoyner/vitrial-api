@@ -32,7 +32,13 @@ defmodule VitrialSync.ItemDeleteGuardTest do
       world = %Canonical.World{item_children: [audit()]}
 
       for type <- ["customer", "project", "project_sector", "blocker", "quotation", "evidence"] do
-        record = %Record{id: "r1", entity_type: type, entity_id: "i1", updated_at: "t", deleted_at: "t"}
+        record = %Record{
+          id: "r1",
+          entity_type: type,
+          entity_id: "i1",
+          updated_at: "t",
+          deleted_at: "t"
+        }
 
         assert ItemDeleteGuard.decide(record, world) == :ok, type
       end

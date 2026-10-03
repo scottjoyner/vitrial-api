@@ -121,14 +121,14 @@ defmodule VitrialSync.Prefetch do
   # `ITEM_CHILD_TYPES`, `app/ownership.py:75`, which is
   # `set(ITEM_CHILD_CAPABILITIES) | {"item_audit_event"}`.
   @item_child_types MapSet.new([
-                          "measurement",
-                          "evidence",
-                          "customer_requirement",
-                          "configuration",
-                          "configuration_version",
-                          "blocker",
-                          "item_audit_event"
-                        ])
+                      "measurement",
+                      "evidence",
+                      "customer_requirement",
+                      "configuration",
+                      "configuration_version",
+                      "blocker",
+                      "item_audit_event"
+                    ])
 
   @doc "`DELIVERY_ENTITY_TYPE`, `app/delivery_execution.py:22`."
   @spec delivery_entity_type() :: String.t()
@@ -191,7 +191,8 @@ defmodule VitrialSync.Prefetch do
         &{&1.entity_type, &1.entity_id}
       )
 
-    sectors = index(world.project_sectors, Map.get(by_type, "project_sector", []), & &1.project_sector_id)
+    sectors =
+      index(world.project_sectors, Map.get(by_type, "project_sector", []), & &1.project_sector_id)
 
     # Second hop: every project id any loaded row points at. Collected before the
     # project map is built so the project selection does not depend on which
@@ -212,7 +213,8 @@ defmodule VitrialSync.Prefetch do
 
     items = index(world.items, MapSet.to_list(reachable_item_ids), & &1.item_id)
 
-    wanted_projects = MapSet.union(wanted_projects, MapSet.new(Map.values(items), & &1.project_id))
+    wanted_projects =
+      MapSet.union(wanted_projects, MapSet.new(Map.values(items), & &1.project_id))
 
     projects = index(world.projects, MapSet.to_list(wanted_projects), & &1.project_id)
 
@@ -301,6 +303,7 @@ defmodule VitrialSync.Prefetch do
 
       entity_type == "project" ->
         project = Map.get(ctx.projects, entity_id)
+
         not is_nil(project) and
           Scope.can_access_project?(scope, project.project_id, project.customer_id)
 

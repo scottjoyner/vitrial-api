@@ -56,19 +56,23 @@ defmodule VitrialSync.Delivery do
   @entity_type "delivery_execution"
   @capability "delivery.manage"
 
-  @delivery_provenance {"delivery execution event provenance is incomplete", "delivery execution event organization is invalid", "delivery execution latest event does not match authenticated provenance"}
-  @delivery_provenance_current_actor {"delivery execution event provenance is incomplete", "delivery execution event organization is invalid", "delivery execution latest event does not match authenticated provenance"}
+  @delivery_provenance {"delivery execution event provenance is incomplete",
+                        "delivery execution event organization is invalid",
+                        "delivery execution latest event does not match authenticated provenance"}
+  @delivery_provenance_current_actor {"delivery execution event provenance is incomplete",
+                                      "delivery execution event organization is invalid",
+                                      "delivery execution latest event does not match authenticated provenance"}
 
   @statuses MapSet.new([
-               "engineeringReview",
-               "materialsRequired",
-               "procurement",
-               "production",
-               "readyForInstallation",
-               "scheduled",
-               "installed",
-               "complete"
-             ])
+              "engineeringReview",
+              "materialsRequired",
+              "procurement",
+              "production",
+              "readyForInstallation",
+              "scheduled",
+              "installed",
+              "complete"
+            ])
 
   # `DELIVERY_TRANSITIONS`, `app/delivery_execution.py:34-42`. A plain map, so a
   # status that is not a key is a status with no forward transition.
@@ -190,7 +194,9 @@ defmodule VitrialSync.Delivery do
   # S-137: `if deleted_at is not None: raise`. Delivery history is non-deletable,
   # so the tombstone branch never reaches the ownership checks below.
   defp refuse_tombstone(nil), do: :ok
-  defp refuse_tombstone(_deleted_at), do: {:error, "delivery execution history cannot be tombstoned"}
+
+  defp refuse_tombstone(_deleted_at),
+    do: {:error, "delivery execution history cannot be tombstoned"}
 
   # The `if current is not None: ... else: ...` block, `app/delivery_execution.py:718-746`.
   defp continuity(entity_id, nil, world) do
@@ -314,7 +320,10 @@ defmodule VitrialSync.Delivery do
          "delivery installation #{label} evidence reference requires itemID and documentID"}
 
       true ->
-        check_evidence_item(world, project_id, Value.normalized(Map.get(reference, "itemID")),
+        check_evidence_item(
+          world,
+          project_id,
+          Value.normalized(Map.get(reference, "itemID")),
           Value.normalized(Map.get(reference, "documentID")),
           label
         )
@@ -705,14 +714,23 @@ defmodule VitrialSync.Delivery do
       true ->
         self_transition_revision(payload, current_payload, List.last(appended))
         |> case do
-          {:error, _message} = error -> error
-          :ok -> Provenance.check(List.last(appended), principal, true, delivery_provenance_messages(true))
+          {:error, _message} = error ->
+            error
+
+          :ok ->
+            Provenance.check(
+              List.last(appended),
+              principal,
+              true,
+              delivery_provenance_messages(true)
+            )
         end
     end
   end
 
   defp operational_change_requires_event(payload, current_payload) do
-    protected = ~w(status updatedAt materialsPlan procurementPlan productionPlan installationSchedule installationCompletion)
+    protected =
+      ~w(status updatedAt materialsPlan procurementPlan productionPlan installationSchedule installationCompletion)
 
     if Enum.any?(protected, fn key ->
          not Value.py_eq?(Map.get(current_payload, key), Map.get(payload, key))
@@ -732,15 +750,24 @@ defmodule VitrialSync.Delivery do
 
     cond do
       from == "materialsRequired" and to == "materialsRequired" and
-          Value.py_eq?(Map.get(current_payload, "materialsPlan"), Map.get(payload, "materialsPlan")) ->
+          Value.py_eq?(
+            Map.get(current_payload, "materialsPlan"),
+            Map.get(payload, "materialsPlan")
+          ) ->
         {:error, "Materials Required self-transition requires a materials plan revision"}
 
       from == "procurement" and to == "procurement" and
-          Value.py_eq?(Map.get(current_payload, "procurementPlan"), Map.get(payload, "procurementPlan")) ->
+          Value.py_eq?(
+            Map.get(current_payload, "procurementPlan"),
+            Map.get(payload, "procurementPlan")
+          ) ->
         {:error, "Procurement self-transition requires a procurement plan revision"}
 
       from == "production" and to == "production" and
-          Value.py_eq?(Map.get(current_payload, "productionPlan"), Map.get(payload, "productionPlan")) ->
+          Value.py_eq?(
+            Map.get(current_payload, "productionPlan"),
+            Map.get(payload, "productionPlan")
+          ) ->
         {:error, "Production self-transition requires a production plan revision"}
 
       from == "readyForInstallation" and to == "readyForInstallation" and
@@ -748,13 +775,14 @@ defmodule VitrialSync.Delivery do
             Map.get(current_payload, "installationSchedule"),
             Map.get(payload, "installationSchedule")
           ) ->
-        {:error, "Installation schedule self-transition requires an installation schedule revision"}
+        {:error,
+         "Installation schedule self-transition requires an installation schedule revision"}
 
       from == "scheduled" and to == "scheduled" and
-          Value.py_eq?(
-            Map.get(current_payload, "installationSchedule"),
-            Map.get(payload, "installationSchedule")
-          ) and
+        Value.py_eq?(
+          Map.get(current_payload, "installationSchedule"),
+          Map.get(payload, "installationSchedule")
+        ) and
           Value.py_eq?(
             Map.get(current_payload, "installationCompletion"),
             Map.get(payload, "installationCompletion")

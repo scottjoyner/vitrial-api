@@ -2,6 +2,7 @@ defmodule VitrialSync.PrefetchTest do
   use ExUnit.Case, async: true
 
   alias VitrialSync.{Canonical, Prefetch}
+
   alias VitrialSync.Canonical.{
     Customer,
     Entity,
@@ -26,14 +27,14 @@ defmodule VitrialSync.PrefetchTest do
   @project_child_types MapSet.new(["quotation", "delivery_execution"])
 
   @item_child_types MapSet.new([
-                          "measurement",
-                          "evidence",
-                          "customer_requirement",
-                          "configuration",
-                          "configuration_version",
-                          "blocker",
-                          "item_audit_event"
-                        ])
+                      "measurement",
+                      "evidence",
+                      "customer_requirement",
+                      "configuration",
+                      "configuration_version",
+                      "blocker",
+                      "item_audit_event"
+                    ])
 
   defp principal(opts \\ []) do
     %Principal{
@@ -69,8 +70,16 @@ defmodule VitrialSync.PrefetchTest do
         ],
         project_sectors: [
           # A sector whose project does not exist at all.
-          %ProjectSector{project_sector_id: "sector-orphan", project_id: "proj-absent", sector_id: "s"},
-          %ProjectSector{project_sector_id: "sector-mine", project_id: "proj-mine", sector_id: "s"}
+          %ProjectSector{
+            project_sector_id: "sector-orphan",
+            project_id: "proj-absent",
+            sector_id: "s"
+          },
+          %ProjectSector{
+            project_sector_id: "sector-mine",
+            project_id: "proj-mine",
+            sector_id: "s"
+          }
         ],
         items: [
           %Item{item_id: "item-mine", project_id: "proj-mine"},
@@ -79,7 +88,11 @@ defmodule VitrialSync.PrefetchTest do
         ],
         project_children: [
           %ProjectChild{entity_type: "quotation", entity_id: "q-mine", project_id: "proj-mine"},
-          %ProjectChild{entity_type: "quotation", entity_id: "q-orphan", project_id: "proj-absent"}
+          %ProjectChild{
+            entity_type: "quotation",
+            entity_id: "q-orphan",
+            project_id: "proj-absent"
+          }
         ],
         item_children: [
           %ItemChild{entity_type: "measurement", entity_id: "m-mine", item_id: "item-mine"},
@@ -89,9 +102,16 @@ defmodule VitrialSync.PrefetchTest do
 
     principals = %{
       "broad" => principal(),
-      "narrow" => principal(all_customers: false, all_projects: false, customer_ids: ["cust-mine"], project_ids: ["proj-mine"]),
+      "narrow" =>
+        principal(
+          all_customers: false,
+          all_projects: false,
+          customer_ids: ["cust-mine"],
+          project_ids: ["proj-mine"]
+        ),
       "customer-only" => principal(all_customers: true, all_projects: false),
-      "project-no-customer" => principal(all_customers: false, all_projects: false, project_ids: ["proj-mine"])
+      "project-no-customer" =>
+        principal(all_customers: false, all_projects: false, project_ids: ["proj-mine"])
     }
 
     ids = [
@@ -146,6 +166,7 @@ defmodule VitrialSync.PrefetchTest do
 
       entity_type == "project" ->
         project = db_get(rows, :projects, entity_id)
+
         not is_nil(project) and
           Canonical.Scope.can_access_project?(scope, project.project_id, project.customer_id)
 
@@ -242,7 +263,8 @@ defmodule VitrialSync.PrefetchTest do
 
   defp db_get(rows, :projects, id), do: Enum.find(rows.projects, &(&1.project_id == id))
 
-  defp db_get(rows, :sectors, id), do: Enum.find(rows.project_sectors, &(&1.project_sector_id == id))
+  defp db_get(rows, :sectors, id),
+    do: Enum.find(rows.project_sectors, &(&1.project_sector_id == id))
 
   defp db_get(rows, :items, id), do: Enum.find(rows.items, &(&1.item_id == id))
 
@@ -372,10 +394,18 @@ defmodule VitrialSync.PrefetchTest do
 
     test "a payload column that is not an object is not a payload" do
       principal = principal()
+
       rows =
         delivery_rows(false, false, false)
         |> Map.update!(:entities, fn [_only] ->
-          [%Entity{entity_type: "delivery_execution", entity_id: "de-1", payload: nil, server_revision: 1}]
+          [
+            %Entity{
+              entity_type: "delivery_execution",
+              entity_id: "de-1",
+              payload: nil,
+              server_revision: 1
+            }
+          ]
         end)
 
       context = Prefetch.load_page_context(principal, [{"delivery_execution", "de-1"}], rows)
@@ -410,10 +440,33 @@ defmodule VitrialSync.PrefetchTest do
         world(
           customers: [%Customer{customer_id: "cust-1", deleted_at: stamp}],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1", deleted_at: stamp}],
-          project_sectors: [%ProjectSector{project_sector_id: "sec-1", project_id: "proj-1", deleted_at: stamp}],
-          items: [%Item{item_id: "item-1", project_id: "proj-1", project_sector_id: "sec-1", deleted_at: stamp}],
-          project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q-1", project_id: "proj-1", deleted_at: stamp}],
-          item_children: [%ItemChild{entity_type: "measurement", entity_id: "m-1", item_id: "item-1", deleted_at: stamp}]
+          project_sectors: [
+            %ProjectSector{project_sector_id: "sec-1", project_id: "proj-1", deleted_at: stamp}
+          ],
+          items: [
+            %Item{
+              item_id: "item-1",
+              project_id: "proj-1",
+              project_sector_id: "sec-1",
+              deleted_at: stamp
+            }
+          ],
+          project_children: [
+            %ProjectChild{
+              entity_type: "quotation",
+              entity_id: "q-1",
+              project_id: "proj-1",
+              deleted_at: stamp
+            }
+          ],
+          item_children: [
+            %ItemChild{
+              entity_type: "measurement",
+              entity_id: "m-1",
+              item_id: "item-1",
+              deleted_at: stamp
+            }
+          ]
         )
 
       # Every type has to be on the page. `load_page_context` loads a table only
@@ -456,9 +509,21 @@ defmodule VitrialSync.PrefetchTest do
 
       rows =
         world(
-          entities: [%Entity{entity_type: "delivery_execution", entity_id: "de-1", payload: %{"id" => "de-1"}, server_revision: 1}],
+          entities: [
+            %Entity{
+              entity_type: "delivery_execution",
+              entity_id: "de-1",
+              payload: %{"id" => "de-1"},
+              server_revision: 1
+            }
+          ],
           project_children: [
-            %ProjectChild{entity_type: "delivery_execution", entity_id: "de-1", project_id: "proj-1", deleted_at: stamp}
+            %ProjectChild{
+              entity_type: "delivery_execution",
+              entity_id: "de-1",
+              project_id: "proj-1",
+              deleted_at: stamp
+            }
           ],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}]
         )
@@ -484,10 +549,16 @@ defmodule VitrialSync.PrefetchTest do
         world(
           customers: [%Customer{customer_id: "cust-1"}],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}],
-          project_sectors: [%ProjectSector{project_sector_id: "sec-1", project_id: "proj-1", sector_id: "s"}],
+          project_sectors: [
+            %ProjectSector{project_sector_id: "sec-1", project_id: "proj-1", sector_id: "s"}
+          ],
           items: [%Item{item_id: "item-1", project_id: "proj-1", project_sector_id: "sec-1"}],
-          item_children: [%ItemChild{entity_type: "evidence", entity_id: "e-1", item_id: "item-1"}],
-          project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q-1", project_id: "proj-1"}]
+          item_children: [
+            %ItemChild{entity_type: "evidence", entity_id: "e-1", item_id: "item-1"}
+          ],
+          project_children: [
+            %ProjectChild{entity_type: "quotation", entity_id: "q-1", project_id: "proj-1"}
+          ]
         )
 
       principal = principal()
@@ -510,8 +581,21 @@ defmodule VitrialSync.PrefetchTest do
     test "the delivery project child is loaded, which is the wiring that broke" do
       rows =
         world(
-          entities: [%Entity{entity_type: "delivery_execution", entity_id: "de-1", payload: %{"id" => "de-1"}, server_revision: 1}],
-          project_children: [%ProjectChild{entity_type: "delivery_execution", entity_id: "de-1", project_id: "proj-1"}],
+          entities: [
+            %Entity{
+              entity_type: "delivery_execution",
+              entity_id: "de-1",
+              payload: %{"id" => "de-1"},
+              server_revision: 1
+            }
+          ],
+          project_children: [
+            %ProjectChild{
+              entity_type: "delivery_execution",
+              entity_id: "de-1",
+              project_id: "proj-1"
+            }
+          ],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}]
         )
 
@@ -532,12 +616,20 @@ defmodule VitrialSync.PrefetchTest do
           customers: [%Customer{customer_id: "cust-1"}],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}],
           items: [%Item{item_id: "item-1", project_id: "proj-1"}],
-          project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q-1", project_id: "proj-1"}],
-          entities: [%Entity{entity_type: "quotation", entity_id: "q-1", payload: %{}, server_revision: 1}]
+          project_children: [
+            %ProjectChild{entity_type: "quotation", entity_id: "q-1", project_id: "proj-1"}
+          ],
+          entities: [
+            %Entity{entity_type: "quotation", entity_id: "q-1", payload: %{}, server_revision: 1}
+          ]
         )
 
       context =
-        Prefetch.load_page_context(principal(), [{"customer", "cust-1"}, {"quotation", "q-1"}], rows)
+        Prefetch.load_page_context(
+          principal(),
+          [{"customer", "cust-1"}, {"quotation", "q-1"}],
+          rows
+        )
 
       assert Map.keys(context.customers) == ["cust-1"]
       assert Map.keys(context.projects) == ["proj-1"]
@@ -565,7 +657,9 @@ defmodule VitrialSync.PrefetchTest do
     test "a project is loaded even when it is only reachable through a sector" do
       rows =
         world(
-          project_sectors: [%ProjectSector{project_sector_id: "sec-1", project_id: "proj-1", sector_id: "s"}],
+          project_sectors: [
+            %ProjectSector{project_sector_id: "sec-1", project_id: "proj-1", sector_id: "s"}
+          ],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}]
         )
 
@@ -581,7 +675,9 @@ defmodule VitrialSync.PrefetchTest do
       rows =
         world(
           items: [%Item{item_id: "item-1", project_id: "proj-1", project_sector_id: "sec-1"}],
-          item_children: [%ItemChild{entity_type: "evidence", entity_id: "e-1", item_id: "item-1"}],
+          item_children: [
+            %ItemChild{entity_type: "evidence", entity_id: "e-1", item_id: "item-1"}
+          ],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}]
         )
 
@@ -604,9 +700,20 @@ defmodule VitrialSync.PrefetchTest do
       rows = world(projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}])
 
       from_tuple = Prefetch.load_page_context(principal(), [{"project", "proj-1"}], rows)
-      from_map = Prefetch.load_page_context(principal(), [%{entity_type: "project", entity_id: "proj-1"}], rows)
 
-      candidate = %VitrialSync.Page.Candidate{sequence: 7, entity_type: "project", entity_id: "proj-1"}
+      from_map =
+        Prefetch.load_page_context(
+          principal(),
+          [%{entity_type: "project", entity_id: "proj-1"}],
+          rows
+        )
+
+      candidate = %VitrialSync.Page.Candidate{
+        sequence: 7,
+        entity_type: "project",
+        entity_id: "proj-1"
+      }
+
       from_candidate = Prefetch.load_page_context(principal(), [candidate], rows)
 
       assert from_tuple == from_map
@@ -648,7 +755,13 @@ defmodule VitrialSync.PrefetchTest do
       # ...)` is a valid call -- it just is not the one `pull_since` makes.
       rows =
         world(
-          project_children: [%ProjectChild{entity_type: "delivery_execution", entity_id: "de-1", project_id: "proj-1"}],
+          project_children: [
+            %ProjectChild{
+              entity_type: "delivery_execution",
+              entity_id: "de-1",
+              project_id: "proj-1"
+            }
+          ],
           projects: [%Project{project_id: "proj-1", customer_id: "cust-1"}]
         )
 

@@ -116,7 +116,19 @@ def s3_store(monkeypatch, *, fail: str | None = None) -> tuple[S3ObjectStore, Fa
 
     client = FakeS3Client(fail=fail)
     monkeypatch.setattr(storage_module.settings, "s3_bucket", "test-bucket")
-    monkeypatch.setattr(storage_module.boto3, "client", lambda **kwargs: client)
+
+    # The service name arrives POSITIONALLY: `boto3.client("s3", endpoint_url=…)`
+    # (app/storage.py:139). A `lambda **kwargs` cannot accept that and raises
+    # `TypeError: <lambda>() takes 0 positional arguments but 1 was given`, which
+    # is exactly what CI reported -- the stub was narrower than the call it stood
+    # in for, so the three tests written to pin VITR-V013 never constructed a
+    # store at all. The stub's job is to be the real client, so it has to accept
+    # the real call shape.
+    def _client(service_name: str, **kwargs):
+        assert service_name == "s3", f"unexpected service {service_name!r}"
+        return client
+
+    monkeypatch.setattr(storage_module.boto3, "client", _client)
     return storage_module.S3ObjectStore(), client
 
 

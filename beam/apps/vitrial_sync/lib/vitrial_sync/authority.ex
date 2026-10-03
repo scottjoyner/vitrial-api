@@ -94,7 +94,13 @@ defmodule VitrialSync.Authority do
       iex> Authority.decide(record, %{}, nil, principal, world)
       {:rejected, "authorization_rejected"}
   """
-  @spec decide(Record.t(), map(), Canonical.Entity.t() | nil, Canonical.Principal.t(), Canonical.World.t()) ::
+  @spec decide(
+          Record.t(),
+          map(),
+          Canonical.Entity.t() | nil,
+          Canonical.Principal.t(),
+          Canonical.World.t()
+        ) ::
           {:ok, effects()} | {:rejected, RejectionCode.t()}
   def decide(%Record{} = record, payload, current, principal, %Canonical.World{} = world) do
     with :ok <- step_item_delete_guard(record, world) do

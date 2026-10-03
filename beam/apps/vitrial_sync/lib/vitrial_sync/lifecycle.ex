@@ -43,10 +43,19 @@ defmodule VitrialSync.Lifecycle do
   @quotation_lifecycle_keys MapSet.new(["status", "events", "updatedAt"])
 
   @blocker_protected_keys ~w(category kind description status critical resolvedAt responsiblePerson vendorSupplier)
-  @blocker_snapshot_normalized MapSet.new(["blockerKind", "description", "responsiblePerson", "vendorSupplier"])
+  @blocker_snapshot_normalized MapSet.new([
+                                 "blockerKind",
+                                 "description",
+                                 "responsiblePerson",
+                                 "vendorSupplier"
+                               ])
 
-  @blocker_provenance_messages {"blocker event provenance is incomplete", "blocker event organization is invalid", "blocker latest event does not match authenticated provenance"}
-  @quotation_provenance_messages {"quotation event provenance is incomplete", "quotation event organization is invalid", "quotation latest event does not match authenticated provenance"}
+  @blocker_provenance_messages {"blocker event provenance is incomplete",
+                                "blocker event organization is invalid",
+                                "blocker latest event does not match authenticated provenance"}
+  @quotation_provenance_messages {"quotation event provenance is incomplete",
+                                  "quotation event organization is invalid",
+                                  "quotation latest event does not match authenticated provenance"}
 
   @typedoc "The reference's message for the lifecycle rule that refused the record."
   @type rejection :: String.t()
@@ -86,7 +95,13 @@ defmodule VitrialSync.Lifecycle do
 
       record.entity_type == "quotation" ->
         verdict(
-          quotation(payload, principal, Canonical.payload_object(current), record.entity_id, world)
+          quotation(
+            payload,
+            principal,
+            Canonical.payload_object(current),
+            record.entity_id,
+            world
+          )
         )
 
       true ->
@@ -169,7 +184,16 @@ defmodule VitrialSync.Lifecycle do
   defp walk_blocker_events([], _principal, _entity_id, _item_id, _index, state, _previous, last),
     do: {:ok, state, last}
 
-  defp walk_blocker_events([event | rest], principal, entity_id, item_id, index, state, previous, _last) do
+  defp walk_blocker_events(
+         [event | rest],
+         principal,
+         entity_id,
+         item_id,
+         index,
+         state,
+         previous,
+         _last
+       ) do
     with :ok <- require_blocker_event_kind(event),
          :ok <- require_blocker_event_identity(event, entity_id, item_id),
          :ok <- Provenance.check(event, principal, false, @blocker_provenance_messages) do
@@ -315,8 +339,8 @@ defmodule VitrialSync.Lifecycle do
         :ok
 
       Enum.any?(@blocker_protected_keys, fn key ->
-               Value.py_ne?(Map.get(current_payload, key), Map.get(payload, key))
-             end) ->
+        Value.py_ne?(Map.get(current_payload, key), Map.get(payload, key))
+      end) ->
         {:error, "blocker changes must append a lifecycle event"}
 
       true ->

@@ -2,6 +2,7 @@ defmodule VitrialSync.DeliveryTest do
   use ExUnit.Case, async: true
 
   alias VitrialSync.{Canonical, Delivery}
+
   alias VitrialSync.Canonical.{
     Customer,
     Entity,
@@ -72,7 +73,11 @@ defmodule VitrialSync.DeliveryTest do
   defp quotation_world(overrides \\ []) do
     chain(
       Keyword.merge(
-        [entities: [%Entity{entity_type: "quotation", entity_id: "q1", payload: quotation_payload()}]],
+        [
+          entities: [
+            %Entity{entity_type: "quotation", entity_id: "q1", payload: quotation_payload()}
+          ]
+        ],
         overrides
       )
     )
@@ -92,18 +97,20 @@ defmodule VitrialSync.DeliveryTest do
       | project_children: [
           %ProjectChild{entity_type: "delivery_execution", entity_id: "d1", project_id: "p1"}
         ],
-        entities: with_evidence().entities ++
-                    [
-                      %Entity{
-                        entity_type: "delivery_execution",
-                        entity_id: "d1",
-                        payload: payload
-                      }
-                    ]
+        entities:
+          with_evidence().entities ++
+            [
+              %Entity{
+                entity_type: "delivery_execution",
+                entity_id: "d1",
+                payload: payload
+              }
+            ]
     }
   end
 
-  defp stored(payload), do: %Entity{entity_type: "delivery_execution", entity_id: "d1", payload: payload}
+  defp stored(payload),
+    do: %Entity{entity_type: "delivery_execution", entity_id: "d1", payload: payload}
 
   defp authorize(payload, opts \\ []) do
     principal = Keyword.get(opts, :principal, capable())
@@ -366,18 +373,32 @@ defmodule VitrialSync.DeliveryTest do
       }
 
       assert {:error, "existing delivery execution payload is not canonical and active"} =
-               authorize(delivery_payload(), current: current, world: existing_world(delivery_payload()))
+               authorize(delivery_payload(),
+                 current: current,
+                 world: existing_world(delivery_payload())
+               )
     end
 
     test "a stored payload that is not an object is not a payload" do
-      current = %Entity{entity_type: "delivery_execution", entity_id: "d1", payload: "not-an-object"}
+      current = %Entity{
+        entity_type: "delivery_execution",
+        entity_id: "d1",
+        payload: "not-an-object"
+      }
 
       assert {:error, "existing delivery execution payload is not canonical and active"} =
-               authorize(delivery_payload(), current: current, world: existing_world(delivery_payload()))
+               authorize(delivery_payload(),
+                 current: current,
+                 world: existing_world(delivery_payload())
+               )
     end
 
     test "a payload with no ownership row is refused" do
-      current = %Entity{entity_type: "delivery_execution", entity_id: "d1", payload: delivery_payload()}
+      current = %Entity{
+        entity_type: "delivery_execution",
+        entity_id: "d1",
+        payload: delivery_payload()
+      }
 
       assert {:error, "existing delivery execution lacks canonical ownership"} =
                authorize(delivery_payload(), current: current)
@@ -396,7 +417,11 @@ defmodule VitrialSync.DeliveryTest do
           ]
         )
 
-      current = %Entity{entity_type: "delivery_execution", entity_id: "d1", payload: delivery_payload()}
+      current = %Entity{
+        entity_type: "delivery_execution",
+        entity_id: "d1",
+        payload: delivery_payload()
+      }
 
       assert {:error, "existing delivery execution ownership is tombstoned"} =
                authorize(delivery_payload(), current: current, world: world)
@@ -447,12 +472,18 @@ defmodule VitrialSync.DeliveryTest do
     end
 
     test "every historical event needs complete provenance, not just the newest" do
-      stale = [opening_event(), event("e2", "engineeringReview", "materialsRequired", @t1, %{"organizationID" => "other"})]
+      stale = [
+        opening_event(),
+        event("e2", "engineeringReview", "materialsRequired", @t1, %{"organizationID" => "other"})
+      ]
 
       assert {:error, "delivery execution event organization is invalid"} =
                authorize(delivery_payload(%{"events" => stale, "updatedAt" => @t1}))
 
-      incomplete = [opening_event(), event("e2", "engineeringReview", "materialsRequired", @t1, %{"sessionID" => nil})]
+      incomplete = [
+        opening_event(),
+        event("e2", "engineeringReview", "materialsRequired", @t1, %{"sessionID" => nil})
+      ]
 
       assert {:error, "delivery execution event provenance is incomplete"} =
                authorize(delivery_payload(%{"events" => incomplete, "updatedAt" => @t1}))
@@ -531,12 +562,20 @@ defmodule VitrialSync.DeliveryTest do
     end
 
     test "the project must be canonical and live" do
-      bare = world(entities: [%Entity{entity_type: "quotation", entity_id: "q1", payload: quotation_payload()}])
+      bare =
+        world(
+          entities: [
+            %Entity{entity_type: "quotation", entity_id: "q1", payload: quotation_payload()}
+          ]
+        )
 
       assert {:error, "delivery execution Project is not canonical and active"} =
                authorize(delivery_payload(), world: bare)
 
-      tombstoned = quotation_world(projects: [%Project{project_id: "p1", customer_id: "c1", deleted_at: @t0}])
+      tombstoned =
+        quotation_world(
+          projects: [%Project{project_id: "p1", customer_id: "c1", deleted_at: @t0}]
+        )
 
       assert {:error, "delivery execution Project is not canonical and active"} =
                authorize(delivery_payload(), world: tombstoned)
@@ -640,7 +679,11 @@ defmodule VitrialSync.DeliveryTest do
       world =
         quotation_world(
           entities: [
-            %Entity{entity_type: "quotation", entity_id: "q1", payload: quotation_payload(%{"revision" => 0})}
+            %Entity{
+              entity_type: "quotation",
+              entity_id: "q1",
+              payload: quotation_payload(%{"revision" => 0})
+            }
           ]
         )
 
@@ -657,7 +700,11 @@ defmodule VitrialSync.DeliveryTest do
     defp total_world(lines) do
       quotation_world(
         entities: [
-          %Entity{entity_type: "quotation", entity_id: "q1", payload: quotation_payload(%{"lines" => lines})}
+          %Entity{
+            entity_type: "quotation",
+            entity_id: "q1",
+            payload: quotation_payload(%{"lines" => lines})
+          }
         ]
       )
     end
@@ -670,7 +717,9 @@ defmodule VitrialSync.DeliveryTest do
       assert {:ok, "p1"} = authorize(delivery_payload(%{"quotedTotal" => "0.3"}), world: world)
 
       assert {:error, "delivery execution quotedTotal does not match canonical quotation"} =
-               authorize(delivery_payload(%{"quotedTotal" => "0.30000000000000004"}), world: world)
+               authorize(delivery_payload(%{"quotedTotal" => "0.30000000000000004"}),
+                 world: world
+               )
     end
 
     test "an integer and its float spelling are the same amount" do
@@ -689,9 +738,14 @@ defmodule VitrialSync.DeliveryTest do
     end
 
     test "an unparseable amount is refused rather than coerced" do
-      assert {:error, "quotedTotal is invalid"} = authorize(delivery_payload(%{"quotedTotal" => "a lot"}))
-      assert {:error, "quotedTotal is invalid"} = authorize(delivery_payload(%{"quotedTotal" => nil}))
-      assert {:error, "quotedTotal is invalid"} = authorize(delivery_payload(%{"quotedTotal" => true}))
+      assert {:error, "quotedTotal is invalid"} =
+               authorize(delivery_payload(%{"quotedTotal" => "a lot"}))
+
+      assert {:error, "quotedTotal is invalid"} =
+               authorize(delivery_payload(%{"quotedTotal" => nil}))
+
+      assert {:error, "quotedTotal is invalid"} =
+               authorize(delivery_payload(%{"quotedTotal" => true}))
 
       world = total_world([%{"totalPrice" => "free"}])
 
@@ -724,7 +778,8 @@ defmodule VitrialSync.DeliveryTest do
         event("e3", "materialsRequired", "procurement", @t2)
       ]
 
-      payload = delivery_payload(%{"status" => "procurement", "events" => revisits, "updatedAt" => @t2})
+      payload =
+        delivery_payload(%{"status" => "procurement", "events" => revisits, "updatedAt" => @t2})
 
       assert {:error, "delivery materials plan is required before Procurement"} =
                authorize(payload)
@@ -746,9 +801,10 @@ defmodule VitrialSync.DeliveryTest do
           "materialsPlan" => materials_plan(1, @t1)
         })
 
-      short = Map.put(procurement_plan(), "requirements", [
-            %{"requirementID" => "m1", "status" => "ordered"}
-          ])
+      short =
+        Map.put(procurement_plan(), "requirements", [
+          %{"requirementID" => "m1", "status" => "ordered"}
+        ])
 
       assert {:error, "delivery Production is blocked until every frozen material is available"} =
                authorize(Map.put(ordered, "procurementPlan", short))
@@ -805,7 +861,8 @@ defmodule VitrialSync.DeliveryTest do
       elsewhere = %{with_evidence() | items: [%Item{item_id: "i1", project_id: "p2"}]}
       payload = scheduled_payload(%{"installationCompletion" => installation_completion()})
 
-      assert {:error, "delivery installation completion evidence Item is not active in the delivery Project"} =
+      assert {:error,
+              "delivery installation completion evidence Item is not active in the delivery Project"} =
                authorize(payload, world: elsewhere)
     end
 
@@ -819,7 +876,8 @@ defmodule VitrialSync.DeliveryTest do
 
       payload = scheduled_payload(%{"installationCompletion" => installation_completion()})
 
-      assert {:error, "delivery installation completion evidence is not canonical for the referenced Item"} =
+      assert {:error,
+              "delivery installation completion evidence is not canonical for the referenced Item"} =
                authorize(payload, world: tombstoned)
     end
 
@@ -835,7 +893,8 @@ defmodule VitrialSync.DeliveryTest do
       for reference <- [%{"itemID" => "i1"}, %{"documentID" => "e1"}] do
         payload =
           scheduled_payload(%{
-            "installationCompletion" => installation_completion(%{"evidenceReferences" => [reference]})
+            "installationCompletion" =>
+              installation_completion(%{"evidenceReferences" => [reference]})
           })
 
         assert {:error,
@@ -848,13 +907,13 @@ defmodule VitrialSync.DeliveryTest do
       for reference <- ["e1", 7] do
         payload =
           scheduled_payload(%{
-            "installationCompletion" => installation_completion(%{"evidenceReferences" => [reference]})
+            "installationCompletion" =>
+              installation_completion(%{"evidenceReferences" => [reference]})
           })
 
         assert {:error, "delivery installation completion evidence reference is malformed"} =
                  authorize(payload, world: with_evidence())
       end
-
     end
   end
 
@@ -950,7 +1009,10 @@ defmodule VitrialSync.DeliveryTest do
         })
 
       assert {:error, "delivery execution history cannot be truncated"} =
-               authorize(shortened, current: stored(scheduled_payload()), world: existing_world(scheduled_payload()))
+               authorize(shortened,
+                 current: stored(scheduled_payload()),
+                 world: existing_world(scheduled_payload())
+               )
     end
 
     test "history may not be rewritten in place" do
@@ -961,14 +1023,20 @@ defmodule VitrialSync.DeliveryTest do
       rewritten = scheduled_payload(%{"events" => rewritten_events})
 
       assert {:error, "delivery execution history is immutable"} =
-               authorize(rewritten, current: stored(scheduled_payload()), world: existing_world(scheduled_payload()))
+               authorize(rewritten,
+                 current: stored(scheduled_payload()),
+                 world: existing_world(scheduled_payload())
+               )
     end
 
     test "a bound handoff field may not move on an update" do
       moved = scheduled_payload(%{"quotedTotal" => "120.00"})
 
       assert {:error, "delivery execution immutable handoff field quotedTotal changed"} =
-               authorize(moved, current: stored(scheduled_payload()), world: existing_world(scheduled_payload()))
+               authorize(moved,
+                 current: stored(scheduled_payload()),
+                 world: existing_world(scheduled_payload())
+               )
     end
 
     test "an operational change with no appended event is refused" do
@@ -980,7 +1048,10 @@ defmodule VitrialSync.DeliveryTest do
         })
 
       assert {:error, "delivery execution operational changes must append a lifecycle event"} =
-               authorize(payload, current: stored(scheduled_payload()), world: existing_world(scheduled_payload()))
+               authorize(payload,
+                 current: stored(scheduled_payload()),
+                 world: existing_world(scheduled_payload())
+               )
     end
   end
 

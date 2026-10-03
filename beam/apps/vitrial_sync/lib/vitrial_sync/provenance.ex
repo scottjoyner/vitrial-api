@@ -83,7 +83,7 @@ defmodule VitrialSync.Provenance do
 
     cond do
       is_nil(actor_id) or is_nil(organization_id) or is_nil(membership_id) or
-          is_nil(session_id) or not Value.int?(revision) or revision < 0 ->
+        is_nil(session_id) or not Value.int?(revision) or revision < 0 ->
         {:error, incomplete}
 
       is_nil(principal) ->

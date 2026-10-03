@@ -2,6 +2,7 @@ defmodule VitrialSync.OwnershipTest do
   use ExUnit.Case, async: true
 
   alias VitrialSync.{Canonical, Ownership}
+
   alias VitrialSync.Canonical.{
     Customer,
     Entity,
@@ -55,7 +56,9 @@ defmodule VitrialSync.OwnershipTest do
     world(
       customers: [%Customer{customer_id: "c1"}],
       projects: [%Project{project_id: "p1", customer_id: "c1"}],
-      project_sectors: [%ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}],
+      project_sectors: [
+        %ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}
+      ],
       items: [%Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1"}]
     )
   end
@@ -174,23 +177,43 @@ defmodule VitrialSync.OwnershipTest do
 
     test "a create without customer.create is refused" do
       assert {:error, "customer.create capability required"} =
-               authorize("customer", "c1", %{"id" => "c1"}, principal([]), Canonical.empty_world())
+               authorize(
+                 "customer",
+                 "c1",
+                 %{"id" => "c1"},
+                 principal([]),
+                 Canonical.empty_world()
+               )
     end
 
     test "the payload id must match the entityID" do
       # `_require_identity/3`, app/ownership.py:111-116.
       assert {:error, "payload identity does not match canonical entityID"} =
-               authorize("customer", "c1", %{"id" => "c2"}, principal(["customer.create"]), Canonical.empty_world())
+               authorize(
+                 "customer",
+                 "c1",
+                 %{"id" => "c2"},
+                 principal(["customer.create"]),
+                 Canonical.empty_world()
+               )
 
       assert {:error, "payload identity does not match canonical entityID"} =
-               authorize("customer", "c1", %{}, principal(["customer.create"]), Canonical.empty_world())
+               authorize(
+                 "customer",
+                 "c1",
+                 %{},
+                 principal(["customer.create"]),
+                 Canonical.empty_world()
+               )
     end
 
     test "a tombstone may omit the id, because a V1 tombstone may carry an empty payload" do
       existing = world(customers: [%Customer{customer_id: "c1"}])
 
       assert {:ok, plan} =
-               authorize("customer", "c1", %{}, principal(["customer.edit"]), existing, deleted_at: "t")
+               authorize("customer", "c1", %{}, principal(["customer.edit"]), existing,
+                 deleted_at: "t"
+               )
 
       assert plan.deleted_at == "t"
       refute plan.is_create
@@ -201,12 +224,22 @@ defmodule VitrialSync.OwnershipTest do
       # ownership, and a request to delete something canonical never had is
       # refused rather than allowed through the generic path.
       assert {:error, "cannot tombstone an unknown Customer"} =
-               authorize("customer", "c1", %{}, principal(["customer.edit"]), Canonical.empty_world(),
+               authorize(
+                 "customer",
+                 "c1",
+                 %{},
+                 principal(["customer.edit"]),
+                 Canonical.empty_world(),
                  deleted_at: "t"
                )
 
       assert {:error, "existing Customer lacks canonical ownership"} =
-               authorize("customer", "c1", %{"id" => "c1"}, principal(["customer.create"]), Canonical.empty_world(),
+               authorize(
+                 "customer",
+                 "c1",
+                 %{"id" => "c1"},
+                 principal(["customer.create"]),
+                 Canonical.empty_world(),
                  generic_exists: true
                )
     end
@@ -215,7 +248,13 @@ defmodule VitrialSync.OwnershipTest do
       existing = world(customers: [%Customer{customer_id: "c1"}])
 
       assert {:ok, _plan} =
-               authorize("customer", "c1", %{"id" => "c1"}, principal(["customer.edit"]), existing)
+               authorize(
+                 "customer",
+                 "c1",
+                 %{"id" => "c1"},
+                 principal(["customer.edit"]),
+                 existing
+               )
 
       assert {:error, "customer.edit capability required"} =
                authorize("customer", "c1", %{"id" => "c1"}, principal([]), existing)
@@ -251,7 +290,9 @@ defmodule VitrialSync.OwnershipTest do
         )
 
       assert {:error, "Customer cannot be deleted while Projects remain active"} =
-               authorize("customer", "c1", %{}, principal(["customer.edit"]), blocked, deleted_at: "t")
+               authorize("customer", "c1", %{}, principal(["customer.edit"]), blocked,
+                 deleted_at: "t"
+               )
 
       cleared =
         world(
@@ -260,7 +301,9 @@ defmodule VitrialSync.OwnershipTest do
         )
 
       assert {:ok, _plan} =
-               authorize("customer", "c1", %{}, principal(["customer.edit"]), cleared, deleted_at: "t")
+               authorize("customer", "c1", %{}, principal(["customer.edit"]), cleared,
+                 deleted_at: "t"
+               )
     end
   end
 
@@ -274,18 +317,36 @@ defmodule VitrialSync.OwnershipTest do
       capable = principal(["project.create"])
 
       assert {:ok, plan} =
-               authorize("project", "p1", %{"id" => "p1", "customerID" => "c1"}, capable, customers)
+               authorize(
+                 "project",
+                 "p1",
+                 %{"id" => "p1", "customerID" => "c1"},
+                 capable,
+                 customers
+               )
 
       assert plan.project_id == "p1"
       assert plan.customer_id == "c1"
 
       assert {:error, "Project parent Customer is not canonical and active"} =
-               authorize("project", "p1", %{"id" => "p1", "customerID" => "nope"}, capable, customers)
+               authorize(
+                 "project",
+                 "p1",
+                 %{"id" => "p1", "customerID" => "nope"},
+                 capable,
+                 customers
+               )
 
       tombstoned = world(customers: [%Customer{customer_id: "c1", deleted_at: "t"}])
 
       assert {:error, "Project parent Customer is not canonical and active"} =
-               authorize("project", "p1", %{"id" => "p1", "customerID" => "c1"}, capable, tombstoned)
+               authorize(
+                 "project",
+                 "p1",
+                 %{"id" => "p1", "customerID" => "c1"},
+                 capable,
+                 tombstoned
+               )
 
       assert {:error, "Project parent Customer is outside authorized scope"} =
                authorize(
@@ -312,7 +373,13 @@ defmodule VitrialSync.OwnershipTest do
       assert {:ok, _plan} = authorize("project", "p1", %{"id" => "p1"}, capable, projects)
 
       assert {:error, "Project Customer ownership is immutable"} =
-               authorize("project", "p1", %{"id" => "p1", "customerID" => "c2"}, capable, projects)
+               authorize(
+                 "project",
+                 "p1",
+                 %{"id" => "p1", "customerID" => "c2"},
+                 capable,
+                 projects
+               )
     end
 
     test "a project with a live sector, item or project child cannot be deleted" do
@@ -321,10 +388,18 @@ defmodule VitrialSync.OwnershipTest do
       for extra <- [
             [project_sectors: [%ProjectSector{project_sector_id: "ps1", project_id: "p1"}]],
             [items: [%Item{item_id: "i1", project_id: "p1"}]],
-            [project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}]],
             [
               project_children: [
-                %ProjectChild{entity_type: "delivery_execution", entity_id: "d1", project_id: "p1"}
+                %ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}
+              ]
+            ],
+            [
+              project_children: [
+                %ProjectChild{
+                  entity_type: "delivery_execution",
+                  entity_id: "d1",
+                  project_id: "p1"
+                }
               ]
             ]
           ] do
@@ -353,7 +428,9 @@ defmodule VitrialSync.OwnershipTest do
         )
 
       assert {:ok, _plan} =
-               authorize("project", "p1", %{}, principal(["project.edit"]), cleared, deleted_at: "t")
+               authorize("project", "p1", %{}, principal(["project.edit"]), cleared,
+                 deleted_at: "t"
+               )
     end
   end
 
@@ -385,7 +462,13 @@ defmodule VitrialSync.OwnershipTest do
       assert plan.customer_id == "c1"
 
       assert {:error, "sectorID is required for canonical ownership"} =
-               authorize("project_sector", "ps1", %{"id" => "ps1", "projectID" => "p1"}, capable, projects)
+               authorize(
+                 "project_sector",
+                 "ps1",
+                 %{"id" => "ps1", "projectID" => "p1"},
+                 capable,
+                 projects
+               )
     end
 
     test "both parents are immutable when supplied" do
@@ -402,22 +485,40 @@ defmodule VitrialSync.OwnershipTest do
                )
 
       assert {:error, "ProjectSector Sector identity is immutable"} =
-               authorize("project_sector", "ps1", %{"id" => "ps1", "sectorID" => "s9"}, capable, existing)
+               authorize(
+                 "project_sector",
+                 "ps1",
+                 %{"id" => "ps1", "sectorID" => "s9"},
+                 capable,
+                 existing
+               )
     end
 
     test "a sector with live items cannot be deleted" do
       assert {:error, "ProjectSector cannot be deleted while Items remain active"} =
-               authorize("project_sector", "ps1", %{"id" => "ps1"}, principal(["project.edit"]), chain(),
+               authorize(
+                 "project_sector",
+                 "ps1",
+                 %{"id" => "ps1"},
+                 principal(["project.edit"]),
+                 chain(),
                  deleted_at: "t"
                )
 
       cleared = %{
         chain()
-        | items: [%Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1", deleted_at: "t"}]
+        | items: [
+            %Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1", deleted_at: "t"}
+          ]
       }
 
       assert {:ok, _plan} =
-               authorize("project_sector", "ps1", %{"id" => "ps1"}, principal(["project.edit"]), cleared,
+               authorize(
+                 "project_sector",
+                 "ps1",
+                 %{"id" => "ps1"},
+                 principal(["project.edit"]),
+                 cleared,
                  deleted_at: "t"
                )
     end
@@ -502,7 +603,13 @@ defmodule VitrialSync.OwnershipTest do
                authorize("item", "i1", %{"id" => "i1", "projectID" => "p9"}, capable, chain())
 
       assert {:error, "Item ProjectSector ownership is immutable"} =
-               authorize("item", "i1", %{"id" => "i1", "projectSectorID" => "ps9"}, capable, chain())
+               authorize(
+                 "item",
+                 "i1",
+                 %{"id" => "i1", "projectSectorID" => "ps9"},
+                 capable,
+                 chain()
+               )
     end
 
     test "an item with a live sidecar cannot be deleted" do
@@ -521,7 +628,9 @@ defmodule VitrialSync.OwnershipTest do
       # cover the whole sidecar table; neither does alone.
       audit_world = %{
         chain()
-        | item_children: [%ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1"}]
+        | item_children: [
+            %ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1"}
+          ]
       }
 
       sidecar_world = %{
@@ -559,11 +668,15 @@ defmodule VitrialSync.OwnershipTest do
       payload = %{"id" => "a1", "itemID" => "i1", "kind" => "created"}
 
       assert {:error, "item_audit_event history is append-only"} =
-               authorize("item_audit_event", "a1", payload, capable, chain(), generic_exists: true)
+               authorize("item_audit_event", "a1", payload, capable, chain(),
+                 generic_exists: true
+               )
 
       existing = %{
         chain()
-        | item_children: [%ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1"}]
+        | item_children: [
+            %ItemChild{entity_type: "item_audit_event", entity_id: "a1", item_id: "i1"}
+          ]
       }
 
       assert {:error, "item_audit_event history is append-only"} =
@@ -589,7 +702,9 @@ defmodule VitrialSync.OwnershipTest do
 
       with_base = %{
         chain()
-        | item_children: [%ItemChild{entity_type: "configuration", entity_id: "c1", item_id: "i1"}]
+        | item_children: [
+            %ItemChild{entity_type: "configuration", entity_id: "c1", item_id: "i1"}
+          ]
       }
 
       assert {:ok, plan} =
@@ -655,10 +770,22 @@ defmodule VitrialSync.OwnershipTest do
                authorize("item_audit_event", "a1", audit_payload("updated"), both, chain())
 
       assert {:error, "item.create capability required"} =
-               authorize("item_audit_event", "a1", audit_payload("created"), principal([]), chain())
+               authorize(
+                 "item_audit_event",
+                 "a1",
+                 audit_payload("created"),
+                 principal([]),
+                 chain()
+               )
 
       assert {:error, "item.edit capability required"} =
-               authorize("item_audit_event", "a1", audit_payload("updated"), principal(["item.create"]), chain())
+               authorize(
+                 "item_audit_event",
+                 "a1",
+                 audit_payload("updated"),
+                 principal(["item.create"]),
+                 chain()
+               )
 
       assert {:error, "item audit kind is invalid"} =
                authorize("item_audit_event", "a1", audit_payload("escalated"), both, chain())
@@ -739,16 +866,40 @@ defmodule VitrialSync.OwnershipTest do
       base = %{"id" => "m1", "itemID" => "i1"}
 
       assert {:ok, _plan} =
-               authorize("measurement", "m1", Map.put(base, "evidenceReferences", ["e1"]), capable, with_evidence())
+               authorize(
+                 "measurement",
+                 "m1",
+                 Map.put(base, "evidenceReferences", ["e1"]),
+                 capable,
+                 with_evidence()
+               )
 
       assert {:error, "evidence reference is not canonical for the same Item"} =
-               authorize("measurement", "m1", Map.put(base, "evidenceReferences", ["nope"]), capable, with_evidence())
+               authorize(
+                 "measurement",
+                 "m1",
+                 Map.put(base, "evidenceReferences", ["nope"]),
+                 capable,
+                 with_evidence()
+               )
 
       assert {:error, "invalid evidence reference"} =
-               authorize("measurement", "m1", Map.put(base, "evidenceReferences", [""]), capable, with_evidence())
+               authorize(
+                 "measurement",
+                 "m1",
+                 Map.put(base, "evidenceReferences", [""]),
+                 capable,
+                 with_evidence()
+               )
 
       assert {:error, "invalid evidence reference"} =
-               authorize("measurement", "m1", Map.put(base, "evidenceReferences", "e1"), capable, with_evidence())
+               authorize(
+                 "measurement",
+                 "m1",
+                 Map.put(base, "evidenceReferences", "e1"),
+                 capable,
+                 with_evidence()
+               )
 
       # A live evidence child of a *different* item is not a reference for this one.
       elsewhere = %{
@@ -757,7 +908,13 @@ defmodule VitrialSync.OwnershipTest do
       }
 
       assert {:error, "evidence reference is not canonical for the same Item"} =
-               authorize("measurement", "m1", Map.put(base, "evidenceReferences", ["e1"]), capable, elsewhere)
+               authorize(
+                 "measurement",
+                 "m1",
+                 Map.put(base, "evidenceReferences", ["e1"]),
+                 capable,
+                 elsewhere
+               )
     end
 
     test "a tombstoned evidence child is not a live one" do
@@ -783,16 +940,32 @@ defmodule VitrialSync.OwnershipTest do
       base = %{"id" => "r1", "itemID" => "i1"}
 
       assert {:ok, _plan} =
-               authorize("customer_requirement", "r1", Map.put(base, "evidenceReferenceIDs", ["e1"]), capable, with_evidence())
+               authorize(
+                 "customer_requirement",
+                 "r1",
+                 Map.put(base, "evidenceReferenceIDs", ["e1"]),
+                 capable,
+                 with_evidence()
+               )
 
       assert {:error, "evidence reference is not canonical for the same Item"} =
-               authorize("customer_requirement", "r1", Map.put(base, "evidenceReferenceIDs", ["e2"]), capable, with_evidence())
+               authorize(
+                 "customer_requirement",
+                 "r1",
+                 Map.put(base, "evidenceReferenceIDs", ["e2"]),
+                 capable,
+                 with_evidence()
+               )
     end
 
     test "an evidence delete is refused while a live record still references it" do
       referencing =
         Map.put(with_evidence(), :entities, [
-          %Entity{entity_type: "measurement", entity_id: "m1", payload: %{"evidenceReferences" => ["e1"]}}
+          %Entity{
+            entity_type: "measurement",
+            entity_id: "m1",
+            payload: %{"evidenceReferences" => ["e1"]}
+          }
         ])
 
       capable = principal(["item.evidence.manage"])
@@ -843,7 +1016,9 @@ defmodule VitrialSync.OwnershipTest do
     defp configuration_world(status) do
       %{
         chain()
-        | item_children: [%ItemChild{entity_type: "configuration", entity_id: "c1", item_id: "i1"}],
+        | item_children: [
+            %ItemChild{entity_type: "configuration", entity_id: "c1", item_id: "i1"}
+          ],
           entities: [
             %Entity{
               entity_type: "configuration",
@@ -859,7 +1034,13 @@ defmodule VitrialSync.OwnershipTest do
       draft = configuration_world("draft")
 
       assert {:error, "item.configuration.finalize capability required"} =
-               authorize("configuration", "c1", payload, principal(["item.configuration.manage"]), draft)
+               authorize(
+                 "configuration",
+                 "c1",
+                 payload,
+                 principal(["item.configuration.manage"]),
+                 draft
+               )
 
       assert {:ok, _plan} =
                authorize(
@@ -876,7 +1057,13 @@ defmodule VitrialSync.OwnershipTest do
       complete = configuration_world("complete")
 
       assert {:error, "item.configuration.reopen capability required"} =
-               authorize("configuration", "c1", payload, principal(["item.configuration.manage"]), complete)
+               authorize(
+                 "configuration",
+                 "c1",
+                 payload,
+                 principal(["item.configuration.manage"]),
+                 complete
+               )
 
       assert {:ok, _plan} =
                authorize(
@@ -892,7 +1079,13 @@ defmodule VitrialSync.OwnershipTest do
       payload = %{"id" => "c1", "itemID" => "i1", "status" => "draft"}
 
       assert {:ok, _plan} =
-               authorize("configuration", "c1", payload, principal(["item.configuration.manage"]), configuration_world("blocked"))
+               authorize(
+                 "configuration",
+                 "c1",
+                 payload,
+                 principal(["item.configuration.manage"]),
+                 configuration_world("blocked")
+               )
     end
   end
 
@@ -912,23 +1105,50 @@ defmodule VitrialSync.OwnershipTest do
                authorize("blocker", "b1", blocker_payload([]), capable, chain())
 
       assert {:ok, _plan} =
-               authorize("blocker", "b1", blocker_payload([blocker_event("e1")]), capable, chain())
+               authorize(
+                 "blocker",
+                 "b1",
+                 blocker_payload([blocker_event("e1")]),
+                 capable,
+                 chain()
+               )
 
       assert {:error, "blocker event identity is invalid"} =
-               authorize("blocker", "b1", blocker_payload([blocker_event("e1", %{"blockerID" => "b2"})]), capable, chain())
+               authorize(
+                 "blocker",
+                 "b1",
+                 blocker_payload([blocker_event("e1", %{"blockerID" => "b2"})]),
+                 capable,
+                 chain()
+               )
 
       assert {:error, "blocker event organization is invalid"} =
-               authorize("blocker", "b1", blocker_payload([blocker_event("e1", %{"organizationID" => "other"})]), capable, chain())
+               authorize(
+                 "blocker",
+                 "b1",
+                 blocker_payload([blocker_event("e1", %{"organizationID" => "other"})]),
+                 capable,
+                 chain()
+               )
 
       assert {:error, "blocker event provenance is incomplete"} =
-               authorize("blocker", "b1", blocker_payload([blocker_event("e1", %{"sessionID" => nil})]), capable, chain())
+               authorize(
+                 "blocker",
+                 "b1",
+                 blocker_payload([blocker_event("e1", %{"sessionID" => nil})]),
+                 capable,
+                 chain()
+               )
     end
 
     test "only the appended tail is checked against the current principal (S-120)" do
       capable = principal(["item.blockers.manage"])
 
       # A historical event authored by someone else is history, not a forgery.
-      history = [blocker_event("e1", %{"actorID" => "u0", "authorizationRevision" => 1}), blocker_event("e2")]
+      history = [
+        blocker_event("e1", %{"actorID" => "u0", "authorizationRevision" => 1}),
+        blocker_event("e2")
+      ]
 
       assert {:ok, _plan} = authorize("blocker", "b1", blocker_payload(history), capable, chain())
 
@@ -945,7 +1165,9 @@ defmodule VitrialSync.OwnershipTest do
       }
 
       assert {:ok, _plan} =
-               authorize("blocker", "b1", %{}, principal(["item.blockers.manage"]), existing, deleted_at: "t")
+               authorize("blocker", "b1", %{}, principal(["item.blockers.manage"]), existing,
+                 deleted_at: "t"
+               )
     end
   end
 
@@ -958,7 +1180,9 @@ defmodule VitrialSync.OwnershipTest do
       world(
         customers: [%Customer{customer_id: "c1"}],
         projects: [%Project{project_id: "p1", customer_id: "c1"}],
-        project_sectors: [%ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}],
+        project_sectors: [
+          %ProjectSector{project_sector_id: "ps1", project_id: "p1", sector_id: "s1"}
+        ],
         items: [%Item{item_id: "i1", project_id: "p1", project_sector_id: "ps1"}]
       )
     end
@@ -979,16 +1203,26 @@ defmodule VitrialSync.OwnershipTest do
     test "the capability is chosen by status" do
       draft = principal(["quotation.create"])
 
-      assert {:ok, _plan} = authorize("quotation", "q1", quote_payload("draft"), draft, quotation_world())
-      assert {:ok, _plan} = authorize("quotation", "q1", quote_payload("ready"), draft, quotation_world())
+      assert {:ok, _plan} =
+               authorize("quotation", "q1", quote_payload("draft"), draft, quotation_world())
+
+      assert {:ok, _plan} =
+               authorize("quotation", "q1", quote_payload("ready"), draft, quotation_world())
 
       assert {:error, "quotation.send capability required"} =
                authorize("quotation", "q1", quote_payload("sent"), draft, quotation_world())
 
-      approved = quote_payload("approved", %{"events" => [quotation_event("e1", %{"kind" => "approved"})]})
+      approved =
+        quote_payload("approved", %{"events" => [quotation_event("e1", %{"kind" => "approved"})]})
 
       assert {:ok, _plan} =
-               authorize("quotation", "q1", approved, principal(["quotation.approve"]), quotation_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 approved,
+                 principal(["quotation.approve"]),
+                 quotation_world()
+               )
 
       assert {:error, "Quotation status is invalid"} =
                authorize("quotation", "q1", quote_payload("cancelled"), draft, quotation_world())
@@ -999,11 +1233,15 @@ defmodule VitrialSync.OwnershipTest do
       # customer, line or provenance checks run for it.
       existing = %{
         quotation_world()
-        | project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}]
+        | project_children: [
+            %ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}
+          ]
       }
 
       assert {:ok, plan} =
-               authorize("quotation", "q1", %{}, principal(["quotation.create"]), existing, deleted_at: "t")
+               authorize("quotation", "q1", %{}, principal(["quotation.create"]), existing,
+                 deleted_at: "t"
+               )
 
       assert plan.project_id == "p1"
       refute plan.is_create
@@ -1023,7 +1261,9 @@ defmodule VitrialSync.OwnershipTest do
     test "the project is immutable once the quotation is canonical" do
       existing = %{
         quotation_world()
-        | project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}]
+        | project_children: [
+            %ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}
+          ]
       }
 
       assert {:error, "Quotation Project ownership is immutable"} =
@@ -1040,13 +1280,31 @@ defmodule VitrialSync.OwnershipTest do
       capable = principal(["quotation.create"])
 
       assert {:error, "Quotation must contain canonical Item lines"} =
-               authorize("quotation", "q1", quote_payload("draft", %{"lines" => []}), capable, quotation_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 quote_payload("draft", %{"lines" => []}),
+                 capable,
+                 quotation_world()
+               )
 
       assert {:error, "Quotation line is malformed"} =
-               authorize("quotation", "q1", quote_payload("draft", %{"lines" => ["i1"]}), capable, quotation_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 quote_payload("draft", %{"lines" => ["i1"]}),
+                 capable,
+                 quotation_world()
+               )
 
       assert {:error, "itemID is required for canonical ownership"} =
-               authorize("quotation", "q1", quote_payload("draft", %{"lines" => [%{"totalPrice" => 1}]}), capable, quotation_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 quote_payload("draft", %{"lines" => [%{"totalPrice" => 1}]}),
+                 capable,
+                 quotation_world()
+               )
 
       # A live Item, in a live Sector, but under a different Project.
       elsewhere =
@@ -1056,7 +1314,9 @@ defmodule VitrialSync.OwnershipTest do
             %Project{project_id: "p1", customer_id: "c1"},
             %Project{project_id: "p2", customer_id: "c1"}
           ],
-          project_sectors: [%ProjectSector{project_sector_id: "ps1", project_id: "p2", sector_id: "s1"}],
+          project_sectors: [
+            %ProjectSector{project_sector_id: "ps1", project_id: "p2", sector_id: "s1"}
+          ],
           items: [%Item{item_id: "i1", project_id: "p2", project_sector_id: "ps1"}]
         )
 
@@ -1066,7 +1326,13 @@ defmodule VitrialSync.OwnershipTest do
 
     test "a quotation whose project is not canonical is refused" do
       assert {:error, "Project is not canonical and active"} =
-               authorize("quotation", "q1", quote_payload("draft"), principal(["quotation.create"]), Canonical.empty_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 quote_payload("draft"),
+                 principal(["quotation.create"]),
+                 Canonical.empty_world()
+               )
     end
 
     test "a status that has left draft needs an event history with current provenance" do
@@ -1076,13 +1342,21 @@ defmodule VitrialSync.OwnershipTest do
                authorize("quotation", "q1", quote_payload("sent"), capable, quotation_world())
 
       assert {:ok, _plan} =
-               authorize("quotation", "q1", quote_payload("sent", %{"events" => [quotation_event("e1")]}), capable, quotation_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 quote_payload("sent", %{"events" => [quotation_event("e1")]}),
+                 capable,
+                 quotation_world()
+               )
 
       assert {:error, "actorID does not match authenticated provenance"} =
                authorize(
                  "quotation",
                  "q1",
-                 quote_payload("sent", %{"events" => [quotation_event("e1", %{"actorID" => "u0"})]}),
+                 quote_payload("sent", %{
+                   "events" => [quotation_event("e1", %{"actorID" => "u0"})]
+                 }),
                  capable,
                  quotation_world()
                )
@@ -1091,14 +1365,22 @@ defmodule VitrialSync.OwnershipTest do
                authorize(
                  "quotation",
                  "q1",
-                 quote_payload("sent", %{"events" => [quotation_event("e1", %{"organizationID" => "other"})]}),
+                 quote_payload("sent", %{
+                   "events" => [quotation_event("e1", %{"organizationID" => "other"})]
+                 }),
                  capable,
                  quotation_world()
                )
 
       # A draft needs none of it.
       assert {:ok, _plan} =
-               authorize("quotation", "q1", quote_payload("draft"), principal(["quotation.create"]), quotation_world())
+               authorize(
+                 "quotation",
+                 "q1",
+                 quote_payload("draft"),
+                 principal(["quotation.create"]),
+                 quotation_world()
+               )
     end
   end
 
@@ -1124,7 +1406,12 @@ defmodule VitrialSync.OwnershipTest do
     test "a created customer upserts the row and widens the creator's customer scope" do
       assert {:ok, effect} =
                Ownership.apply_plan(
-                 plan(%{entity_type: "customer", entity_id: "c1", is_create: true, customer_id: "c1"}),
+                 plan(%{
+                   entity_type: "customer",
+                   entity_id: "c1",
+                   is_create: true,
+                   customer_id: "c1"
+                 }),
                  grantable(),
                  principal(["customer.create"])
                )
@@ -1156,7 +1443,9 @@ defmodule VitrialSync.OwnershipTest do
 
     test "a membership that is no longer canonical refuses the create" do
       revoked = world(organization: %Organization{authorization_revision: 4})
-      creator = plan(%{entity_type: "customer", entity_id: "c1", is_create: true, customer_id: "c1"})
+
+      creator =
+        plan(%{entity_type: "customer", entity_id: "c1", is_create: true, customer_id: "c1"})
 
       assert {:error, "creator membership is not canonical and active"} =
                Ownership.apply_plan(creator, revoked, principal(["customer.create"]))
@@ -1187,7 +1476,12 @@ defmodule VitrialSync.OwnershipTest do
 
       assert {:ok, effect} =
                Ownership.apply_plan(
-                 plan(%{entity_type: "customer", entity_id: "c1", is_create: true, customer_id: "c1"}),
+                 plan(%{
+                   entity_type: "customer",
+                   entity_id: "c1",
+                   is_create: true,
+                   customer_id: "c1"
+                 }),
                  wide,
                  principal(["customer.create"])
                )
@@ -1209,7 +1503,12 @@ defmodule VitrialSync.OwnershipTest do
 
       assert {:ok, effect} =
                Ownership.apply_plan(
-                 plan(%{entity_type: "customer", entity_id: "c1", is_create: true, customer_id: "c1"}),
+                 plan(%{
+                   entity_type: "customer",
+                   entity_id: "c1",
+                   is_create: true,
+                   customer_id: "c1"
+                 }),
                  held,
                  principal(["customer.create"])
                )
@@ -1306,7 +1605,9 @@ defmodule VitrialSync.OwnershipTest do
                Ownership.apply_plan(
                  plan(%{entity_type: "evidence", entity_id: "e1", item_id: "i2"}),
                  grantable(
-                   item_children: [%ItemChild{entity_type: "evidence", entity_id: "e1", item_id: "i1"}]
+                   item_children: [
+                     %ItemChild{entity_type: "evidence", entity_id: "e1", item_id: "i1"}
+                   ]
                  ),
                  principal
                )
@@ -1316,24 +1617,48 @@ defmodule VitrialSync.OwnershipTest do
       principal = principal(["item.edit"])
 
       assert {:error, "Item ownership plan is missing project_id or project_sector_id"} =
-               Ownership.apply_plan(plan(%{entity_type: "item", entity_id: "i1"}), grantable(), principal)
+               Ownership.apply_plan(
+                 plan(%{entity_type: "item", entity_id: "i1"}),
+                 grantable(),
+                 principal
+               )
 
       assert {:error, "Item ownership plan is missing project_id or project_sector_id"} =
-               Ownership.apply_plan(plan(%{entity_type: "item", entity_id: "i1", project_id: "p1"}), grantable(), principal)
+               Ownership.apply_plan(
+                 plan(%{entity_type: "item", entity_id: "i1", project_id: "p1"}),
+                 grantable(),
+                 principal
+               )
 
       assert {:error, "ProjectSector ownership plan is missing project_id or sector_id"} =
-               Ownership.apply_plan(plan(%{entity_type: "project_sector", entity_id: "ps1"}), grantable(), principal)
+               Ownership.apply_plan(
+                 plan(%{entity_type: "project_sector", entity_id: "ps1"}),
+                 grantable(),
+                 principal
+               )
 
       assert {:error, "Project-child ownership plan is missing project_id"} =
-               Ownership.apply_plan(plan(%{entity_type: "quotation", entity_id: "q1"}), grantable(), principal)
+               Ownership.apply_plan(
+                 plan(%{entity_type: "quotation", entity_id: "q1"}),
+                 grantable(),
+                 principal
+               )
 
       assert {:error, "Item-child ownership plan is missing item_id"} =
-               Ownership.apply_plan(plan(%{entity_type: "evidence", entity_id: "e1"}), grantable(), principal)
+               Ownership.apply_plan(
+                 plan(%{entity_type: "evidence", entity_id: "e1"}),
+                 grantable(),
+                 principal
+               )
     end
 
     test "an unsupported plan type is refused" do
       assert {:error, "unsupported ownership plan \"widget\""} =
-               Ownership.apply_plan(plan(%{entity_type: "widget", entity_id: "w1"}), grantable(), principal([]))
+               Ownership.apply_plan(
+                 plan(%{entity_type: "widget", entity_id: "w1"}),
+                 grantable(),
+                 principal([])
+               )
     end
 
     test "each row keeps the tuple the writer needs, and the two tables stay apart" do
@@ -1348,7 +1673,12 @@ defmodule VitrialSync.OwnershipTest do
 
       assert {:ok, effect} =
                Ownership.apply_plan(
-                 plan(%{entity_type: "evidence", entity_id: "e1", item_id: "i1", deleted_at: "t"}),
+                 plan(%{
+                   entity_type: "evidence",
+                   entity_id: "e1",
+                   item_id: "i1",
+                   deleted_at: "t"
+                 }),
                  grantable(),
                  principal([])
                )
@@ -1387,7 +1717,9 @@ defmodule VitrialSync.OwnershipTest do
     test "a project child that keeps its project is written again" do
       existing =
         grantable(
-          project_children: [%ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}]
+          project_children: [
+            %ProjectChild{entity_type: "quotation", entity_id: "q1", project_id: "p1"}
+          ]
         )
 
       assert {:ok, effect} =
