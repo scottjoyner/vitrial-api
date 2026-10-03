@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **339 passed, 1 skipped**.
+`make check` runs contract validation + guard lint + tests. Baseline: **356 passed, 1 skipped** (includes another agent's BEAM/docs work merged into main).
 
 ## HOME MOVED (2026-10-02)
 
@@ -122,6 +122,29 @@ hard-pins `pytest<9`, so **both** must move or the environment is unsatisfiable 
 than partially fixed. Dev-only — pytest is not a production dep. Verified on an isolated
 venv *and* from a clean-room lockfile install (the real CI path) before committing.
 
+## W3 trust-proxy assertion landed (commit 94eaef8)
+
+The XFF overwrite from W3 shipped untested: it could be reverted or re-spelled with no
+test going red, while `rate_limit.client_key_for` reads the **left-most** XFF entry —
+which under Caddy's default *append* semantics is the attacker's. A caller sending
+`X-Forwarded-For: 1.2.3.4` gets a fresh throttle bucket per request and the rate limit
+is a no-op.
+
+Three assertions, because the positive case alone leaves the hostile spellings open:
+both Caddyfiles carry the overwrite; `{http.request.header.X-Forwarded-For}` is rejected
+explicitly (reads like a fix, is the exact reverse); and the preference order *inside*
+`client_key_for` is pinned, so the Caddy control cannot quietly become decorative if the
+key derivation ever changes. All three confirmed red against planted defects.
+
+## Concurrent-agent merge (2026-10-03)
+
+The BEAM agent merged 8 commits (`3830efe` "Merge current Vitrial API work into Astrix
+home", incl. #66 ops baseline and #68 topology evidence). My push was rejected as
+non-fast-forward. `git diff --stat HEAD...origin/main` showed overlap only in
+`deploy/README.md` (theirs), so I stashed `ubs-history.json`, rebased, re-ran the full
+suite on the merged result (**356 passed**), and pushed. The dropped stash held a stale
+scan timestamp superseded by the committed one — dropped rather than left to rot.
+
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
 - Run migrations before `python -m pytest` or you get 44 failures that look like defects but
@@ -141,3 +164,7 @@ venv *and* from a clean-room lockfile install (the real CI path) before committi
   downgrades pytest back to the range in `pyproject.toml` and you will think you tested
   9.x while running 8.x. Install the target version explicitly afterwards and check
   `pytest --version` before trusting any result.
+- On a shared branch, check for overlap with `git diff --stat HEAD...origin/main` BEFORE
+  rebasing a rejected push. "Rejected" does not mean "conflicting" — this time only the
+  other agent's `deploy/README.md` moved, and the rebase was free. Re-run the suite on
+  the merged result either way: their 8 commits changed the tree under you.

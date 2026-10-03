@@ -264,7 +264,19 @@ Per #28, none of these are defects — they are unshipped commitments:
       dependency and `test_production_dependencies.py` still passes. Verified twice on an
       isolated venv: 339 passed, 1 skipped both times, the second from a clean-room
       install of the edited lockfile (the exact CI path). No new transitive deps.
-- [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
+- [x] **W3 follow-up: trust-proxy acceptance assertion** — `94eaef8`. The XFF overwrite
+      shipped in W3 but nothing tested it, so it could be reverted or re-spelled with no
+      test going red while the rate limiter's correctness depends on it: `client_key_for`
+      reads the LEFT-MOST XFF entry, which under Caddy's default append semantics is the
+      attacker's, making the throttle a no-op. Three assertions — both Caddyfiles carry
+      the overwrite (the smoke file is the only one CI boots), the client-header
+      placeable `{http.request.header.X-Forwarded-For}` is rejected explicitly (it reads
+      like a fix and is the exact reverse), and the preference order inside
+      `client_key_for` is pinned so the Caddy control cannot quietly become decorative.
+      All three verified against planted defects.
+- [ ] Session renewal story (today: fixed bearer TTL + manual revoke only). **Product
+      decision, not engineering** — asked, awaiting an answer on whether sessions should
+      slide-refresh or stay fixed-TTL with manual revoke.
 - [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
 - [ ] W3 follow-up: acceptance assertion so a mis-set trust proxy fails fast.
 - [ ] `VITR-V005` follow-up: `jsonb` + GIN index migration (schema change on a pinned contract).
