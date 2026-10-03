@@ -5,6 +5,23 @@ requirements-lock.txt
 # version pin is string equality, never a numeric one, and this file has no arithmetic.
 requirements-runtime-lock.txt
 tests/
+# The BEAM differential harness, for the same reason as `tests/` above: it is test
+# scaffolding, not shipped code, and it exists to RUN the Python reference.
+#
+# Its findings are true and unavoidable rather than false positives, which is the
+# stronger reason to scope it out. `parity_oracle.py` AST-lifts functions out of
+# `app/` and executes them, so `py.security.eval-exec-usage` (3), `py.eval-exec` (3)
+# and `python.taint.eval` (1) fire on `exec(compile(...))` — there is no other way to
+# execute a lifted reference. The three `py.parsing.json-loads-no-try` warnings fire
+# on `json.loads` of the oracle's own output, where a decode failure must raise
+# rather than be swallowed.
+#
+# The `tests/` glob missed this path because it lives under `beam/apps/*/test/`, so
+# without this line the gate's critical floor rises every time the harness grows —
+# which is how a scaffolding file becomes a permanent tax on real findings. Scoped
+# BY PATH, never by rule: a rule-level suppression would also silence the same rule
+# in shipped code.
+beam/apps/*/test/
 .pytest_cache/
 *.egg-info/
 migrations/versions/
