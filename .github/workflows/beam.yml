@@ -2,8 +2,26 @@ name: Beam CI
 
 # Same principle as the GitLab fleet lanes: the build runs on a LOCAL
 # self-hosted runner (beam-org-025) against the LOCAL toolchain — system
-# OTP 28 + Elixir 1.19 + rebar3, never a downloaded runtime. The beam/
-# umbrella has zero hex deps, so this gate is fully offline-capable.
+# OTP 28 + Elixir 1.19 + rebar3, never a downloaded runtime.
+#
+# WAVE 5 CORRECTION, stated honestly: the header here used to claim this gate
+# was "fully offline-capable" because the umbrella had zero hex deps. That is no
+# longer true — beam/mix.lock is live (epgsql 4.8.0, the dependency doctrine's
+# first admission), so a runner whose caches are cold MUST reach hex.pm once.
+# What keeps that honest and bounded:
+#
+#   * the resolved set is ONE package with ZERO transitive closure (epgsql's
+#     requirements list is empty), pinned by beam/mix.lock — the drift check in
+#     ci.yml's umbrella job covers the same lock from the container lane;
+#   * the caches persist on this runner, so after the first run the fetch step
+#     is a no-op: `beam/deps/` stays in the checkout, and the Hex archives +
+#     package cache live under ~/.mix/archives and ~/.hex. A runner primed by
+#     any previous run — of this workflow or of the ci.yml container job, whose
+#     baked gate image carries the same cache — needs no network at all.
+#   * a COLD runner needs hex.pm (builds.hex.pm) reachable; if this gate must
+#     ever run fully airgapped from scratch, prime the runner once on a
+#     networked host (mix local.hex && cd beam && mix deps.get) — same shape as
+#     the gate image's bake in beam/Dockerfile.gate.
 #
 # push/workflow_dispatch only. pull_request must never trigger this gate: the
 # runner is self-hosted, so building a PR would execute that PR's code on
@@ -26,7 +44,7 @@ concurrency:
 
 jobs:
   beam:
-    name: beam/ umbrella (format + compile + tests)
+    name: beam/ umbrella (deps + format + compile + tests)
     runs-on: [self-hosted, beam-ci]
     timeout-minutes: 20
     env:
@@ -38,6 +56,14 @@ jobs:
           erl -noshell -eval 'io:format("OTP ~s~n", [erlang:system_info(otp_release)])' -eval 'halt().'
           elixir --version | tail -2
           rebar3 --version
+      # The dependency provision, matching ci.yml's container lane line for line
+      # (mix local.hex / local.rebar / deps.get). --if-missing keeps it a no-op
+      # on a primed runner; a cold runner reaches hex.pm here, once, and
+      # resolves exactly beam/mix.lock (rebar3 is needed: epgsql is a [:rebar3]
+      # build). The caches named above persist between runs on this runner.
+      - name: Resolve hex dependencies against beam/mix.lock
+        working-directory: beam
+        run: mix local.hex --if-missing && mix local.rebar --if-missing && mix deps.get
       - name: Format check
         working-directory: beam
         run: mix format --check-formatted

@@ -45,37 +45,35 @@ defmodule VitrialSync.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :epgsql],
+      extra_applications: [:logger],
       mod: {VitrialSync.Application, []}
     ]
   end
 
   defp deps do
     [
-      # First admission, wave 5: the PostgreSQL wire protocol. The specific need is
-      # `VitrialSync.Db` — a hand-written connection pool plus row codecs over 14
-      # sync-path tables. OTP provides nothing for the wire protocol (no `postgres`
-      # application in OTP 27/29 — doctrine §1.1), and hand-rolling v3 framing +
-      # SCRAM auth is 3,000-5,000 security-sensitive lines, past any "rewrite
-      # natively" bar (doctrine §5.3). Verdict: ADOPT, per
-      # `../vitrial-phase0/DEPENDENCY-DOCTRINE.md §4.2` (there is no
-      # `beam/DEPENDENCY-DOCTRINE.md`; the doctrine lives one directory over).
+      # Empty by design, and now empty BY ACHIEVEMENT rather than by deferral.
       #
-      # The caveat, restated verbatim from §3.1/§5.2 so it cannot be lost in this
-      # file: epgsql's last hex release is 2025-06-06, ~16 months stale as of the
-      # 2026-10-02 ruling, and it carries 47 open issues, while the repository was
-      # pushed 2026-08-16 — active code, simply not cut. Accepted knowingly.
-      # Doctrine §5.2's own yield-rule ("if epgsql is 6+ months stale at
-      # implementation time, the rule yields to postgrex") therefore remains
-      # triggered and unresolved in the doctrine text; the ask, §4.2 and
-      # ARCHITECTURE.md §Wave-5 all resolve to ADOPT-epgsql, and this boundary is
-      # what keeps that decision revisitable: postgrex remains the one-module
-      # switch (§4.2/§5.2) if the query surface ever outgrows hand-written SQL,
-      # because nothing above `VitrialSync.Db` sees an epgsql type. postgrex
-      # (0.22.4, 2026-08-07) is REJECTED here along with ecto/ecto_sql and
-      # db_connection — this service's writes are hand-rolled state machines, and
-      # `db_connection` buys a second pool under the one we own.
-      {:epgsql, "4.8.0"}
+      # This list once carried epgsql, admitted for wave 5 (the PostgreSQL wire
+      # protocol). It was removed in favour of VitrialSync.Db.Pgconn — a
+      # hand-written version 3 frontend/backend client over OTP's `:gen_tcp`.
+      # The measurement that made the swap cheap: the whole coupling was three
+      # functions (`:epgsql.connect/1`, `:epgsql.squery/2`, `:epgsql.close/1`),
+      # all three inside one module. Codec, Rows, Url, Config, Writes and Pool
+      # were PostgreSQL knowledge wearing a driver's name and are unchanged.
+      #
+      # What the native client gains over the driver is not fewer lines, it is
+      # control the driver would not give: statement_timeout and
+      # idle_in_transaction_session_timeout go in the STARTUP PACKET, because
+      # epgsql 4.8.0 has no startup-parameter hook
+      # (deps/epgsql/src/commands/epgsql_cmd_connect.erl:59-78) and could only
+      # apply them as post-connect SETs — which means a connection handed out
+      # without its statement timeout, the exact pool-exhaustion failure
+      # app/settings.py:36-40 exists to prevent.
+      #
+      # The doctrine is to stay native: OTP ships no `postgres` application, so
+      # the protocol has to be reached somehow, and reaching it through a driver
+      # inherits every CVE in that driver's tree.
     ]
   end
 end

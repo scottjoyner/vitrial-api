@@ -128,7 +128,7 @@ defmodule VitrialSync.Db.Config do
   # a boot failure, not a falsy default — DATABASE_NULL_POOL=false is what the
   # compose files set, and DATABASE_NULL_POOL=flase must not quietly become
   # "pooling on".
-  defp parse_bool(value, env) when is_boolean(value), do: value
+  defp parse_bool(value, _env) when is_boolean(value), do: value
 
   defp parse_bool(value, env) when is_binary(value) do
     case String.downcase(String.trim(value)) do
@@ -141,7 +141,7 @@ defmodule VitrialSync.Db.Config do
   defp parse_bool(value, env),
     do: raise(ArgumentError, "#{env} must be a boolean, got: #{inspect(value)}")
 
-  defp parse_int(value, env) when is_integer(value), do: value
+  defp parse_int(value, _env) when is_integer(value), do: value
 
   defp parse_int(value, env) when is_binary(value) do
     case Integer.parse(String.trim(value)) do
@@ -153,8 +153,8 @@ defmodule VitrialSync.Db.Config do
   defp parse_int(value, env),
     do: raise(ArgumentError, "#{env} must be an integer, got: #{inspect(value)}")
 
-  defp parse_float(value, env) when is_integer(value), do: value * 1.0
-  defp parse_float(value, env) when is_float(value), do: value
+  defp parse_float(value, _env) when is_integer(value), do: value * 1.0
+  defp parse_float(value, _env) when is_float(value), do: value
 
   defp parse_float(value, env) when is_binary(value) do
     case Float.parse(String.trim(value)) do

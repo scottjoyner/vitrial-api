@@ -71,6 +71,15 @@ fi
 # Build the gate image on demand. This is a cached layer after the first build,
 # so the common case is a no-op; the fallback exists because an offline host
 # should still get format + compile + test rather than nothing.
+#
+# WAVE 5 DEGRADATION, ON THE RECORD: that fallback promise is narrower since
+# beam/mix.lock went live. The base image ships no Hex and no package cache, so
+# on a fully-offline host whose cached gate image is ABSENT, the fallback lane
+# cannot provision (deps.get fails → exit 5 below) and the gate cannot run. The
+# offline-with-dependencies case is served by the gate image, which bakes the
+# Hex archives and the resolved package cache (beam/Dockerfile.gate, built once
+# with network). With network, both shapes work: the base image installs Hex and
+# fetches epgsql on the fly.
 if [ "$IMAGE" = "$GATE_IMAGE" ] && ! podman image exists "$GATE_IMAGE" 2>/dev/null; then
   echo "beam gate: building $GATE_IMAGE (first run only)" >&2
   if ! podman build -q -t "$GATE_IMAGE" -f "$BEAM/Dockerfile.gate" "$REPO" >/dev/null 2>&1; then

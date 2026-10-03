@@ -486,15 +486,12 @@ defmodule VitrialSync.JSON do
   defp encode_value(value) when is_binary(value), do: quote_string(value)
   defp encode_value(value) when is_integer(value), do: Integer.to_string(value)
 
-  defp encode_value(value) when is_float(value) do
-    if Float.is_finite(value) do
-      # CPython renders the shortest round-tripping decimal form, same as
-      # Elixir's Float.to_string for finite floats.
-      Float.to_string(value)
-    else
-      throw({:unencodable, value})
-    end
-  end
+  # An Erlang float is ALWAYS finite — the runtime raises `badarith` on
+  # overflow rather than ever holding an infinity, so the decoder's "no
+  # non-finite numbers" rule is unforgeable on this side and needs no re-check
+  # here. Rendered shortest-round-trip, matching CPython's repr for the values
+  # both runtimes can represent.
+  defp encode_value(value) when is_float(value), do: :erlang.float_to_binary(value, [:short])
 
   defp encode_value(value) when is_list(value) do
     [?[, encode_values(Enum.map(value, &encode_value/1)), ?]]

@@ -171,7 +171,13 @@ defmodule VitrialSync.Db.Codec do
   defp to_datetime({{_y, _m, _d}, {_h, _mi, _s}} = erl), do: to_datetime(erl, 0)
 
   defp to_datetime({date, time}, micro) do
-    with {:ok, naive} <- NaiveDateTime.from_erl({date, time}, microsecond: {micro, 6}),
+    # Built through NaiveDateTime.new/2 rather than NaiveDateTime.from_erl/2's
+    # microsecond option, which misroutes on this Elixir (verified: the option
+    # reaches Calendar.ISO.valid_time?/4 malformed there, while Time.new/4 with
+    # the same pair is fine).
+    with {:ok, date} <- Date.from_erl(date),
+         {:ok, time} <- Time.new(elem(time, 0), elem(time, 1), elem(time, 2), {micro, 6}),
+         {:ok, naive} <- NaiveDateTime.new(date, time),
          {:ok, utc} <- DateTime.from_naive(naive, "Etc/UTC") do
       utc
     else

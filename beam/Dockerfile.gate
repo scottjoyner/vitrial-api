@@ -17,6 +17,13 @@
 # Build:  podman build -t server-api-beam-gate:local -f beam/Dockerfile.gate .
 # The gate script builds this on demand and falls back to the base image with a
 # loud warning when it cannot, so an offline host still gets format+compile+test.
+#
+# WAVE 5 CAVEAT, ON THE RECORD: with epgsql admitted (beam/mix.lock is live),
+# that fallback promise has narrowed. The BASE image ships no Hex and no package
+# cache, so on a fully-offline host whose cached gate image is ABSENT, the
+# fallback lane cannot resolve the dependency and the gate cannot run. The bake
+# below exists precisely so the normal lane — the gate image, built once with
+# network — never reaches hex.pm again at run time.
 FROM docker.io/hexpm/elixir:1.20.4-erlang-29.1.1-debian-bookworm-20260918-slim
 
 # python3: the harness's interpreter. pydantic: the reference's own dependency,
@@ -27,3 +34,29 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir --break-system-packages "pydantic>=2,<3"
+
+# The Hex provisioning, baked as a MECHANISM (archive + package cache in the
+# image), not asserted as an outcome. Before wave 5 the gate had zero hex deps,
+# so the base image needed nothing; with beam/mix.lock live, `mix deps.get` at
+# gate time needs Hex itself plus the resolved package bytes. This is an
+# offline-verification shape, not a shortcut: beam_gate.sh still runs
+# `mix local.hex --if-missing && mix deps.get` in every lane, and ci.yml's
+# umbrella job rebuilds THIS Dockerfile and does the same — the cache just makes
+# those commands no-ops. Requires network at IMAGE BUILD time (once).
+#
+# The scratch tree is the minimal umbrella a resolve needs: the root mix.exs
+# (apps_path), the one app that declares the dep, and the committed lock —
+# `mix deps.get` then resolves byte-exactly what CI will verify against that
+# same lock. The scratch tree is discarded; ~/.hex (cache.ets + the epgsql tar)
+# and ~/.mix/archives (hex, rebar3 — epgsql is a [:rebar3] build) are what
+# persist.
+RUN mix local.hex --force \
+ && mix local.rebar --force
+
+COPY beam/mix.exs beam/mix.lock /tmp/depseed/
+COPY beam/apps/vitrial_sync/mix.exs /tmp/depseed/apps/vitrial_sync/mix.exs
+
+RUN cd /tmp/depseed \
+ && mix deps.get \
+ && cd / \
+ && rm -rf /tmp/depseed
