@@ -23,6 +23,8 @@ class ConfigurationGeometryContext(StrictTopologyModel):
     configurationVersion: int = Field(ge=1)
     openingWidth: DimensionPayload | None = None
     openingHeight: DimensionPayload | None = None
+    productWidth: DimensionPayload | None = None
+    productHeight: DimensionPayload | None = None
     sectionIDs: list[str] = Field(default_factory=list)
 
 
@@ -41,6 +43,7 @@ class AssemblyTopologyDimensionVerificationEvidence(StrictTopologyModel):
     itemID: str = Field(min_length=1, max_length=256)
     configurationID: str = Field(min_length=1, max_length=256)
     configurationVersion: int = Field(ge=1)
+    dimensionBasis: str = Field(pattern="^(opening|product)$")
     verifiedBy: str = Field(min_length=1, max_length=256)
     verifiedAt: datetime
     evidenceReferenceIDs: list[str] = Field(default_factory=list)
@@ -69,6 +72,7 @@ class VerifiedAssemblyTopologyGeometry(StrictTopologyModel):
     configurationID: str
     configurationVersion: int
     kind: str
+    dimensionBasis: str
     verifiedBy: str
     verifiedAt: datetime
     evidenceReferenceIDs: list[str]
@@ -147,9 +151,13 @@ def _verify_planar(
     context: ConfigurationGeometryContext,
     verification: AssemblyTopologyDimensionVerificationEvidence,
 ) -> VerifiedAssemblyTopologyGeometry:
-    if context.openingWidth is None or context.openingHeight is None:
+    reference_width, reference_height = _reference_dimensions(
+        context=context,
+        basis=verification.dimensionBasis,
+    )
+    if reference_width is None or reference_height is None:
         raise TopologyDimensionVerificationError(
-            "opening width and height are required for planar verification"
+            f"{verification.dimensionBasis} width and height are required for planar verification"
         )
     if verification.cornerLegs:
         raise TopologyDimensionVerificationError(
@@ -174,12 +182,12 @@ def _verify_planar(
 
     _reconcile_total(
         rows,
-        expected_mm=context.openingHeight.millimeters,
+        expected_mm=reference_height.millimeters,
         axis="row",
     )
     _reconcile_total(
         columns,
-        expected_mm=context.openingWidth.millimeters,
+        expected_mm=reference_width.millimeters,
         axis="column",
     )
 
@@ -192,6 +200,7 @@ def _verify_planar(
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
         kind=topology.kind,
+        dimensionBasis=verification.dimensionBasis,
         verifiedBy=verification.verifiedBy,
         verifiedAt=verification.verifiedAt,
         evidenceReferenceIDs=verification.evidenceReferenceIDs,
@@ -208,9 +217,13 @@ def _verify_corner(
     context: ConfigurationGeometryContext,
     verification: AssemblyTopologyDimensionVerificationEvidence,
 ) -> VerifiedAssemblyTopologyGeometry:
-    if context.openingHeight is None:
+    _, reference_height = _reference_dimensions(
+        context=context,
+        basis=verification.dimensionBasis,
+    )
+    if reference_height is None:
         raise TopologyDimensionVerificationError(
-            "opening height is required for corner verification"
+            f"{verification.dimensionBasis} height is required for corner verification"
         )
     if verification.rowHeights or verification.columnWidths:
         raise TopologyDimensionVerificationError(
@@ -307,6 +320,18 @@ def _verify_corner(
         cornerLegs=verified_legs,
         cornerJunctionAngleDegrees=angle,
     )
+
+
+def _reference_dimensions(
+    *,
+    context: ConfigurationGeometryContext,
+    basis: str,
+) -> tuple[DimensionPayload | None, DimensionPayload | None]:
+    if basis == "opening":
+        return context.openingWidth, context.openingHeight
+    if basis == "product":
+        return context.productWidth, context.productHeight
+    raise TopologyDimensionVerificationError(f"unsupported dimension basis {basis}")
 
 
 def _reconcile_total(
