@@ -38,6 +38,12 @@ def test_three_panel_fixture_validates_without_new_sync_entity():
         "right",
         None,
     ]
+    assert assembly.renderDescriptor.configurationID == "configuration-window-1"
+    assert assembly.renderDescriptor.configurationVersion == 1
+    assert assembly.renderDescriptor.overall.widthMM == 2400
+    assert assembly.renderDescriptor.overall.heightMM == 1650
+    assert assembly.bom.configurationID == "configuration-window-1"
+    assert assembly.bom.configurationVersion == 1
 
     # The assembly is nested payload content, not a new authorization/sync surface.
     assert "assembly" not in get_args(EntityType)
