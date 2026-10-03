@@ -45,17 +45,37 @@ defmodule VitrialSync.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :epgsql],
       mod: {VitrialSync.Application, []}
     ]
   end
 
   defp deps do
     [
-      # Empty by design. Dependencies are admitted one at a time, with the specific
-      # need written down, so that the exposure window of any third-party code and
-      # its transitive CVE surface is a decision on the record rather than a side
-      # effect of scaffolding.
+      # First admission, wave 5: the PostgreSQL wire protocol. The specific need is
+      # `VitrialSync.Db` — a hand-written connection pool plus row codecs over 14
+      # sync-path tables. OTP provides nothing for the wire protocol (no `postgres`
+      # application in OTP 27/29 — doctrine §1.1), and hand-rolling v3 framing +
+      # SCRAM auth is 3,000-5,000 security-sensitive lines, past any "rewrite
+      # natively" bar (doctrine §5.3). Verdict: ADOPT, per
+      # `../vitrial-phase0/DEPENDENCY-DOCTRINE.md §4.2` (there is no
+      # `beam/DEPENDENCY-DOCTRINE.md`; the doctrine lives one directory over).
+      #
+      # The caveat, restated verbatim from §3.1/§5.2 so it cannot be lost in this
+      # file: epgsql's last hex release is 2025-06-06, ~16 months stale as of the
+      # 2026-10-02 ruling, and it carries 47 open issues, while the repository was
+      # pushed 2026-08-16 — active code, simply not cut. Accepted knowingly.
+      # Doctrine §5.2's own yield-rule ("if epgsql is 6+ months stale at
+      # implementation time, the rule yields to postgrex") therefore remains
+      # triggered and unresolved in the doctrine text; the ask, §4.2 and
+      # ARCHITECTURE.md §Wave-5 all resolve to ADOPT-epgsql, and this boundary is
+      # what keeps that decision revisitable: postgrex remains the one-module
+      # switch (§4.2/§5.2) if the query surface ever outgrows hand-written SQL,
+      # because nothing above `VitrialSync.Db` sees an epgsql type. postgrex
+      # (0.22.4, 2026-08-07) is REJECTED here along with ecto/ecto_sql and
+      # db_connection — this service's writes are hand-rolled state machines, and
+      # `db_connection` buys a second pool under the one we own.
+      {:epgsql, "4.8.0"}
     ]
   end
 end

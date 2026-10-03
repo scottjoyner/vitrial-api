@@ -426,4 +426,123 @@ defmodule VitrialSync.JSON do
     do: take_digits(rest, [digit | acc])
 
   defp take_digits(bin, acc), do: {acc |> Enum.reverse() |> List.to_string(), bin}
+
+  # -- encoding -----------------------------------------------------------------
+
+  @doc """
+  Encode native terms to JSON bytes.
+
+  The decoder above exists because the wire contract is pinned; this encoder
+  exists because two internal surfaces need to WRITE json — the `json`/`jsonb`
+  column parameters in `VitrialSync.Db` and nothing else so far. It is held to
+  the same discipline the decoder is: emit exactly what CPython's
+  `json.dumps(obj, ensure_ascii=False)` would, so a value that round-trips
+  through this module is byte-stable against the reference's own serializations
+  wherever both sides are compared.
+
+  One deliberate deviation, recorded because it is the kind that fails silently:
+  **map key order is Elixir's, not insertion-ordered.** Elixir maps are
+  unordered; CPython dicts preserve insertion order and `json.dumps` renders
+  it. Any comparison of stored `payload_json` BYTES between the two estates is
+  therefore not guaranteed by this module, and the sync path's stored-byte
+  parity question (`VitrialSync.Db.Writes`) is explicitly open for that reason.
+  Values compared as DECODED data are unaffected.
+
+  Accepts maps with binary keys, lists, binaries, integers, floats, booleans and
+  `nil`; raises `ArgumentError` on anything else, and on a float that is not
+  finite — the decoder rejects infinities, so the encoder must not emit them.
+
+      iex> VitrialSync.JSON.encode(%{"a" => [1, 2, %{"b" => nil}]})
+      {:ok, ~s({"a":[1,2,{"b":null}]})}
+
+      iex> VitrialSync.JSON.encode(%{model: "evidence", at: ~U[2026-01-01 00:00:00Z]})
+      {:error, :unencodable_term}
+  """
+  @spec encode(value() | %{optional(binary()) => value()}) ::
+          {:ok, binary()} | {:error, :unencodable_term}
+  def encode(term) do
+    try do
+      {:ok, encode_value(term)}
+    catch
+      {:unencodable, _} -> {:error, :unencodable_term}
+    end
+  end
+
+  @doc """
+  `encode/1` for call sites that have already validated their input — raises
+  `ArgumentError` instead of returning a tagged error.
+  """
+  @spec encode!(term()) :: binary()
+  def encode!(term) do
+    case encode(term) do
+      {:ok, bytes} -> bytes
+      {:error, :unencodable_term} -> raise ArgumentError, "not JSON-encodable: #{inspect(term)}"
+    end
+  end
+
+  defp encode_value(nil), do: "null"
+  defp encode_value(true), do: "true"
+  defp encode_value(false), do: "false"
+  defp encode_value(value) when is_binary(value), do: quote_string(value)
+  defp encode_value(value) when is_integer(value), do: Integer.to_string(value)
+
+  defp encode_value(value) when is_float(value) do
+    if Float.is_finite(value) do
+      # CPython renders the shortest round-tripping decimal form, same as
+      # Elixir's Float.to_string for finite floats.
+      Float.to_string(value)
+    else
+      throw({:unencodable, value})
+    end
+  end
+
+  defp encode_value(value) when is_list(value) do
+    [?[, encode_values(Enum.map(value, &encode_value/1)), ?]]
+  end
+
+  defp encode_value(value) when is_map(value) do
+    pairs =
+      Enum.map(value, fn
+        {key, value} when is_binary(key) -> {quote_string(key), encode_value(value)}
+        _other -> throw({:unencodable, value})
+      end)
+
+    [?{, encode_values(pairs), ?}]
+  end
+
+  defp encode_value(value), do: throw({:unencodable, value})
+
+  defp encode_values([]), do: []
+
+  defp encode_values([first | rest]) do
+    Enum.reduce(rest, first, fn value, acc -> [acc, ?, | value] end)
+  end
+
+  defp quote_string(binary) do
+    [?", escape(binary, []), ?"] |> IO.iodata_to_binary()
+  end
+
+  # Two-byte escapes exactly as CPython's ESCAPE_DCT: the C1 control range
+  # (0x80-0x9F) is emitted raw UTF-8 by json.dumps with ensure_ascii=False.
+  @escapes %{
+    0x22 => "\\\"",
+    0x5C => "\\\\",
+    0x08 => "\\b",
+    0x0C => "\\f",
+    0x0A => "\\n",
+    0x0D => "\\r",
+    0x09 => "\\t"
+  }
+
+  defp escape(<<byte, rest::binary>>, acc) when byte < 0x20 do
+    escape(rest, [acc, Map.get(@escapes, byte) || "\\u" <> hex4(byte)])
+  end
+
+  defp escape(<<byte, rest::binary>>, acc) when byte === 0x22 or byte === 0x5C,
+    do: escape(rest, [acc, Map.fetch!(@escapes, byte)])
+
+  defp escape(<<char::utf8, rest::binary>>, acc), do: escape(rest, [acc, <<char::utf8>>])
+  defp escape(<<>>, acc), do: acc
+
+  defp hex4(byte), do: byte |> :io_lib.format("~4.16.0b", []) |> IO.iodata_to_binary()
 end
