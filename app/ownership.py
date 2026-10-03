@@ -8,7 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal
-from app.assembly_contract import validate_quotation_design_against_configuration_version
+from app.assembly_contract import (
+    validate_configuration_assembly,
+    validate_quotation_design_against_configuration_version,
+)
 from app.models import (
     CanonicalCustomer,
     CanonicalItem,
@@ -20,10 +23,74 @@ from app.models import (
     Organization,
     SyncEntity,
 )
+from app.reference_models import ReferencePublication
 
 
 class AuthorizationRejected(Exception):
     """A record could not be authorized from canonical server state."""
+
+
+async def _require_canonical_assembly_reference_pins(
+    db: AsyncSession,
+    principal: Principal,
+    configuration: dict,
+) -> None:
+    """Require frozen assembly pins to resolve to immutable organization publications.
+
+    These are historical pins, not "current publication" requirements. A later successor may
+    become current without invalidating a completed ConfigurationVersion that still references
+    the older immutable version and digest.
+    """
+    try:
+        snapshot = validate_configuration_assembly(configuration)
+    except ValueError as exc:
+        raise AuthorizationRejected(f"assembly contract is invalid: {exc}") from exc
+    if snapshot is None:
+        return
+
+    expected = [
+        (
+            "catalog",
+            snapshot.referenceData.catalogVersionID,
+            snapshot.referenceData.catalogContentSHA256.lower(),
+        ),
+        (
+            "compatibility_rules",
+            snapshot.referenceData.compatibilityRulesVersionID,
+            snapshot.referenceData.compatibilityRulesContentSHA256.lower(),
+        ),
+        (
+            "price_book",
+            snapshot.referenceData.priceBookVersionID,
+            snapshot.referenceData.priceBookContentSHA256.lower(),
+        ),
+    ]
+
+    rows = (
+        await db.scalars(
+            select(ReferencePublication).where(
+                ReferencePublication.organization_id == principal.organization_id,
+                ReferencePublication.version_id.in_(
+                    [version for _, version, _ in expected]
+                ),
+            )
+        )
+    ).all()
+    canonical = {
+        (row.kind, row.version_id): row.content_sha256.lower()
+        for row in rows
+    }
+
+    for kind, version, digest in expected:
+        found = canonical.get((kind, version))
+        if found is None:
+            raise AuthorizationRejected(
+                f"assembly reference publication is not canonical: {kind} {version}"
+            )
+        if found != digest:
+            raise AuthorizationRejected(
+                f"assembly reference publication digest mismatch: {kind} {version}"
+            )
 
 
 @dataclass
@@ -654,6 +721,12 @@ async def authorize_record(
                 db, principal, item_id, "customer_requirement", requirements
             )
             await _require_item_references(db, principal, item_id, "blocker", blockers)
+            if configuration.get("assembly") is not None:
+                await _require_canonical_assembly_reference_pins(
+                    db,
+                    principal,
+                    configuration,
+                )
 
         if entity_type == "blocker" and not deleting:
             events = payload.get("events")
@@ -748,6 +821,18 @@ async def authorize_record(
                             "Quotation assembly ConfigurationVersion is not canonical and active"
                         )
                     try:
+                        canonical_configuration = configuration_version.payload_json.get(
+                            "configuration"
+                        )
+                        if not isinstance(canonical_configuration, dict):
+                            raise ValueError(
+                                "canonical ConfigurationVersion payload is malformed"
+                            )
+                        await _require_canonical_assembly_reference_pins(
+                            db,
+                            principal,
+                            canonical_configuration,
+                        )
                         validate_quotation_design_against_configuration_version(
                             line,
                             configuration_version.payload_json,
