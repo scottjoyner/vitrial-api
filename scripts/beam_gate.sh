@@ -37,6 +37,7 @@
 #   2  compilation failed, or emitted a warning under --warnings-as-errors
 #   3  the test suite failed
 #   4  the container could not run at all (no image, no mount)
+#   5  dependencies could not be resolved (offline host, first dependency)
 #
 # `mix compile --warnings-as-errors` is the only thing in the estate that finds
 # an unreachable clause inside a reachable module. The module-level orphan
@@ -85,7 +86,22 @@ if ! podman image exists "$IMAGE" 2>/dev/null; then
 fi
 
 # -v "$REPO":/w — the repo root, so `app/` is reachable from inside.
-run_beam() {
+# `mix deps.get` and `mix local.hex` are NOT optional decoration. The gate ran
+# clean for the whole zero-dependency era and then broke the moment the first hex
+# package was admitted:
+#
+#   Mix requires the Hex package manager to fetch dependencies
+#   ** (Mix) Could not find an SCM for dependency :epgsql
+#
+# ci.yml already did these three lines (`mix local.hex`, `mix local.rebar`,
+# `mix deps.get`); the local gate did not, so the two drifted exactly where drift
+# costs the most — the gate that is supposed to BE the check CI runs.
+#
+# And they must all run in the SAME container as the compile. Each step used to be
+# its own `podman run`, so `mix local.hex` installed Hex into a throwaway layer
+# that the next container could not see: `deps.get` succeeded, then `compile` in a
+# fresh container asked for Hex again and failed. One invocation, one container.
+run_gate() {
   podman run --rm \
     -v "$REPO":/w:z \
     -w /w/beam \
@@ -93,25 +109,40 @@ run_beam() {
     bash -c "$1"
 }
 
-echo "beam gate: format"
-if ! run_beam 'mix format --check-formatted'; then
-  echo "beam gate: FAILED at format (exit 1)" >&2
-  exit 1
-fi
+set +e
+run_gate '
+  set -euo pipefail
+  mix local.hex --force --if-missing
+  mix local.rebar --force --if-missing
+  mix deps.get
+  echo "--- beam gate: format ---"
+  mix format --check-formatted
+  echo "--- beam gate: compile --warnings-as-errors ---"
+  mix compile --warnings-as-errors
+  echo "--- beam gate: test ---"
+  mix test
+' 2>&1 | tee /tmp/beam-gate.log
+GATE_EXIT=${PIPESTATUS[0]}
+set -e
 
-echo "beam gate: compile --warnings-as-errors"
-if ! run_beam 'mix compile --warnings-as-errors'; then
-  echo "beam gate: FAILED at compile (exit 2)" >&2
-  exit 2
-fi
-
-echo "beam gate: test"
-# The summary line is what a reader wants; `-q` keeps the rest out of the log
-# without hiding a failure, which prints its own traceback regardless. The
-# harness's own SKIPPED/RUN banner goes to stderr and is preserved.
-if ! run_beam 'mix test 2>&1 | tail -40'; then
-  echo "beam gate: FAILED at test (exit 3)" >&2
-  exit 3
+# Stage attribution from the echoed markers, so a failure names the step rather
+# than just an exit code. The markers are the only thing identifying the stage.
+if [ "$GATE_EXIT" -ne 0 ]; then
+  if grep -q 'beam gate: test' /tmp/beam-gate.log; then
+    echo "beam gate: FAILED at test (exit 3)" >&2
+    exit 3
+  elif grep -q 'beam gate: compile' /tmp/beam-gate.log; then
+    echo "beam gate: FAILED at compile (exit 2)" >&2
+    exit 2
+  elif grep -q 'beam gate: format' /tmp/beam-gate.log; then
+    echo "beam gate: FAILED at format (exit 1)" >&2
+    exit 1
+  fi
+  echo "beam gate: FAILED before format — dependency resolution (exit 5)" >&2
+  echo "beam gate: if this is an offline host, the gate cannot fetch new" >&2
+  echo "beam gate: dependencies. Populate beam/deps on a networked host, or" >&2
+  echo "beam gate: point BEAM_IMAGE at an image that already carries them." >&2
+  exit 5
 fi
 
 echo "beam gate: PASS"
