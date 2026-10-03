@@ -91,6 +91,7 @@ def test_planar_operator_verification_derives_geometry_without_mutation():
         itemID=topology.itemID,
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
+        dimensionBasis="opening",
         verifiedBy="field-operator",
         verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
         evidenceReferenceIDs=["measurement-photo-v4"],
@@ -134,6 +135,7 @@ def test_planar_verification_rejects_track_total_drift():
         itemID=topology.itemID,
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
+        dimensionBasis="opening",
         verifiedBy="field-operator",
         verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
         rowHeights=[
@@ -169,6 +171,7 @@ def test_verification_rejects_stale_configuration_revision():
         itemID=topology.itemID,
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
+        dimensionBasis="opening",
         verifiedBy="field-operator",
         verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
         rowHeights=[
@@ -204,6 +207,7 @@ def test_corner_operator_verification_requires_exact_section_assignment():
         itemID=topology.itemID,
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
+        dimensionBasis="opening",
         verifiedBy="field-operator",
         verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
         evidenceReferenceIDs=["corner-measurement-photo"],
@@ -263,6 +267,7 @@ def test_corner_verification_rejects_envelope_mismatch_instead_of_rewriting_sour
         itemID=topology.itemID,
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
+        dimensionBasis="opening",
         verifiedBy="field-operator",
         verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
         cornerLegs=[
@@ -311,6 +316,7 @@ def test_corner_verification_requires_angle():
         itemID=topology.itemID,
         configurationID=topology.configurationID,
         configurationVersion=topology.configurationVersion,
+        dimensionBasis="opening",
         verifiedBy="field-operator",
         verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
         cornerLegs=[
@@ -341,3 +347,46 @@ def test_corner_verification_requires_angle():
             context=context,
             verification=verification,
         )
+
+
+
+def test_product_basis_uses_product_dimensions_explicitly():
+    topology = v4_topology()
+    context = ConfigurationGeometryContext(
+        itemID=topology.itemID,
+        configurationID=topology.configurationID,
+        configurationVersion=topology.configurationVersion,
+        openingWidth=DimensionPayload(value=129, unit="cm"),
+        openingHeight=DimensionPayload(value=287, unit="cm"),
+        productWidth=DimensionPayload(value=120, unit="cm"),
+        productHeight=DimensionPayload(value=280, unit="cm"),
+        sectionIDs=["v4-slide-left", "v4-slide-right", "v4-fixed-lower"],
+    )
+    verification = AssemblyTopologyDimensionVerificationEvidence(
+        id="v4-product-basis",
+        topologyID=topology.id,
+        itemID=topology.itemID,
+        configurationID=topology.configurationID,
+        configurationVersion=topology.configurationVersion,
+        dimensionBasis="product",
+        verifiedBy="field-operator",
+        verifiedAt=datetime(2026, 10, 3, tzinfo=timezone.utc),
+        rowHeights=[
+            DimensionPayload(value=200, unit="cm"),
+            DimensionPayload(value=80, unit="cm"),
+        ],
+        columnWidths=[
+            DimensionPayload(value=60, unit="cm"),
+            DimensionPayload(value=60, unit="cm"),
+        ],
+    )
+
+    geometry = verify_topology_dimensions(
+        topology=topology,
+        context=context,
+        verification=verification,
+    )
+
+    assert geometry.dimensionBasis == "product"
+    assert geometry.rowHeightsMeters == [2.0, 0.8]
+    assert geometry.columnWidthsMeters == [0.6, 0.6]
