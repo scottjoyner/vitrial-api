@@ -199,6 +199,51 @@
         "compatibilityRulesContentSHA256": "2222222222222222222222222222222222222222222222222222222222222222",
         "priceBookVersionID": "price-book-unconfigured-v1",
         "priceBookContentSHA256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "renderDescriptor": {
+        "schema": "vitrial.render.v1",
+        "coordinateSystem": "normalized_opening",
+        "overall": {
+          "widthMM": 2400,
+          "heightMM": 1650
+        },
+        "sections": [
+          {
+            "sectionID": "panel-1",
+            "sectionType": "sliding",
+            "operation": "left",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 0.3333333333333333,
+              "height": 1
+            }
+          },
+          {
+            "sectionID": "panel-2",
+            "sectionType": "sliding",
+            "operation": "right",
+            "frame": {
+              "x": 0.3333333333333333,
+              "y": 0,
+              "width": 0.3333333333333333,
+              "height": 1
+            }
+          },
+          {
+            "sectionID": "panel-3",
+            "sectionType": "fixed",
+            "operation": null,
+            "frame": {
+              "x": 0.6666666666666666,
+              "y": 0,
+              "width": 0.33333333333333337,
+              "height": 1
+            }
+          }
+        ],
+        "configurationID": "configuration-window-1",
+        "configurationVersion": 1
       }
     }
   }
