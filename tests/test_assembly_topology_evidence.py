@@ -269,3 +269,18 @@ def test_unknown_schema_version_fails_closed():
 
     with pytest.raises(ValidationError):
         AssemblySectionTopologyEvidence.model_validate(payload)
+
+
+
+def test_non_finite_track_or_corner_dimensions_fail_closed():
+    payload = v4_payload()
+    payload["rowProportions"] = [float("nan"), 1.0]
+
+    with pytest.raises(ValidationError):
+        AssemblySectionTopologyEvidence.model_validate(payload)
+
+    corner = v1_payload()
+    corner["cornerLegs"][0]["length"]["value"] = float("inf")
+
+    with pytest.raises(ValidationError):
+        AssemblySectionTopologyEvidence.model_validate(corner)
