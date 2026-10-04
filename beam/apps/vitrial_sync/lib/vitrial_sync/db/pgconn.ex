@@ -1,6 +1,4 @@
 defmodule VitrialSync.Db.Pgconn do
-  alias VitrialSync.Db.Url
-
   @protocol_version_bin <<196_608::32>>
   @moduledoc """
   A PostgreSQL connection, hand-written over OTP's `:gen_tcp`.
@@ -95,11 +93,16 @@ defmodule VitrialSync.Db.Pgconn do
   Returns `{:ok, conn}` or `{:error, reason}`. `conn` is a pid; the caller never
   touches a socket descriptor.
   """
-  @spec connect(VitrialSync.Db.Url.t(), keyword()) :: {:ok, conn()} | {:error, term()}
-  def connect(%VitrialSync.Db.Url{} = url, opts \\ []) do
+  @spec connect(map(), keyword()) :: {:ok, conn()} | {:error, term()}
+  def connect(url, opts \\ []) do
     timeout = Keyword.get(opts, :connect_timeout, 5_000)
 
-    case :gen_tcp.connect(url.host, url.port, [:binary, active: false], timeout) do
+    case :gen_tcp.connect(
+           String.to_charlist(url.host),
+           url.port,
+           [:binary, active: false],
+           timeout
+         ) do
       {:ok, socket} -> owner_loop(socket, url, opts)
       {:error, reason} -> {:error, reason}
     end
@@ -161,7 +164,8 @@ defmodule VitrialSync.Db.Pgconn do
           try do
             handshake(socket, url, opts)
           catch
-            kind, reason -> {:error, {kind, reason}}
+            kind, reason ->
+              {:error, {kind, reason}}
           end
 
         send(parent, {:pgconn_ready, self(), result})
@@ -255,7 +259,7 @@ defmodule VitrialSync.Db.Pgconn do
   # `app/db.py:25-44` sends as asyncpg `server_settings` go out HERE, in the
   # startup packet. epgsql 4.8.0 has no startup-parameter hook and could only
   # apply them as post-connect SETs.
-  defp send_startup(socket, %Url{} = url, opts) do
+  defp send_startup(socket, url, opts) do
     # The two resource-bounding GUCs `app/db.py:25-44` sets on every connection go
     # in HERE, in the startup packet, because that is the only place the protocol
     # offers for them before the connection is usable. A driver without a
@@ -263,7 +267,12 @@ defmodule VitrialSync.Db.Pgconn do
     # means a connection that exists without its statement timeout — the exact
     # pool-exhaustion failure mode `app/settings.py:36-40` exists to prevent.
     pairs =
-      [{"user", url.username}, {"database", url.database}, {"client_encoding", "UTF8"}]
+      [
+        {"user", url.username},
+        {"database", url.database},
+        {"client_encoding", "UTF8"},
+        {"timezone", "UTC"}
+      ]
       |> append_guc(@statement_timeout_param, guc(opts, @statement_timeout_param))
       |> append_guc(@idle_in_transaction_param, guc(opts, @idle_in_transaction_param))
       |> Enum.flat_map(fn {key, value} -> [key, <<0>>, to_string(value), <<0>>] end)
@@ -273,7 +282,8 @@ defmodule VitrialSync.Db.Pgconn do
     # accept a list of binaries.
     payload = [:binary.bin_to_list(@protocol_version_bin) | pairs] ++ [<<0>>]
 
-    :gen_tcp.send(socket, [<<:erlang.iolist_size(payload) + 4::32>>, payload])
+    bytes = IO.iodata_to_binary([<<:erlang.iolist_size(payload) + 4::32>>, payload])
+    :gen_tcp.send(socket, bytes)
   end
 
   # The two GUCs `app/db.py:25-44` sets on every connection. Both are a bound on
@@ -291,10 +301,15 @@ defmodule VitrialSync.Db.Pgconn do
   end
 
   defp append_guc(pairs, _key, nil), do: pairs
-  defp append_guc(pairs, key, value), do: pairs ++ [{key, value}]
+  # The server accepts real GUC names here, not this client's caller option atoms.
+  defp append_guc(pairs, :statement_timeout_ms, value),
+    do: pairs ++ [{"statement_timeout", value}]
+
+  defp append_guc(pairs, :idle_in_transaction_session_timeout_ms, value),
+    do: pairs ++ [{"idle_in_transaction_session_timeout", value}]
 
   # Read startup-phase messages until the server is ready or has refused.
-  defp read_until(socket, :ready, timeout, %Url{} = url) do
+  defp read_until(socket, :ready, timeout, url) do
     case read_message(socket, timeout) do
       {:ok, "R", payload} -> handle_auth(socket, payload, timeout, url)
       {:ok, "E", payload} -> {:error, decode_error(payload)}
@@ -309,7 +324,7 @@ defmodule VitrialSync.Db.Pgconn do
   defp handle_auth(_socket, <<3::32>>, _timeout, _url),
     do: {:error, :cleartext_password_not_supported}
 
-  defp handle_auth(socket, <<5::32, salt::binary-size(4)>>, timeout, %Url{} = url) do
+  defp handle_auth(socket, <<5::32, salt::binary-size(4)>>, timeout, url) do
     # MD5: "md5" ++ hex(md5(hex(md5(password ++ user)) ++ salt)). The INNER hash
     # is what makes this salted per user rather than salted per database.
     with :ok <- send_password(socket, md5_auth(url.password || "", url.username, salt)) do
@@ -325,7 +340,7 @@ defmodule VitrialSync.Db.Pgconn do
 
   # PasswordMessage: the literal "password", the answer, a terminating zero.
   defp send_password(socket, secret) when is_binary(secret),
-    do: :gen_tcp.send(socket, ["password", <<0>>, secret, <<0>>])
+    do: :gen_tcp.send(socket, ["p", <<byte_size(secret) + 5::32>>, secret, <<0>>])
 
   # `:crypto` has been in extra_applications since the umbrella's first line, so
   # both of PostgreSQL's constructions need no dependency.
@@ -358,7 +373,7 @@ defmodule VitrialSync.Db.Pgconn do
         bind_message(params),
         describe_message(),
         execute_message(),
-        <<"S">>
+        <<"S", 4::32>>
       ]
       |> IO.iodata_to_binary()
 
@@ -368,8 +383,8 @@ defmodule VitrialSync.Db.Pgconn do
   # Parse: statement name (unnamed), the query, and zero parameter type OIDs —
   # which asks the server to infer every type rather than be told.
   defp parse_message(sql) do
-    query = sql <> <<0>>
-    <<"P", 0::32>> <> <<0>> <> <<byte_size(query)::16>> <> query <> <<0::16>>
+    body = <<0>> <> (sql <> <<0>>) <> <<0::16>>
+    <<"P", byte_size(body) + 4::32>> <> body
   end
 
   # Bind: the unnamed portal and statement, all parameters in TEXT format, and
@@ -380,13 +395,14 @@ defmodule VitrialSync.Db.Pgconn do
     param_bytes = :erlang.iolist_to_binary(encoded)
 
     # unnamed portal and statement
+    # parameter count: ONE per parameter, not the byte size of the encoded blob
     # parameter format codes: all text
     # result format codes: all text
     body =
       <<0>> <>
         <<0>> <>
         <<0::16>> <>
-        <<byte_size(param_bytes)::16>> <>
+        <<length(params)::16>> <>
         param_bytes <>
         <<0::16>>
 
@@ -402,7 +418,7 @@ defmodule VitrialSync.Db.Pgconn do
   defp encode_param(true), do: encode_param("t")
   defp encode_param(false), do: encode_param("f")
 
-  defp describe_message, do: <<"D", 9::32, "P", 0>>
+  defp describe_message, do: <<"D", 6::32, "P", 0>>
 
   # Execute: the unnamed portal, and 0 rows — unlimited, because the page-fit
   # decision is made by `VitrialSync.Page` on bytes, not by a row cap here.
@@ -421,23 +437,30 @@ defmodule VitrialSync.Db.Pgconn do
       {:ok, "D", payload} ->
         {:ok, %{rows: [], row_description: nil, status: payload}}
 
+      # A write's CommandComplete: keep reading through ReadyForQuery so the
+      # next exchange starts aligned (the top-level C arm that returns here
+      # without consuming Z desynced every later query by one message).
       {:ok, "C", payload} ->
-        {:ok, %{rows: [], command_complete: payload, status: nil}}
+        case read_message(socket, timeout) do
+          {:ok, "Z", status} -> {:ok, %{rows: [], command_complete: payload, status: status}}
+          {:ok, _late, _} -> {:ok, %{rows: [], command_complete: payload, status: nil}}
+          {:error, reason} -> {:error, reason}
+        end
 
       {:ok, "E", payload} ->
         {:error, decode_error(payload)}
 
       {:ok, "1", _payload} ->
-        {:error, :parse_error_unsupported}
+        read_query_response(socket, timeout)
 
       {:ok, "2", _payload} ->
-        {:error, :bind_error_unsupported}
+        read_query_response(socket, timeout)
 
       {:ok, "n", _payload} ->
-        {:error, :notice_unhandled}
+        read_query_response(socket, timeout)
 
       {:ok, "3", _payload} ->
-        {:error, :close_complete_unexpected}
+        read_query_response(socket, timeout)
 
       {:ok, "I", _empty} ->
         read_query_response(socket, timeout)
@@ -462,12 +485,11 @@ defmodule VitrialSync.Db.Pgconn do
         collect_rows(socket, timeout, description, [decode_data_row(payload) | acc], result)
 
       {:ok, "C", payload} ->
-        {:ok,
-         %{
-           rows: Enum.reverse(acc),
-           row_description: description,
-           command_complete: payload
-         }}
+        collect_rows(socket, timeout, description, acc, %{
+          rows: Enum.reverse(acc),
+          row_description: description,
+          command_complete: payload
+        })
 
       {:ok, "E", payload} ->
         {:error, decode_error(payload)}
@@ -521,8 +543,11 @@ defmodule VitrialSync.Db.Pgconn do
   # separately. The trailing 18 bytes are spelled out field by field rather than
   # as one opaque size, so a miscount is a compile error here and not a silently
   # misaligned decode at runtime.
-  defp decode_field(<<name_size::16, rest::binary>>) do
-    with <<name::binary-size(^name_size), 0, tail::binary>> <- rest,
+  defp decode_field(rest) do
+    # The field name is a NULL-TERMINATED string with no length prefix (the
+    # version that read an int16 length consumed the name's own bytes as a
+    # size and failed every real RowDescription to []).
+    with [name, tail] <- :binary.split(rest, <<0>>),
          <<table_oid::32, column::16, type_oid::32, size::16, modifier::32, format::16,
            rest2::binary>> <- tail do
       {:ok,
@@ -565,13 +590,24 @@ defmodule VitrialSync.Db.Pgconn do
     |> Enum.into(%{severity: nil, code: nil, message: nil, detail: nil, hint: nil, position: nil})
   end
 
+  # Null-terminated cstring fields per the protocol, mapped to the
+  # atoms the client's @type promises.
+  @field_codes %{
+    ?S => :severity,
+    ?C => :code,
+    ?M => :message,
+    ?D => :detail,
+    ?H => :hint,
+    ?P => :position
+  }
+
   defp split_error_fields(payload), do: split_error_fields(payload, [])
 
   defp split_error_fields(<<0>>, acc), do: acc |> Enum.reverse() |> Map.new()
 
-  defp split_error_fields(<<field, size::16, rest::binary>>, acc) do
-    <<value::binary-size(^size), rest2::binary>> = rest
-    split_error_fields(rest2, [{field, value} | acc])
+  defp split_error_fields(<<field, rest::binary>>, acc) do
+    [value, rest2] = :binary.split(rest, <<0>>)
+    split_error_fields(rest2, [{Map.get(@field_codes, field, field), value} | acc])
   end
 
   # ---------------------------------------------------------------------------
