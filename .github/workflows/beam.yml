@@ -50,7 +50,7 @@ jobs:
     env:
       MIX_ENV: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Local toolchain probe (fail loudly if the host loses BEAM)
         run: |
           erl -noshell -eval 'io:format("OTP ~s~n", [erlang:system_info(otp_release)])' -eval 'halt().'

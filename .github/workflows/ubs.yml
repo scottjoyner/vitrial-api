@@ -46,7 +46,7 @@ jobs:
       # -182 on an unchanged tree), and info does not gate anyway.
       UBS_NO_AUTO_UPDATE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Tool probe (fail loudly if the runner loses ubs)
         run: |
@@ -78,7 +78,7 @@ jobs:
       # set -- see that file's own comment.
       - name: Publish findings (queryable JSON + new-findings table + fingerprint set)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ubs-findings-json
           path: |
@@ -90,7 +90,7 @@ jobs:
 
       - name: Publish human-readable findings log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ubs-findings-log
           path: ubs-findings.txt
