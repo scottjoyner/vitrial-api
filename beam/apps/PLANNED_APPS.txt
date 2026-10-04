@@ -16,7 +16,6 @@
 # Do that instead of leaving the directory undeclared. An undeclared scaffold is
 # indistinguishable, to the next reader, from an app someone abandoned halfway.
 
-# vitrial_auth -- 0b89421 -- Device pairing and session authority. Access tokens stored only as SHA-256 hashes, so a database disclosure yields hashes rather than bearer tokens. Rate limiting is in-process, which is correct for the single-replica deployment and wrong the moment a second replica exists; deploy/env.production.example says so at the setting.
 # vitrial_delivery -- 0b89421 -- Delivery execution as an explicit state machine. It is the one entity type whose visibility probe checks deleted_at at every hop, unlike the generic types where a soft-deleted record stays visible with deletedAt set.
 # vitrial_evidence -- 0b89421 -- Evidence blob storage and garbage collection. Blobs are streamed and size-bounded while in flight; the evidence PUT route deliberately has no middleware byte ceiling, which is why evidence_max_bytes exists.
 # vitrial_lifecycle -- 0b89421 -- Item lifecycle transitions: configuration finalize and reopen, readiness change and override, blocker management. This is where the push pipeline's later admission steps live.
