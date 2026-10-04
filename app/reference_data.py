@@ -435,6 +435,34 @@ async def _seed_baseline_publications(db: AsyncSession, principal: Principal) ->
     return created
 
 
+async def ensure_baseline_publications_for_organization(
+    db: AsyncSession,
+    organization_id: str,
+) -> None:
+    """Seed the bundled baselines for an organization, by id rather than by principal.
+
+    The write path (`bootstrap_identity`) has no `Principal` -- it is creating one. The
+    seed only ever reads `principal.organization_id`, so taking the id directly keeps the
+    signature honest instead of inventing a shim principal with capabilities the caller
+    does not have.
+    """
+    await _ensure_baseline_publications(db, _OrganizationOnly(organization_id))
+
+
+class _OrganizationOnly:
+    """Minimal stand-in carrying exactly the field the seed reads.
+
+    Deliberately not a `Principal`: a real one would imply capabilities, and this code
+    path must not appear to be capability-checked when it is not. The seed is a system
+    action and reads exactly one attribute.
+    """
+
+    __slots__ = ("organization_id",)
+
+    def __init__(self, organization_id: str) -> None:
+        self.organization_id = organization_id
+
+
 async def ensure_baseline_publications(db: AsyncSession, principal: Principal) -> None:
     """Seed the bundled baselines for an organization, tolerating a concurrent seed.
 
@@ -453,6 +481,16 @@ async def ensure_baseline_publications(db: AsyncSession, principal: Principal) -
     winner has committed. The loser therefore rolls back, discarding its own
     uncommitted seed, and re-runs the check against committed state, where the rows
     now exist and it inserts nothing.
+    """
+    await _ensure_baseline_publications(db, principal)
+
+
+async def _ensure_baseline_publications(db: AsyncSession, principal) -> None:
+    """The race-tolerant seed loop, shared by the read and write entry points.
+
+    One implementation, so the `VITR-V008` retry cannot be fixed on one path and quietly
+    stay broken on the other -- which is exactly what two near-identical copies of this
+    loop would invite.
     """
     for attempt in range(1, BASELINE_SEED_ATTEMPTS + 1):
         try:

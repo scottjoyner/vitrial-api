@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import token_hash
 from app.models import AuthSession, Membership, Organization, User, uid
 from app.observability import correlation_ref, log_event
+from app.reference_data import ensure_baseline_publications_for_organization
 from app.schemas import AuthorizationRole, Capability, StrictModel
 from app.settings import settings
 
@@ -184,6 +185,25 @@ async def bootstrap_identity(
         expires_at=now + timedelta(seconds=request.sessionTTLSeconds),
     )
     db.add(auth_session)
+
+    # Seed the bundled reference publications here, at organization creation, rather
+    # than leaving it to the first GET that happens to need them.
+    #
+    # `VITR-V004`: four GET helpers (`get_publication`, `list_publications`,
+    # `current_publications`, `publication_manifest`) each call
+    # `ensure_baseline_publications`, so every read route takes a WRITE transaction and
+    # commits. Making reads mutate is not merely untidy -- it is why `VITR-V008` existed
+    # at all, and it means the read path cannot be served from a replica.
+    #
+    # This does NOT remove the lazy seed. Removing it would change what a GET returns for
+    # an organization that already exists but was never bootstrapped through this path,
+    # and that is client-visible on a pinned contract. Seeding at creation means the GET
+    # seed finds the rows present and inserts nothing, which closes the window for every
+    # NEW organization without changing what any existing one returns.
+    #
+    # Idempotent: `ensure_baseline_publications` inserts only what is missing, so
+    # re-bootstrapping an existing organization is unaffected.
+    await ensure_baseline_publications_for_organization(db, request.organizationID)
     await db.commit()
 
     log_event(
