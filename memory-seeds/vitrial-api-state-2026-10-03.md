@@ -297,6 +297,19 @@ including SCRAM-SHA-256. The coupling that made the swap cheap was measured firs
 three functions, one module. `vitrial_web` carries the umbrella's only package
 (cowboy), which is the recorded wave-6 decision.
 
+**`VitrialSync.Db.Reads` exists (2026-10-04, `88b6112`).** There was **no read
+query anywhere in the estate** before it — `Writes` had seven insert/update
+functions and `Rows` has always been a pure decoder over `(fields, cells)` with
+nothing feeding it. That is why 21 of 23 routes answer 501: every engine is a pure
+function over already-loaded rows, and nothing loaded them. 684 passing live.
+
+**Both BEAM gates now run the parity oracle.** `ci.yml`'s job builds
+`beam/Dockerfile.gate` (pinned hexpm + python3 + pydantic); `beam.yml` runs on the
+self-hosted HOST and used only to PROBE for pydantic, so its ability to check the
+oracle depended on someone having previously pip-installed it on that machine. It
+now provisions it. Confirmed live: `differential oracle available (python3
+3.12.12, pydantic 2.13.5)`.
+
 **The live-PostgreSQL suite runs in CI.** It used to skip and report green: no
 `postgres:` service, then a skip guard matching `SKIPPED` when the suite says
 `NOT RUN`, then a probe reporting `{:error, :function_clause}`. All three are
