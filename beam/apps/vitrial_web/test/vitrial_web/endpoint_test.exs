@@ -40,10 +40,35 @@ defmodule VitrialWeb.EndpointTest do
     parse_response(response)
   end
 
+  # Read until the SERVER closes, not until a deadline passes.
+  #
+  # `recv(sock, 0, 2_000)` returning `{:error, :timeout}` after two seconds was
+  # treated as end-of-response, which is a race: a slow response had not arrived
+  # yet and the caller got an empty body. That surfaced as
+  #
+  #     ** (MatchError) no match of right hand side value: [""]
+  #
+  # from `parse_response/1` splitting an empty body, naming neither the timeout
+  # nor the test. It reproduced roughly one run in five.
+  #
+  # The distinction that matters: `:closed` means the server finished (correct,
+  # because the request sends `connection: close`), while `:timeout` means it has
+  # not yet. Only the first ends the read. The timeout is now an error, so a
+  # genuinely stalled server fails with a sentence that says so.
   defp drain(sock, acc \\ []) do
-    case :gen_tcp.recv(sock, 0, 2_000) do
-      {:ok, data} -> drain(sock, [data | acc])
-      {:error, _reason} -> acc |> Enum.reverse() |> IO.iodata_to_binary()
+    case :gen_tcp.recv(sock, 0, 10_000) do
+      {:ok, data} ->
+        drain(sock, [data | acc])
+
+      {:error, :closed} ->
+        acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+      {:error, :timeout} ->
+        raise "endpoint test: server did not close the connection within 10s " <>
+                "(read #{acc |> Enum.reverse() |> IO.iodata_to_binary() |> byte_size()} bytes so far)"
+
+      {:error, reason} ->
+        raise "endpoint test: recv failed: #{inspect(reason)}"
     end
   end
 
