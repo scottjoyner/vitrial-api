@@ -495,6 +495,26 @@ weighs:
    that breaks a cycle by accident costs more than the layout is worth, and the
    umbrellas already exist to hold the whole service.
 
+**The move is not cheap, and measuring it says so.** Cross-module reference counts
+inside `vitrial_sync`:
+
+```
+ownership.ex -> canonical        58 references
+authority.ex -> ownership         5
+batch.ex    -> authority          1
+lifecycle.ex-> ownership          0
+```
+
+`Ownership` and `Canonical` are not two modules that happen to sit together; the
+first makes 58 references to the second, and both are ports of two Python files
+that import each other. Moving either one out means either a sibling dependency
+(0 of 8 apps have one) or splitting a pair that is inseparable in the reference.
+
+So the recommendation is firmer than "a layout decision": **leave them.** Five
+scaffold declarations stay as a map of where those modules *could* go, and the
+guard keeps the claim honest. Revisit it when something forces the question —
+a deployment that needs them apart, or a cycle that has to be broken.
+
 **`vitrial_auth` is DONE** (2026-10-04). `token_hash`, `current_principal`,
 `profile_for`, `_normalized_code`, `issue_pairing_grant` and
 `exchange_pairing_code` are ported as pure decisions over the rows a lookup would
