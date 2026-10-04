@@ -20,6 +20,6 @@
 # vitrial_delivery -- 0b89421 -- Delivery execution as an explicit state machine. It is the one entity type whose visibility probe checks deleted_at at every hop, unlike the generic types where a soft-deleted record stays visible with deletedAt set.
 # vitrial_evidence -- 0b89421 -- Evidence blob storage and garbage collection. Blobs are streamed and size-bounded while in flight; the evidence PUT route deliberately has no middleware byte ceiling, which is why evidence_max_bytes exists.
 # vitrial_lifecycle -- 0b89421 -- Item lifecycle transitions: configuration finalize and reopen, readiness change and override, blocker management. This is where the push pipeline's later admission steps live.
-# vitrial_ownership -- 0b89421 -- Record ownership and authorization. Note app/ownership.py:781-849 carries a duplicate delivery-policy block that is unreachable; authorize_record is only called on the else branch (#14).
+# vitrial_ownership -- 0b89421 -- Record ownership and authorization. NOTE: the defect this line used to cite (a duplicate, unreachable delivery-policy block in app/ownership.py) is FIXED (VITR-V009); the Elixir port refuses delivery_execution in the generic gate on purpose, and `VitrialSync.Ownership`/`Authority` already implement this app's logic inside vitrial_sync. What is left here is a layout decision, not a port.
 # vitrial_reference -- 0b89421 -- Reference data and the evidence-reference containment filter. On the Python side this is the jsonb @> pushdown, so delete and GC no longer materialize every measurement payload in Python.
 

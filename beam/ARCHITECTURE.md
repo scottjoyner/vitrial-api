@@ -465,17 +465,46 @@ flagged by `mix hex.audit` when the dependency was vetted and visible in this
 session's gate output (the hex resolution prints both under `VULNERABLE!`).
 Advisory output only; recorded because the pin, not a choice, holds it open.
 
-### Waves 7–9 — the remaining apps, in ascending order of risk
+### Waves 7–9 — the remaining apps
 
-`vitrial_ownership` (1,098 Python lines — the largest single module in the
-service, 13 entity types and the canonical parent chain), `vitrial_delivery`
-(900 + 630 lines, an 8-state machine with plan freezing and append-only
-history), `vitrial_evidence` (streamed SHA-256, multipart staging, GC), then
-`vitrial_lifecycle`, `vitrial_auth`, `vitrial_reference`.
+**Measured 2026-10-04, and the framing above this section was wrong.** These waves
+were sized by *Python lines still to port*, which implies the logic does not exist
+yet. It does. Measured against the tree:
 
-`vitrial_ownership` first despite being a scaffold today, because the push
-pipeline's authority steps call into it — waves 4a and 7 are the same work seen
-from two ends.
+| declared app | already ported, inside `vitrial_sync` | lines |
+|---|---|---:|
+| `vitrial_ownership` | `ownership.ex`, `authority.ex` | 1,916 |
+| `vitrial_delivery` | `delivery.ex`, `delivery/handoff.ex` | 2,235 |
+| `vitrial_lifecycle` | `lifecycle.ex`, `item_delete_guard.ex` | 748 |
+| `vitrial_reference` | `canonical.ex`, `prefetch.ex` | 854 |
+| `vitrial_evidence` | `evidence_gc.ex` | 119 |
+| `vitrial_auth` | — nothing ported | 0 |
+
+So five of the six are **moves, not builds**. `vitrial_auth` (device pairing,
+hashed access tokens, in-process rate limiting) is the only one that is genuinely
+unstarted, and it is the smallest.
+
+That reorders the waves by what is actually left rather than by what the reference
+weighs:
+
+1. **`vitrial_auth`** — the only real porting work. Everything else is mechanical.
+2. **The moves.** Whether `ownership` and `delivery` should leave `vitrial_sync`
+   at all is a LAYOUT decision, not a porting one, and it is worth making
+   deliberately rather than by default: `Authority` calls into `Ownership`,
+   `Ownership` calls into `Canonical`, and `Batch` calls into all of them. A move
+   that breaks a cycle by accident costs more than the layout is worth, and the
+   umbrellas already exist to hold the whole service.
+
+**The call I would make, and why:** port `vitrial_auth`, then leave the other five
+as they are until there is a reason to move them that is not "the directory was
+declared first". The seven scaffolds were declared as a map before any of this
+existed, and a map is not a schedule. The `check_beam_scaffold.py` guard keeps the
+declaration honest either way — an app that gains real content fails CI asking for
+its line to be deleted.
+
+**What this section does not settle:** whether one 13,000-line app is the right
+unit of deployment. Nothing here has ever been deployed, so there is no evidence
+for a split and none against one.
 
 ---
 
