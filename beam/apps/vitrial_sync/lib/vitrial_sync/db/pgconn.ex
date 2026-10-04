@@ -160,12 +160,18 @@ defmodule VitrialSync.Db.Pgconn do
         # first version exited here — which closed the socket in the `after`
         # immediately and handed the caller a pid for a dead process. The
         # `after` runs when `owner_receive/2` returns, not when this block does.
+        # One wrapping, one shape. The previous version produced
+        # `{:error, {:error, :function_clause}}` for a server that refuses the
+        # connection: `handshake/3` already returns `{:error, reason}`, and the
+        # caller-facing contract is a single-level tuple. The extra nesting came
+        # from a `catch` clause that wrapped an already-wrapped value — visible
+        # only as a reason string naming neither the server nor the client, and
+        # it is what CI reported when PostgreSQL demanded SCRAM.
         result =
           try do
             handshake(socket, url, opts)
           catch
-            kind, reason ->
-              {:error, {kind, reason}}
+            kind, reason -> {:error, {:transport_raised, kind, reason}}
           end
 
         send(parent, {:pgconn_ready, self(), result})
@@ -312,6 +318,10 @@ defmodule VitrialSync.Db.Pgconn do
   defp read_until(socket, :ready, timeout, url) do
     case read_message(socket, timeout) do
       {:ok, "R", payload} -> handle_auth(socket, payload, timeout, url)
+      # `decode_error/1` returns the ERROR MAP, not an `{:error, _}` tuple, so
+      # this is the one place the tuple is built. Wrapping it twice is what
+      # produced `{:error, {:error, :function_clause}}` reaching a caller that
+      # matches on a single level.
       {:ok, "E", payload} -> {:error, decode_error(payload)}
       {:ok, _type, _payload} -> read_until(socket, :ready, timeout, url)
       {:error, reason} -> {:error, reason}
@@ -332,11 +342,34 @@ defmodule VitrialSync.Db.Pgconn do
     end
   end
 
-  defp handle_auth(_socket, <<10::32>>, _timeout, _url),
-    do: {:error, {:unsupported_auth, :sasl_prepared_channel_binding}}
+  # AuthenticationSASL: the int32 subtype, then a null-terminated list of
+  # mechanism names, then a final zero byte.
+  #
+  # The previous version matched a BARE `<<10::32>>`, which is not what a
+  # SCRAM-capable server sends — it sends the subtype followed by
+  # "SCRAM-SHA-256\0\0". Every clause missed, and because the clause list had
+  # no catch-all for a longer binary, the result was a FunctionClauseError from
+  # inside the handshake:
+  #
+  #   ** (FunctionClauseError) no function clause matching in
+  #   VitrialSync.Db.Pgconn.handle_auth/4
+  #   handle_auth(#Port<...>, <<0,0,0,10,83,67,82,65,77,45,83,72,65,45,50,53,54,0,0>>, ...)
+  #
+  # which reached the caller as `{:error, :function_clause}` and named neither
+  # the server, nor the mechanism it offered, nor the fact that SCRAM is simply
+  # not implemented yet.
+  defp handle_auth(_socket, <<10::32, rest::binary>>, _timeout, _url) do
+    {:error, {:unsupported_auth, {:sasl, mechanisms(rest)}}}
+  end
 
   defp handle_auth(_socket, <<other::32>>, _timeout, _url),
     do: {:error, {:unsupported_auth, other}}
+
+  defp mechanisms(binary) do
+    binary
+    |> :binary.split(<<0>>, [:global])
+    |> Enum.reject(&(&1 == ""))
+  end
 
   # PasswordMessage: the literal "password", the answer, a terminating zero.
   defp send_password(socket, secret) when is_binary(secret),
