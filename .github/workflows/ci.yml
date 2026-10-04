@@ -178,6 +178,41 @@ jobs:
   beam:
     name: BEAM umbrella (compile + format + test)
     runs-on: ubuntu-latest
+
+    # A real PostgreSQL, for `VitrialSync.Db`'s live suite. Without this service
+    # the BEAM job reported `657 passed, 20 skipped` and called it green — the
+    # 20 being `live_db_test.exs`, which skips itself and prints why:
+    #
+    #   [db] live-postgresql suite NOT RUN (no server reachable at
+    #   $VITRIAL_TEST_DATABASE_URL): no server reachable: :econnrefused
+    #
+    # That is a hand-written PostgreSQL v3 wire client whose entire risk lives in
+    # whether the bytes are right, and nothing in CI was exercising the bytes.
+    # Twelve wire defects were found once by a builder against a local server;
+    # the next one will not be found the same way. The Python `postgres` job
+    # below has had this service all along — the BEAM job was simply never given
+    # one.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: vitrial
+          POSTGRES_USER: vitrial
+          POSTGRES_PASSWORD: vitrial
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U vitrial -d vitrial"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      # The live suite refuses to run without this, which is the correct default:
+      # a skipped wire protocol is indistinguishable from a correct one until a
+      # query fails in production.
+      VITRIAL_TEST_DATABASE_URL: postgresql://vitrial:vitrial@localhost:5432/vitrial
+
     steps:
       - uses: actions/checkout@v4
 

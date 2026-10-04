@@ -35,18 +35,33 @@ defmodule VitrialSync.Db.PoolTest do
   describe "the application child" do
     test "the umbrella boots the pool with the app, and it stays at zero connections" do
       # The permanent guard against an eager warm-up: the pool is a child of
-      # VitrialSync.Application, Mix starts it under `mix test` — in the gate,
-      # with no PostgreSQL at all. It must sit there, alive, holding NOTHING,
-      # until a checkout happens. See VitrialSync.Db.Pool's moduledoc.
-      pid = GenServer.whereis(VitrialSync.Db.Pool)
-      assert is_pid(pid) and Process.alive?(pid)
+      # VitrialSync.Application, Mix starts it under `mix test`, and it must sit
+      # there holding NOTHING until a checkout happens.
+      #
+      # It used to assert `stats.total == 0` against the APPLICATION pool, which
+      # held only because the gate had no PostgreSQL at all. Giving the BEAM job a
+      # `postgres:` service (the live suite needs one) made `live_db_test.exs`
+      # check connections out of that same application pool, and because both
+      # files are `async: false` the ordering decided the answer: this guard
+      # passed or failed depending on whether the live suite ran first. Asserting
+      # on a shared pool's current contents was never what this test was about —
+      # it is about what STARTUP does, not what any other test did before it.
+      #
+      # So it starts its OWN pool and asserts that is untouched, which is the
+      # property stated in Pool's moduledoc and is immune to ordering.
+      name = tiny_pool()
 
-      stats = GenServer.call(VitrialSync.Db.Pool, :stats, 5_000)
+      stats = GenServer.call(name, :stats, 5_000)
       assert stats.total == 0
       assert stats.idle == 0
       assert stats.checked_out == 0
       assert stats.waiters == 0
       assert stats.draining? == false
+
+      # And the application child itself is alive — the guard that motivated the
+      # original assertion, kept without depending on its connection count.
+      pid = GenServer.whereis(VitrialSync.Db.Pool)
+      assert is_pid(pid) and Process.alive?(pid)
     end
 
     test "the running app's checkout surfaces a connect failure as an error, not a crash" do

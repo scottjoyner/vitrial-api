@@ -448,6 +448,14 @@ defmodule VitrialSync.Db.Pgconn do
         end
 
       {:ok, "E", payload} ->
+        # DRAIN TO THE SYNC BOUNDARY before returning. The server follows an
+        # ErrorResponse with ReadyForQuery; returning here leaves that frame in
+        # the socket, and the NEXT query on this connection reads it as its own
+        # answer. The symptom is a cross-contaminated connection: one bad
+        # statement, then every later query on that connection returns the first
+        # statement's error, or times out. Verified live -- this exact branch
+        # produced `{:error, :query_timeout}` on the following query.
+        drain_to_ready(socket, timeout)
         {:error, decode_error(payload)}
 
       {:ok, "1", _payload} ->
@@ -581,13 +589,46 @@ defmodule VitrialSync.Db.Pgconn do
     decode_row_cells(n - 1, rest2, [value | acc])
   end
 
-  # ErrorResponse: a field-count-free sequence of (byte, type, value) triples,
-  # terminated by a zero byte. The five fields worth keeping are the ones a
-  # caller acts on; the rest are dropped rather than guessed at.
+  # ErrorResponse: a sequence of (field-code byte, null-terminated value) pairs,
+  # terminated by a zero byte. No count -- the terminator is the boundary.
+  #
+  # UNRECOGNISED FIELDS ARE DROPPED, not merged. The previous version built the
+  # pairs and passed them to `Enum.into/2` against a map of nil defaults, which
+  # MERGES: every extra field the server sent (?F file, ?L line, ?R routine, ?W
+  # where) stayed in the result under its RAW INTEGER KEY. A real error came back
+  # as
+  #
+  #     %{70 => "parse_relation.c", 76 => "3716", 82 => "errorMissingColumn",
+  #       86 => "ERROR", :code => "42703", :message => "..."}
+  #
+  # so a map the @type promises is all-atoms was in fact mostly integers, and the
+  # first caller to `reraise/2` it crashed with "expect a module name, string or
+  # exception as the first argument, got: {:badmatch, {:error, %{70 => ...". A
+  # default map is a floor for the KEYS YOU LIST, not a filter for the ones you
+  # did not.
   defp decode_error(payload) do
-    payload
-    |> split_error_fields()
-    |> Enum.into(%{severity: nil, code: nil, message: nil, detail: nil, hint: nil, position: nil})
+    defaults = %{severity: nil, code: nil, message: nil, detail: nil, hint: nil, position: nil}
+
+    # Only the fields @field_codes names are kept. The rest are dropped HERE, at
+    # the point the pairs are built, rather than merged and filtered afterwards.
+    #
+    # Two bugs lived in this one spot, both found against a live server and
+    # neither visible in a unit test that only checked the fields it cared about:
+    #
+    #   1. `Enum.into/2` against a map of nil defaults MERGES, it does not
+    #      filter. Every unmapped field survived under its RAW INTEGER KEY:
+    #        %{70 => "parse_relation.c", 76 => "3716", 82 => "errorMissingColumn",
+    #          86 => "ERROR", :code => "42703", :message => "..."}
+    #      A map the @type promises is all-atoms; this was mostly integers, and
+    #      `pool.ex` crashed trying to `reraise/2` it.
+    #   2. Fixing that with `Enum.filter(is_atom)` produced a KEYWORD LIST, and
+    #      the following `Map.merge/2` raised BadMapError on it.
+    #
+    # Filtering at the source is the version that has neither problem.
+    Enum.reduce(split_error_fields(payload), defaults, fn
+      {key, value}, acc when is_atom(key) -> Map.put(acc, key, value)
+      _unmapped, acc -> acc
+    end)
   end
 
   # Null-terminated cstring fields per the protocol, mapped to the
@@ -627,6 +668,17 @@ defmodule VitrialSync.Db.Pgconn do
          {:ok, <<length::32>>} <- recv(socket, 4, timeout),
          {:ok, payload} <- recv(socket, length - 4, timeout) do
       {:ok, type, payload}
+    end
+  end
+
+  # Read and discard until `ReadyForQuery` ("Z"), which is the server's marker
+  # that the whole extended-query group is finished. Bounded like every other
+  # read here: a server that errors and then goes quiet must not hold the caller.
+  defp drain_to_ready(socket, timeout) do
+    case read_message(socket, timeout) do
+      {:ok, "Z", _status} -> :ok
+      {:ok, _type, _payload} -> drain_to_ready(socket, timeout)
+      {:error, _reason} -> :ok
     end
   end
 

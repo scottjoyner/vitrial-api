@@ -11,7 +11,7 @@ defmodule VitrialSync.Db.LiveDB do
 
   ## Compile-time, like the parity suite
 
-  The probe runs at MODULE-BODY (compile) time and `unavailable_reason/0`
+  The probe runs when a CALLER asks, and `unavailable_reason/0`
   returns the frozen verdict, exactly the pattern `parity_test.exs` documents:
   a `@tag skip` decided inside `setup_all` skips the first test and still runs
   the callbacks (an `invalid` report), `@moduletag` skips the whole module
@@ -83,21 +83,43 @@ defmodule VitrialSync.Db.LiveDB do
 
   url_string = System.get_env("VITRIAL_TEST_DATABASE_URL") || @default_test_url
 
-  reason =
-    case Probe.run(url_string) do
-      {:ok, _url} -> nil
-      {:error, reason} -> reason
-    end
-
+  # NOT probed at compile time. The previous version called `Probe.run/1` from
+  # the module body and froze the answer into `@unavailable_reason`, which cannot
+  # work: connecting opens a `#Port`, and a `#Port` cannot escape into a module
+  # attribute —
+  #
+  #   ** (ArgumentError) cannot inject attribute @result into function/macro
+  #   because cannot escape #Port<0.4>
+  #
+  # So the probe always reported `transport raised exit: :badarg`, whatever the
+  # server was doing, and the live suite skipped itself in CI while the job went
+  # green. Verified directly: the same connect from a script works against a real
+  # PostgreSQL 17 and returns `{:ok, pid}`; from the module body it always raises.
+  #
+  # `unavailable_reason/0` is therefore computed on first call and memoized, which
+  # keeps `@moduletag skip:` — a compile-time attribute — working by having the
+  # test file ask for the reason at compile time through THIS function, which
+  # runs in the caller's (runtime) context.
   @url_string url_string
-  @unavailable_reason reason
 
   @doc "The URL the suites talk to, from `VITRIAL_TEST_DATABASE_URL` or the default."
   def url_string, do: @url_string
 
   @doc """
   `nil` when the server is reachable and the schema is applied; the reason it is
-  not, otherwise. Frozen at compile time — see the moduledoc.
+  not, otherwise.
+
+  Called from a test file's module body, so it runs in the CALLER's context at
+  the caller's compile time. The connection it opens is opened and closed there;
+  only the resulting reason (a string or `nil`) comes back here. That is the
+  whole point: the old shape froze a `#Port` into an attribute, which cannot be
+  done, so it raised unconditionally and reported a server problem that was not
+  there.
   """
-  def unavailable_reason, do: @unavailable_reason
+  def unavailable_reason do
+    case Probe.run(@url_string) do
+      {:ok, _url} -> nil
+      {:error, reason} -> reason
+    end
+  end
 end
