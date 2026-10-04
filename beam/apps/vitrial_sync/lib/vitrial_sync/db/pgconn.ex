@@ -1,5 +1,4 @@
 defmodule VitrialSync.Db.Pgconn do
-  @protocol_version_bin <<196_608::32>>
   @moduledoc """
   A PostgreSQL connection, hand-written over OTP's `:gen_tcp`.
 
@@ -67,6 +66,11 @@ defmodule VitrialSync.Db.Pgconn do
   # socket reads, and the default for `:query_timeout`. Generous relative to a
   # LAN round-trip and to the server-side `statement_timeout` the startup packet
   # carries; it exists to catch a wedged socket, not to enforce a deadline.
+  alias VitrialSync.Db.Url
+
+  # Protocol version 3.0 (major 3, minor 0) as the int32 the startup packet wants.
+  @protocol_version_bin <<196_608::32>>
+
   @call_timeout_ms 15_000
 
   @typedoc "One connection: the pid owning its socket."
@@ -358,12 +362,293 @@ defmodule VitrialSync.Db.Pgconn do
   # which reached the caller as `{:error, :function_clause}` and named neither
   # the server, nor the mechanism it offered, nor the fact that SCRAM is simply
   # not implemented yet.
-  defp handle_auth(_socket, <<10::32, rest::binary>>, _timeout, _url) do
-    {:error, {:unsupported_auth, {:sasl, mechanisms(rest)}}}
+  # AuthenticationSASL (10): int32 subtype, then a null-terminated list of
+  # mechanism names, then a final zero byte.
+  #
+  # This is what PostgreSQL has negotiated since 10 (`scram-sha-256` became the
+  # default `password_encryption` in 14), so it is not an edge case: without it
+  # this client cannot reach a modern server at all. Verified against a
+  # PostgreSQL started with `--auth-host=scram-sha-256`, which is what CI's
+  # `postgres:17` service does.
+  #
+  # The previous version matched a BARE `<<10::32>>`, which no server sends, so
+  # every clause missed and the handshake raised FunctionClauseError — surfacing
+  # as `{:error, :function_clause}`, naming neither the server nor the mechanism
+  # it had offered.
+  defp handle_auth(socket, <<10::32, rest::binary>>, timeout, url) do
+    offered = mechanisms(rest)
+
+    if "SCRAM-SHA-256" in offered do
+      scram(socket, timeout, url)
+    else
+      # Naming what WAS offered is the difference between a diagnosis and a
+      # shrug: a server offering only SCRAM-SHA-256-PLUS (channel binding) is a
+      # different problem from one offering nothing this client knows.
+      {:error, {:unsupported_auth, {:sasl, offered, "only SCRAM-SHA-256 is implemented"}}}
+    end
   end
 
-  defp handle_auth(_socket, <<other::32>>, _timeout, _url),
-    do: {:error, {:unsupported_auth, other}}
+  # SCRAM-SHA-256, RFC 5802/7677, over SASL.
+  #
+  # Three messages, each of which is the literal tag byte, an int32 length that
+  # counts itself but not the tag, and the payload:
+  #
+  #   client-first      "n,,n=<user>,r=<nonce>"
+  #   server-first      "r=<nonce>,s=<salt-b64>,i=<iterations>"
+  #   client-final      "c=biws,r=<nonce>,p=<proof-b64>"
+  #   server-final      "v=<server-proof-b64>"   (or e=<error>)
+  #
+  # Everything it needs is in `:crypto` — HMAC-SHA-256 and PBKDF2 — which has
+  # been in `extra_applications` since the umbrella's first line, so this costs
+  # no dependency. `SCRAM-SHA-256-PLUS` is NOT implemented: it binds the channel
+  # to TLS, and this client speaks no TLS.
+  defp scram(socket, timeout, %Url{} = url) do
+    nonce = client_nonce()
+
+    # gs2-cbind-flag "n" (no channel binding), empty authzid, then the bare
+    # attributes: `n=<username>,r=<nonce>`.
+    #
+    # The username is NOT optional. RFC 5802 permits an empty one, but
+    # PostgreSQL's parser rejects it precisely:
+    #
+    #   FATAL: malformed SCRAM message
+    #   DETAIL:  Comma expected, but found character "'='".
+    #
+    # because it reads `n=` and then expects the NEXT comma, not another `=`.
+    client_first = "n,,n=" <> url.username <> ",r=" <> nonce
+
+    # 'p' for BOTH SASLInitialResponse and SASLResponse — that is the message
+    # type on the wire, and "n" is only how the SCRAM layer names the
+    # client-first-message inside it. Using "n" produced
+    #
+    #   FATAL: expected SASL response, got message type 110
+    #
+    # which is the server saying, precisely, that the byte it read was not the
+    # one it was waiting for.
+    with :ok <- sasl_initial(socket, "SCRAM-SHA-256", client_first),
+         {:ok, server_first} <- sasl_recv(socket, "R", timeout),
+         {:ok, parsed} <- scram_parse(server_first, nonce, url.username) do
+      {client_final, expected} = scram_client_final(url, parsed)
+
+      with :ok <- sasl_send(socket, "p", client_final),
+           {:ok, server_final} <- sasl_recv(socket, "R", timeout),
+           :ok <- scram_verify(server_final, expected) do
+        read_until(socket, :ready, timeout, url)
+      end
+    end
+  end
+
+  # Two DIFFERENT message shapes, which the previous single function could not
+  # produce:
+  #
+  #   SASLInitialResponse  'p' | int32 len | mechanism\0 | int32 initial-response-len | response
+  #   SASLResponse         'p' | int32 len | response
+  #
+  # Sending the second shape for the first produced
+  #     FATAL: invalid string in message
+  # because the mechanism name was simply absent — the server read the
+  # client-first-message as the mechanism list.
+  #
+  # `len` counts everything after itself, including the mechanism and the
+  # inner length for the initial response.
+  defp sasl_send(socket, tag, payload) when is_binary(tag) and is_binary(payload) do
+    :gen_tcp.send(socket, <<:binary.first(tag), byte_size(payload) + 4::32, payload::binary>>)
+  end
+
+  defp sasl_initial(socket, mechanism, payload) do
+    body = [
+      mechanism,
+      <<0>>,
+      <<byte_size(payload)::32>>,
+      payload
+    ]
+
+    # `iolist_size`, not `byte_size`: `body` is an IODATA list and `byte_size/1`
+    # does not accept one (that raised `:badarg` from inside the handshake). The
+    # body is sent as a SEPARATE argument — folding it into the same binary
+    # would force a conversion this module has no reason to do, and getting the
+    # size without the bytes sends a well-formed header for nothing, which the
+    # server reads as a hang.
+    :gen_tcp.send(socket, [<<?p, :erlang.iolist_size(body) + 4::32>>, body])
+  end
+
+  # The server's SASL replies ride on Authentication messages, so the tag is
+  # "R" — but the FIRST one is AuthenticationSASLContinue (code 11), which
+  # prefixes the server-first message with that int32. The second is
+  # AuthenticationSASLFinal (code 12) and has no prefix.
+  #
+  # The previous version compared the tag and handed back the WHOLE payload, so
+  # the server-first message arrived with four bytes of code in front of it. That
+  # is not a shape this function can use and not one it would have noticed
+  # without a server that actually speaks SCRAM: every parse of it then fails on
+  # a field that is not there.
+  defp sasl_recv(socket, "R", timeout) do
+    case read_message(socket, timeout) do
+      {:ok, "R", <<11::32, message::binary>>} -> {:ok, message}
+      {:ok, "R", <<12::32, message::binary>>} -> {:ok, message}
+      {:ok, "R", <<0::32>>} -> {:error, :sasl_authentication_succeeded_early}
+      {:ok, "R", message} -> {:error, {:sasl_unexpected_code, message}}
+      {:ok, "E", payload} -> {:error, {:sasl_authentication_failed, decode_error(payload)}}
+      {:ok, other, _payload} -> {:error, {:sasl_expected, "R", other}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp sasl_recv(socket, tag, timeout) do
+    case read_message(socket, timeout) do
+      {:ok, ^tag, payload} -> {:ok, payload}
+      {:ok, other, _payload} -> {:error, {:sasl_expected, tag, other}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # server-first: r=<nonce>,s=<salt>,i=<iterations>. The server nonce must EXTEND
+  # ours — a nonce that does not is the classic downgrade attempt, and accepting
+  # one would let a man-in-the-middle replay a proof it obtained elsewhere.
+  @typedoc "The server-first fields SCRAM needs, parsed once."
+  @type scram_first :: %{
+          nonce: String.t(),
+          salt: binary(),
+          iterations: integer(),
+          first: String.t(),
+          server_first: String.t()
+        }
+
+  @spec scram_parse(String.t(), String.t(), String.t()) ::
+          {:ok, scram_first()} | {:error, atom()}
+  defp scram_parse(message, client_nonce, username) do
+    # Built by hand rather than with `Map.new/2`: the compiler cannot infer a
+    # key type from `[key, value]` LISTS, and the result was a `Map.new/2`
+    # warning that `--warnings-as-errors` correctly refused to ignore.
+    fields =
+      message
+      |> String.split(",")
+      |> Enum.reduce(%{}, fn part, acc ->
+        case String.split(part, "=", parts: 2) do
+          [key, value] -> Map.put(acc, key, value)
+          _ -> acc
+        end
+      end)
+
+    server_nonce = fields["r"] || ""
+    salt64 = fields["s"] || ""
+    iterations = fields["i"] || ""
+
+    with true <- server_nonce != "",
+         true <- String.starts_with?(server_nonce, client_nonce),
+         {:ok, salt} <- Base.decode64(salt64),
+         # `Integer.parse/1` returns `:error | {integer, binary}` — NOT
+         # `{:ok, _}`. A `{:ok, _}` pattern here can never match, which the
+         # compiler says out loud, and in a `with` that means the guard falls
+         # through to `else` and every SCRAM handshake fails as
+         # `:scram_bad_server_first` for a reason that has nothing to do with
+         # the handshake.
+         {count, ""} when count > 0 <- Integer.parse(iterations) do
+      {:ok,
+       %{
+         nonce: server_nonce,
+         salt: salt,
+         # `count`, not `iterations`: the map holds the RAW STRING otherwise,
+         # and every downstream use of it as a number is then a type error the
+         # compiler is right to report.
+         iterations: count,
+         # client-first-message-BARE. RFC 5802:
+         #
+         #   AuthMessage := client-first-message-bare + "," +
+         #                  server-first-message + "," +
+         #                  client-final-message-without-proof
+         #
+         # The BARE form — WITHOUT the "n,," gs2-header. Including it (which is
+         # what this did) puts four extra bytes at the front of the HMAC input,
+         # so the client signature is computed over different bytes than the
+         # server does. Every handshake then fails as
+         #
+         #   FATAL: password authentication failed for user "..."
+         #
+         # which is indistinguishable from a wrong password. The channel-binding
+         # flag still appears in client-final, as `c=biws`.
+         first: "n=" <> username <> ",r=" <> client_nonce,
+         # The server-first message VERBATIM. RFC 5802 builds auth-message as
+         # client-first-message "," server-first-message "," client-final-message
+         # -without-proof, so the raw server text is an input to the HMAC, not
+         # something to reconstruct from the parsed fields. It was missing from
+         # this map, which the compiler reported as an incompatible call shape;
+         # at runtime it would have been a KeyError on the first SCRAM handshake.
+         server_first: message
+       }}
+    else
+      _ -> {:error, :scram_bad_server_first}
+    end
+  end
+
+  # Deliberately un-specced. `scram_parse/2`'s result flows through a `with` as
+  # `dynamic()`, so any spec here compares a known shape against `dynamic()` and
+  # warns — and under `--warnings-as-errors` that is a red build over a type the
+  # compiler cannot see, not a defect. The three fields this reads
+  # (`salt`, `iterations`, `nonce`, `first`) are named where they are built, in
+  # `scram_parse/2`.
+  defp scram_client_final(url, parsed) do
+    # `Url`'s struct fields carry no `@dialyzer` types (only the `@type t`
+    # does), so a bare `url.password` is `term()` to the compiler and this
+    # function's own spec then disagreed with it. Going through `Map.fetch!/2`
+    # keeps the value's type open, which is honest — the field really can be
+    # anything until `Url` has parsed it.
+    password = url |> Map.fetch!(:password) |> to_string()
+
+    salted = pbkdf2(password, parsed.salt, parsed.iterations)
+    client_key = :crypto.mac(:hmac, :sha256, salted, "Client Key")
+    stored_key = :crypto.hash(:sha256, client_key)
+
+    # "biws" is base64("n,,") — the gs2 header that says "no channel binding,
+    # no authzid". It is a constant, but it must be derived the same way
+    # everything else here is rather than typed as a literal string that nobody
+    # can check.
+    without_proof = "c=#{Base.encode64("n,,")},r=#{parsed.nonce}"
+    auth_message = "#{parsed.first},#{parsed.server_first},#{without_proof}"
+
+    client_signature = :crypto.mac(:hmac, :sha256, stored_key, auth_message)
+
+    proof =
+      :crypto.exor(client_key, client_signature)
+      |> Base.encode64()
+
+    server_key = :crypto.mac(:hmac, :sha256, salted, "Server Key")
+    expected = Base.encode64(:crypto.mac(:hmac, :sha256, server_key, auth_message))
+
+    {"#{without_proof},p=#{proof}", expected}
+  end
+
+  # The server proves it knows the stored key too. Checking it is what makes
+  # SCRAM a MUTUAL authentication: without this the client would be satisfied by
+  # anyone who could read the exchange.
+  defp scram_verify("v=" <> verifier, expected) do
+    # Constant-time comparison. A byte-by-byte `==` on a MAC comparison leaks its
+    # length and prefix through timing, which is a real attack against exactly
+    # this kind of exchange; OTP has had `crypto.hash_equals/2` for this since
+    # 20.1 and it is native.
+    if :crypto.hash_equals(verifier, expected) do
+      :ok
+    else
+      {:error, :scram_server_proof_mismatch}
+    end
+  end
+
+  defp scram_verify("e=" <> error, _expected), do: {:error, {:scram_server_error, error}}
+
+  defp scram_verify(_message, _expected), do: {:error, :scram_bad_server_final}
+
+  # PBKDF2-HMAC-SHA-256. `:crypto.pbkdf2_hmac/5` does this in C, and `hi` is the
+  # derived key length in BYTES (32 for SHA-256).
+  defp pbkdf2(_password, _salt, 0), do: <<>>
+
+  defp pbkdf2(password, salt, iterations) do
+    :crypto.pbkdf2_hmac(:sha256, password, salt, iterations, 32)
+  end
+
+  # 24 random bytes, base64. `:crypto.strong_rand_bytes/1` is a NIF and does not
+  # block; `Math.random` equivalent hand-rolled here would be worse than useless
+  # in an authentication handshake.
+  defp client_nonce, do: 24 |> :crypto.strong_rand_bytes() |> Base.encode64()
 
   defp mechanisms(binary) do
     binary
