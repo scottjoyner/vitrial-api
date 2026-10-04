@@ -305,3 +305,42 @@ fixed and the job now fails rather than passing quietly. 677 passed, 0 skipped.
 **Still open:** branch protection and secret scanning both need GitHub Advanced
 Security on the org's plan. The `nezter/vitrial-api` fork is stale. And no Python
 test has ever been executed in this workspace — every Python result is CI's.
+
+## The wiring gap, measured (2026-04, `4094e5c`)
+
+I had been saying the apps were "built". They are built and **not wired to each
+other at all**:
+
+```
+cross-app references   vitrial_sync <-> vitrial_web     0
+                        vitrial_sync <-> vitrial_auth    0
+                        vitrial_web  <-> vitrial_auth    0
+```
+
+`beam/apps/vitrial_web/lib/vitrial_web/router/table.ex` is explicit about it —
+**21 routes carry `:not_wired`, 2 carry `:serve`** (`/health`, `/api/v1/version`).
+`Handlers.not_wired/0` returns a uniform `501 {"detail":"not implemented"}`, and
+its own docstring says why that uniformity is deliberate: so a differential test
+can never mistake it for parity.
+
+So the shape of what remains is not "more porting". Every engine a route needs
+already exists inside `vitrial_sync` (Batch, Admission, Authority, Page) and
+`vitrial_auth`; what is missing is the layer that CALLS them — the handler
+admission path, the pool-backed repository, and the wiring from route to engine.
+That is wave 7 in substance and it was never named.
+
+**Ordering that follows from the measurement, not from the wave list:**
+
+1. A repository layer over `VitrialSync.Db.Pool` for the reads each handler needs.
+   `Batch` and `Page` are pure functions over loaded rows; nothing loads them yet.
+2. The `/api/v2/sync/push` handler: parse the batch, run `Batch.run/4`, apply the
+   returned effects in ONE transaction, build the wire response with
+   `Batch.finish/2`. This is the single largest win — it exercises Batch, Pool,
+   Pgconn, the codecs and the live schema together.
+3. The `/api/v2/sync/pull` handler: `Prefetch.load_page_context/3` then
+   `Page.assemble/2`.
+4. Auth: `VitrialAuth.authenticate/5` in front of every non-public route.
+5. The remaining 19 routes, cheapest first.
+
+Step 2 is the one worth doing next: it is the only place most of the port is
+exercised end to end against a real PostgreSQL.
