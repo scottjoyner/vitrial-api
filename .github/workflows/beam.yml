@@ -80,6 +80,23 @@ jobs:
           # PATH (line 78) and pydantic importable by it (line 97). The pydantic
           # probe is explicit because a missing pydantic otherwise surfaces as a
           # misleading {:error, :trailing_data} rather than a clean skip.
+          # Provision pydantic for the runner's interpreter rather than probing
+          # for it. The step used to PROBE and fail, which made this gate depend on
+          # whatever happens to be installed on the self-hosted host — and it is
+          # precisely the host whose pydantic is missing, since that is what the
+          # probe has been failing on. A gate whose oracle depends on an operator's
+          # earlier `pip install` is not a gate.
+          #
+          # `|| pip install` rather than a bare install so a primed runner is a
+          # no-op, and `--break-system-packages` because a distribution python3
+          # outside a virtualenv refuses without it (PEP 668).
+          python3 -c 'import pydantic, sys; sys.exit(0)' || \
+            python3 -m pip install --quiet --break-system-packages "pydantic>=2,<3" || {
+            echo "::error::could not provision pydantic for this runner's interpreter."
+            echo "The harness would skip itself and this gate would pass while checking less than it claims."
+            exit 1
+          }
+
           python3 -c 'import pydantic, sys; sys.exit(0)' || {
             echo "::error::the differential oracle cannot run here: python3 on PATH cannot import pydantic."
             echo "The harness would skip itself and this gate would pass while checking less than it claims."
