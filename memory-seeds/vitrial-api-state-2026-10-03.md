@@ -344,3 +344,13 @@ That is wave 7 in substance and it was never named.
 
 Step 2 is the one worth doing next: it is the only place most of the port is
 exercised end to end against a real PostgreSQL.
+
+**Every part step 2 needs already exists**, which is why it is bounded rather than
+open-ended: `Writes` exports `effects/0`, `entity_upsert/3`, `mutation_insert/4`,
+`changelog_insert/4`, `evidence_gc_insert/2`, `membership_grant/2` and
+`organization_revision_update/2`; `Db.with_conn/2` is the transaction wrapper
+(`session_scope()`, `app/db.py:65-67`); `Batch.run/4` returns the effects and
+`Batch.finish/2` builds the wire response. The missing piece is the caller that
+sequences them — one function, and it is the seam `Db`'s own moduledoc was written
+to describe ("everything above this module talks to PostgreSQL through the four
+names here").
