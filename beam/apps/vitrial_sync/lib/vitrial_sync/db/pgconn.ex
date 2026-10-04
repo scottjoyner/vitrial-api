@@ -28,11 +28,18 @@ defmodule VitrialSync.Db.Pgconn do
       as post-connect `SET`s. epgsql has no startup-parameter hook and could not
       do this; a connection handed out without its statement timeout is exactly
       the pool-exhaustion failure `app/settings.py:36-40` exists to prevent.
-    * **Authentication** — `AuthenticationOk`, `CleartextPassword`,
-      `MD5Password` and `SASL/SCRAM-SHA-256`. SCRAM is not optional in practice:
-      `scram-sha-256` is what managed PostgreSQL (and anything since PG 10 with
-      `password_encryption = scram-sha-256`, the default since PG 14) negotiates,
-      so an MD5-only client cannot connect to a modern server.
+    * **Authentication** — `AuthenticationOk`, `MD5Password` and
+      `SASL/SCRAM-SHA-256`. Cleartext is REFUSED, not implemented: sending a
+      password in the clear over a connection this module never TLS-encrypts is
+      worse than not connecting, and the refusal is an error rather than a
+      silent downgrade.
+
+      SCRAM is not optional in practice: `scram-sha-256` is what managed
+      PostgreSQL negotiates, and what anything since PG 14 defaults to, so an
+      MD5-only client cannot reach a modern server. It is implemented here (RFC
+      5802 / RFC 7677) and verified against a server started with
+      `--auth-host=scram-sha-256`. **SCRAM-SHA-256-PLUS is NOT**: it binds the
+      channel to TLS, and this client speaks no TLS.
     * **Extended query** — `Parse`/`Bind`/`Describe`/`Execute`/`Sync`, because
       bind parameters cannot be interpolated into SQL text. `Codec.normalize/1`
       produces the parameter values; this module produces the wire bytes.
