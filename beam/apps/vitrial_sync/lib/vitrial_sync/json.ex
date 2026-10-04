@@ -494,25 +494,31 @@ defmodule VitrialSync.JSON do
   defp encode_value(value) when is_float(value), do: :erlang.float_to_binary(value, [:short])
 
   defp encode_value(value) when is_list(value) do
-    [?[, encode_values(Enum.map(value, &encode_value/1)), ?]]
+    [?[, encode_joined(Enum.map(value, &encode_value/1)), ?]]
   end
 
   defp encode_value(value) when is_map(value) do
-    pairs =
+    members =
       Enum.map(value, fn
-        {key, value} when is_binary(key) -> {quote_string(key), encode_value(value)}
+        {key, value} when is_binary(key) -> [quote_string(key), ?:, encode_value(value)]
+        # Key order is Elixir's map iteration order, not insertion order — the
+        # stored-byte-parity deviation documented in Writes' moduledoc.
         _other -> throw({:unencodable, value})
       end)
 
-    [?{, encode_values(pairs), ?}]
+    [?{, encode_joined(members), ?}]
   end
 
   defp encode_value(value), do: throw({:unencodable, value})
 
-  defp encode_values([]), do: []
+  # Join already-encoded members with commas (0x2C — `?,` followed by a space
+  # is a lexer trap on this Elixir). Each member must be iodata — the previous
+  # builder folded {key, value} TUPLES into the iolist, which made every map
+  # encode crash `iolist_to_binary` at the caller.
+  defp encode_joined([]), do: []
 
-  defp encode_values([first | rest]) do
-    Enum.reduce(rest, first, fn value, acc -> [acc, ?, | value] end)
+  defp encode_joined([first | rest]) do
+    Enum.reduce(rest, first, fn member, acc -> [acc, 0x2C, member] end)
   end
 
   defp quote_string(binary) do

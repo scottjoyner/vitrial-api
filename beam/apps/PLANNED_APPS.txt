@@ -22,4 +22,4 @@
 # vitrial_lifecycle -- 0b89421 -- Item lifecycle transitions: configuration finalize and reopen, readiness change and override, blocker management. This is where the push pipeline's later admission steps live.
 # vitrial_ownership -- 0b89421 -- Record ownership and authorization. Note app/ownership.py:781-849 carries a duplicate delivery-policy block that is unreachable; authorize_record is only called on the else branch (#14).
 # vitrial_reference -- 0b89421 -- Reference data and the evidence-reference containment filter. On the Python side this is the jsonb @> pushdown, so delete and GC no longer materialize every measurement payload in Python.
-# vitrial_web -- 0b89421 -- The HTTP edge. NOT inert: beam/config/{config,dev,prod,test}.exs already configure VitrialWeb.Endpoint with a Cowboy listener bound at the listener rather than in the supervision tree.
+

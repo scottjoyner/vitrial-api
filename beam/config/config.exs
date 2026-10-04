@@ -24,8 +24,25 @@ config :logger, :default_handler_config, level: :info
 # the request path so an oversized or slow client is refused before the body is
 # buffered, mirroring the per-path admission limits app/request_size.py applies
 # on the Python side.
+#
+# `http:` is read by VitrialWeb.Listener and passed straight to
+# :cowboy.start_clear/3; `test.exs` sets port 0 so tests read the actually-bound
+# port back with VitrialWeb.Listener.port/0.
+#
+# `request_body_max_bytes` is the LISTENER-level bound, not a per-path limit:
+# the reference deliberately leaves unlisted paths unlimited
+# (app/request_size.py:62-64), so this value is consumed as cowboy's
+# max_skip_body_length -- how much of an unread request body the listener will
+# drain to keep the connection alive before dropping it instead. It has no
+# effect on which requests are admitted; that decision stays with the per-path
+# table in VitrialWeb.RequestSize.
 config :vitrial_web, VitrialWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: 8080],
   request_body_max_bytes: 4 * 1024 * 1024
+
+# Wire value for GET /api/v1/version. app/settings.py:10 pins the default on the
+# Python side; this is the same projection, served without touching the service
+# layer.
+config :vitrial_web, :service_version, "0.3.0"
 
 import_config "#{config_env()}.exs"

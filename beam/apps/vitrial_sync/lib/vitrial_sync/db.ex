@@ -4,12 +4,14 @@ defmodule VitrialSync.Db do
 
   Everything above this module — the push walk's transaction wrapper, the pull
   page queries, the readiness gate — talks to PostgreSQL through the four names
-  here and the row codecs beside them. Nothing above sees an `:epgsql` type, a
-  connection pid, or a pool pid. That boundary is not aesthetic: it is what keeps
-  the dependency doctrine's switch (`vitrial-phase0/DEPENDENCY-DOCTRINE.md
-  §4.2`/§5.2) a one-module change instead of a rewrite. If the query surface ever
-  outgrows hand-written SQL, `epgsql` yields to `postgrex` *inside* `Conn` and
-  `Pool`, and the rest of this estate recompiles unchanged.
+  here and the row codecs beside them. Nothing above sees a wire type, a driver
+  term, a connection pid, or a pool pid. That boundary is not aesthetic: it is
+  what keeps the dependency doctrine's swap rule (`vitrial-phase0/DEPENDENCY-DOCTRINE.md
+  §4.2`/§5.2) a one-module change instead of a rewrite — demonstrated in
+  practice when the epgsql admission was superseded, in place, by the native
+  `VitrialSync.Db.Pgconn` client and only `Conn` changed above the wire. If the
+  query surface ever outgrows the hand-written client, a driver yields *inside*
+  `Conn` and `Pool`, and the rest of this estate recompiles unchanged.
 
   The four names:
 
@@ -25,12 +27,12 @@ defmodule VitrialSync.Db do
       `VitrialSync.Application`, not by callers.
 
   The row layer sits beside these, not behind them: `VitrialSync.Db.Rows` turns
-  driver result tuples into maps and canonical structs, and `VitrialSync.Db.Writes`
-  turns `%VitrialSync.Batch.Effects{}` into literal SQL + parameters. There is no
-  ORM, no schema DSL, and no migration runner here — the doctrine rejects Ecto
-  for exactly that reason, and the argument holds: this service's writes are
-  hand-rolled state machines (`app/ownership.py`, 1,098 lines) that changesets
-  would fight, not help.
+  driver result maps into plain maps and canonical structs, and
+  `VitrialSync.Db.Writes` turns `%VitrialSync.Batch.Effects{}` into literal SQL +
+  parameters. There is no ORM, no schema DSL, and no migration runner here — the
+  doctrine rejects Ecto for exactly that reason, and the argument holds: this
+  service's writes are hand-rolled state machines (`app/ownership.py`, 1,098
+  lines) that changesets would fight, not help.
   """
 
   @doc """

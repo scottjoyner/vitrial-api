@@ -68,7 +68,15 @@ RUN mix local.hex --force \
 # nothing copies nothing and succeeds. Putting `COPY beam/mix.lock` on its own
 # line does NOT work — verified, it fails the build identically.
 COPY beam/mix.exs /tmp/depseed/
+# Every app that declares a dependency needs its mix.exs in the seed tree, or
+# the baked cache silently lacks its packages: `mix deps.get` resolves the UNION
+# of the copied apps' deps, so a cache seeded from vitrial_sync alone (whose
+# deps list is empty since the epgsql hand-rewrite) contains no cowboy -- and an
+# offline host whose gate image predates the dep is stuck at beam_gate.sh's
+# exit 5. Wave 6 admitted cowboy in vitrial_web, so its mix.exs is seeded too;
+# add the next app's line when the next dependency lands.
 COPY beam/apps/vitrial_sync/mix.exs /tmp/depseed/apps/vitrial_sync/mix.exs
+COPY beam/apps/vitrial_web/mix.exs /tmp/depseed/apps/vitrial_web/mix.exs
 COPY beam/mix.* /tmp/depseed/
 
 RUN cd /tmp/depseed \

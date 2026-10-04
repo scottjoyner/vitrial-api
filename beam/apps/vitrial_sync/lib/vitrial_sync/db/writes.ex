@@ -11,10 +11,11 @@ defmodule VitrialSync.Db.Writes do
   SQL they are.
 
   Every parameter goes through `VitrialSync.Db.Codec.encode_param/1`, which is
-  what makes the nil-bind connection-kill impossible here: `nil` becomes `:null`
-  at every site, including the nullable `base_server_revision`,
+  the estate's single bind choke point: `nil` becomes the wire NULL at every
+  site, including the nullable `base_server_revision`,
   `result_server_revision`, `client_mutation_id`, `payload_json` and
-  `deleted_at` columns — not just where convenient.
+  `deleted_at` columns — not just where convenient — and every `DateTime`
+  becomes UTC wire text before it can reach a statement.
 
   ## The two holes in the Effects rows, filled at the boundary
 
@@ -140,12 +141,13 @@ defmodule VitrialSync.Db.Writes do
   One `sync_entities` upsert on its composite PK
   `(organization_id, entity_type, entity_id)`.
 
-  `payload` binds as JSON bytes or `:null` — nil'd out on a tombstone by the
-  walk (`batch.ex:380`). `updated_at`/`deleted_at` arrive as ISO-8601 strings
-  from the wire record (`Record.t`) and are converted here: a raw string bound
-  to `timestamptz` would reach `epgsql_idatetime:timestamp2i/1` as
-  `function_clause` and KILL the connection, which is the failure class
-  `VitrialSync.Db.Codec` exists to make impossible.
+  `payload` binds as JSON bytes or the wire NULL — nil'd out on a tombstone by
+  the walk (`batch.ex:380`). `updated_at`/`deleted_at` arrive as ISO-8601
+  strings from the wire record (`Record.t`) and are converted here, where the
+  wire record's format is known: an unconverted string into a `timestamptz`
+  parameter would be type-rejected by the server at execution time — a failure
+  a statement later than it needed to be. Conversion at the encoder keeps the
+  bind shape uniform: UTC text or NULL, nothing else.
   """
   @spec entity_upsert(map()) :: statement()
   def entity_upsert(row) do
@@ -254,9 +256,9 @@ defmodule VitrialSync.Db.Writes do
 
   defp encode(value), do: Codec.encode_param(value)
 
-  # ISO-8601 (wire) | DateTime | nil → bind-safe parameter. nil → :null (a
-  # nullable column), a string parsed to UTC, a DateTime passed through.
-  defp timestamp_param(nil), do: :null
+  # ISO-8601 (wire) | DateTime | nil → bind-safe parameter. nil → the wire
+  # NULL (a nullable column), a string parsed to UTC, a DateTime passed through.
+  defp timestamp_param(nil), do: nil
 
   defp timestamp_param(%DateTime{} = datetime), do: encode(datetime)
 

@@ -8,9 +8,11 @@ Every figure in §1, §2 and §3 came out of one of these, run in this tree:
 
 ```
 ./scripts/beam_gate.sh                      # format + compile + test, exit code
+BEAM_BASE_IMAGE_ONLY=1 ./scripts/beam_gate.sh   # the bare-image shape, §2.1
 python3 scripts/check_beam_orphans.py
 python3 scripts/check_beam_scaffold.py
 find beam/apps/vitrial_sync/lib -name '*.ex' | xargs wc -l
+find beam/apps/vitrial_web/lib -name '*.ex' | xargs wc -l
 podman run … parity_oracle.py --repo /w     # the parity corpus, as data
 ```
 
@@ -24,25 +26,37 @@ the only source for §4).
 
 ## 1. The one-paragraph version
 
-`vitrial_sync` is the only app with real content: **9,897 lines across 28 modules**
-and **587 passing tests** (584 tests plus 3 doctests), all of it **pure
-computation** over already-validated input. The other seven apps are declared,
-documented scaffolds. There is **no database layer, no HTTP layer, and no
-`mix.lock`** — `beam/mix.lock` and `beam/deps` do not exist, and nothing in
-`lib/` opens a socket, touches a file or starts a process.
-The port is **one app of eight built**, and inside that app wave 4 — the part
-that needs no decisions — is built through all four of its code slices: 4a (push
-steps 5–9), 4b (pull visibility resolution), 4c (the push batch walk) and 4d
-(the differential harness) all stand in this tree, and 4e closes the wave as
-the document-truth round this revision of this file performs (§3). One
-precision on "landed", because the tree is shared: part of 4c is committed at
-`a2413ae` (whose message says the work was in flight) and the remainder of the
-4c changes were uncommitted working-tree edits when every figure here was
-measured — so no landing below is backdated to a commit. Everything after
-wave 4 is downstream of two decisions — how we reach PostgreSQL, and how we
-reach HTTP — and both of those decisions are already written down and argued in
-`../vitrial-phase0/DEPENDENCY-DOCTRINE.md`. The work is not "decide the
-architecture." It is "execute decisions already made."
+Two of the eight apps have real content. `vitrial_sync` is the engine:
+**12,951 lines across 37 files** (`find beam/apps/vitrial_sync/lib -name '*.ex'
+| xargs wc -l`; one `defmodule` per file. The scaffold guard's **"38 modules
+beyond the scaffold"** is a file count over a wider net: the 35 lib files past
+`mix new`'s baseline plus the three `.ex` helpers under `test/support/`) —
+of which the wave-4 sync
+engine proper is pure computation over validated input, and the wave-5 `Db/`
+slice (9 files, 2,922 lines) is the first code here that is not. `vitrial_web`
+is the HTTP boundary: **1,664 lines across 15 files**, backed by the umbrella's
+first hex dependency (`beam/mix.lock`: cowboy 2.19.0 / cowlib 2.20.0 /
+ranch 2.3.0, the doctrine's exact pin). Together: **723 passing tests (720
+tests plus 3 doctests), 20 skipped** — every skip is the wave-5 live-PostgreSQL
+suite declining to run without a server, and the skip line prints its reason
+by name (§2.1). The other six apps are declared, documented scaffolds.
+Wave 4 is closed: 4a (push steps 5–9), 4b (pull visibility resolution), 4c
+(the push batch walk) and 4d (the differential harness) are built, and 4e was
+the document-truth round this file's earlier revision performed (§3). Wave 5
+landed the database floor (a hand-written PostgreSQL v3 client, a pool, row
+codecs for 14 of the 18 tables — `3da3b87` plus the adaptation recorded in
+§3), and wave 6 landed the HTTP boundary. One precision on "landed", because
+the tree is shared: wave-4c's work reached `main` across two commits (`a2413ae`,
+whose message says the work was in flight, and `9aa3582`), while the wave-5 and
+wave-6 changes were uncommitted working-tree edits when every figure in this
+revision was measured — the records pass committed them together with this
+document, so no landing below is backdated to a commit it did not produce.
+The two architecture decisions downstream of wave 4 — how we reach PostgreSQL,
+and how we reach HTTP — were taken in `../vitrial-phase0/DEPENDENCY-DOCTRINE.md`
+and are now executed code. The work is no longer "decide" or even "execute":
+for the first time it is "cover the remaining tables, wire the engines behind
+the 501s, and earn the live-database green the shared tree does not yet have
+(§3, wave 5)."
 
 ---
 
@@ -50,29 +64,37 @@ architecture." It is "execute decisions already made."
 
 ### 2.1 `vitrial_sync` — built, tested, and differentially proven
 
-Twenty-eight modules, and the split matters because roughly half of them have no
-business being in a service at all. Lines are `wc -l` per file, measured:
+Thirty-seven files, and the split matters because roughly half of them have no
+business being in a service at all. Lines are `wc -l` per file, measured on the
+landed tree:
 
 | Module | Lines | Nature | Why it exists |
 |---|---:|---|---|
 | `ownership.ex` | 1684 | pure | S-61, admission step 7b: generic record authorization and its ownership plan. The largest module in the tree — `authorize_record` plus the 13 entity types' own rules. |
 | `delivery/handoff.ex` | 1436 | pure | The four delivery handoff validators, kept apart from the authority gate. |
 | `delivery.ex` | 797 | pure | S-60, admission step 7a: delivery authority. |
+| `db/pool.ex` | 785 | process | The hand-written connection pool: checkout/check-in with ownership tracking, an abandoned-checkout eviction on timeout, crash absorption via a per-connection monitor table, drain for shutdown. The supervisor's first real child. |
 | `batch.ex` | 683 | pure | The push batch walk: `EntityOrder` sort, one `Admission.decide/6` per record against the working scope, outcomes keyed by original index, and every database effect returned as data for the caller's one transaction. |
 | `lifecycle.ex` | 662 | pure | S-59, admission step 6: immutable server-side lifecycle validation. |
+| `db/pgconn.ex` | 617 | process | The hand-written PostgreSQL v3 wire client — startup packet with GUCs, MD5 auth, extended query. Landed at `3da3b87`; its known wire defects and their status are recorded in §3 wave 5. |
+| `json.ex` | 551 | pure | Strict RFC 8259 decoder. Hand-written because the doctrine forbids hex packages and OTP's `:json` cannot reject what it must reject here. Grown 429 → 551 by wave 5: map encoding, the lexer's `, ` trap, and timestamp-clause fixes, each found by executing against a live server. |
 | `canonical.ex` | 449 | pure | The canonical server state the admission decisions read, as data. |
-| `json.ex` | 429 | pure | Strict RFC 8259 decoder. Hand-written because the doctrine forbids hex packages and OTP's `:json` cannot reject what it must reject here. |
 | `prefetch.ex` | 403 | pure | Batched pull visibility resolution: `load_page_context/3`, `resolve_visible/3`, `resolve_delivery_visible/2`. |
 | `admission.ex` | 389 | pure | Steps 1–4 of the push decision: missing id → prior mutation → revision guard → payload decode; `decide/6` threads the working scope and returns the decoded payload on the accept effects. |
 | `page.ex` | 376 | pure | Pull page assembly with **exact wire sizing** — the page-fit decision is made on bytes, not on entries. |
+| `db/rows.ex` | 357 | pure | Row codecs for 14 of the 18 domain tables (the README names the four missing). |
+| `db/codec.ex` | 332 | pure | The PostgreSQL wire type codec: text/binary params, timestamps, numerics, JSON. |
 | `canonical_json.ex` | 330 | pure | Canonical encoding for fingerprints, widened to the full JSON value space. |
+| `db/writes.ex` | 277 | pure | The write SQL for the covered tables — the upsert/mutation/changelog/membership rows wave 4's `%Batch.Effects{}` described. |
 | `decimal.ex` | 237 | pure | Exact decimal arithmetic, for the two places the delivery authority compares money. |
-| `record.ex` | 226 | pure | Schema validation, mirroring Pydantic's constraints exactly. |
 | `authority.ex` | 230 | pure | Admission steps 5–8, as one ordered pipeline over the steps 1–4 verdict. |
-| `mutation_event.ex` | 86 | pure | The `sync.mutation_result` event body, exactly `_outcome_event`'s eight wire fields, as data. |
+| `record.ex` | 226 | pure | Schema validation, mirroring Pydantic's constraints exactly. |
+| `db/config.ex` | 199 | pure | Database configuration from the environment: URL parsing, GUC budgets, pool sizing — pydantic-settings semantics without pydantic. |
 | `value.ex` | 164 | pure | Python's `==` comparison rules for decoded JSON, where Elixir's differ. |
+| `db/conn.ex` | 153 | process | The wire-level connection: the three-call surface (`connect`/`query`/`close`) everything above the `Db` boundary sees. |
 | `retry.ex` | 149 | pure | SQLSTATE classification. Transient allow-list `40001`/`40P01`/`55P03`. |
 | `cursor.ex` | 145 | pure | Cursor encode/decode with an explicit int64 ceiling. |
+| `db/url.ex` | 139 | pure | `postgresql://` URL parsing, mirroring the reference's accepted forms. |
 | `provenance.ex` | 133 | pure | The five-connected-provenance check and the field-comparison rule that makes it work. |
 | `rejection_code.ex` | 131 | pure | The closed rejection vocabulary of the sync outcome stream. |
 | `payload.ex` | 128 | pure | base64 → JSON-object decode, mirroring the reference's exact fallback semantics. |
@@ -80,36 +102,50 @@ business being in a service at all. Lines are `wc -l` per file, measured:
 | `evidence_gc.ex` | 118 | pure | S-62, admission step 8: the evidence GC enqueue. |
 | `timestamp.ex` | 100 | pure | `isoformat()`-compatible rendering. |
 | `fingerprint.ex` | 99 | pure | Request identity, byte-identical to `app/idempotency.py`. |
+| `mutation_event.ex` | 86 | pure | The `sync.mutation_result` event body, exactly `_outcome_event`'s eight wire fields, as data. |
 | `item_delete_guard.ex` | 84 | pure | S-58, admission step 5: the immutable-audit-history item-delete guard. |
-| `vitrial_sync.ex` | 76 | — | The app's own docs: the boundary, and why nothing here is a process. |
-| `application.ex` | 29 | — | An intentionally empty supervisor, so later slices add a child spec instead of introducing supervision late. |
+| `vitrial_sync.ex` | 76 | — | The app's own docs: the boundary of the sync engine. (Its moduledoc sentence "this app supervises no children" at `:7` predates wave 5 and is now false — `VitrialSync.Application` supervises the pool. Recorded, not fixed: it is a code file.) |
+| `db.ex` | 63 | — | The single database boundary: `with_conn/2`, `health/0`, `drain/1` — the four names nothing above may bypass, which is what made the epgsql→native swap a one-module change. |
+| `application.ex` | 39 | — | The supervision root. Empty through wave 4 on purpose; wave 5 gave it its first child, the pool, with an explicit statement-timeout-derived `shutdown`. |
 
-**587 passing — 584 tests plus 3 doctests — counted by `./scripts/beam_gate.sh`
-(this tree, with the wave-4c work of `a2413ae` plus its uncommitted remainder in
-the working tree: `Result: 587 passed (3 doctests, 584 tests)`, exit 0),
-whose gate image (`beam/Dockerfile.gate`: the pinned image plus `python3` and
-`pydantic`) mounts the repository root precisely so the harness below can
-execute the reference.** The bare pinned image has no Python: driven through
-the gate's documented `BEAM_BASE_IMAGE_ONLY=1` switch — the bare image is on
-this host, so this figure is a fresh run, not arithmetic — the same suite
-reports `579 passed (3 doctests, 576 tests), 8 skipped`: exactly the eight test
-blocks of `VitrialSync.ParityTest` skip, printing
-`[parity] differential suite SKIPPED: no python3 on PATH` into the gate output,
-while the drift guard still runs, because it needs only `app/`'s source.
-`ci.yml`'s BEAM job is the shape where neither can run — `-v "$PWD/beam:/work"`,
-no reference tree — and there the suite reports `556 passed (3 doctests, 553
-tests), 31 skipped`, printing both skip reasons (the parity eight and the drift
-guard's twenty-three). All three figures were re-measured on this tree, by
-running each shape.
+**723 passing — 720 tests plus 3 doctests — plus 20 skipped, counted by
+`./scripts/beam_gate.sh` on the landed tree (`Result: 66 passed` for
+`vitrial_web`; `Result: 657 passed (3 doctests, 654 tests), 20 skipped` for
+`vitrial_sync`; PASS, exit 0), whose gate image (`beam/Dockerfile.gate`: the
+pinned image plus `python3`, `pydantic` and the resolved hex cache) mounts the
+repository root precisely so the harness below can execute the reference.**
+All 20 skips are the wave-5 live-PostgreSQL suites declining to run without a
+server, and the skip line is printed by name into the gate output:
+`[db] live-postgresql suite NOT RUN (no server reachable at
+$VITRIAL_TEST_DATABASE_URL): ... "transport raised exit: :badarg"` — the
+`:badarg` is the shared tree's unfixed wire transport, §3 wave 5. The bare
+pinned image has no Python: driven through the gate's documented
+`BEAM_BASE_IMAGE_ONLY=1` switch, the same tree reports **715 passed (3
+doctests, 712 tests), 28 skipped** — the eight `VitrialSync.ParityTest` blocks
+skip with `[parity] differential suite SKIPPED: no python3 on PATH` (the drift
+guard still runs: it needs only `app/`'s source), the same 20 live-db skips on
+top. Both figures were measured on this tree on 2026-10-03 by running each
+shape; 723 − 715 is exactly the parity eight.
+`ci.yml`'s BEAM job is no longer a third shape: `e279fb2` pointed it at
+`beam/Dockerfile.gate` with a repository-root mount (`-v "$PWD:/work"`,
+`-w /work/beam`) and made it **fail the job on any `SKIPPED` line** — so CI now
+runs the oracle where the old
+text of this paragraph said it could not (`.github/workflows/ci.yml:242-281`:
+the job builds the gate image at `:242-244`, mounts the root at `:252`, tests
+at `:264`, fails on `SKIPPED` at `:277`). The old third figure this paragraph
+carried (556 passed / 31 skipped, the bare image over a `beam/`-only mount)
+describes a lane that no longer exists and was not re-run.
 
 > The `BEAM_BASE_IMAGE_ONLY=1` switch used above is the fixed form of a defect
 > this document once recorded here: the variable used to be read only inside the
 > build-on-demand block, after `IMAGE` had already defaulted to the gate image,
 > so on any host with the gate image it silently did nothing and a bare-image
 > run had to be produced through the `BEAM_IMAGE` override instead. It was fixed
-> at `414b7a0` — the variable is now read before `IMAGE` is chosen
-> (`scripts/beam_gate.sh:51-63`) — and the bare-image figure above is that fixed
-> path run for real.
+> at `414b7a0` — the selection now reads `BEAM_BASE_IMAGE_ONLY` first
+> (`scripts/beam_gate.sh:58-64`, line numbers as of HEAD `77c83c2`; later gate
+> commits shifted the block from the `:51-63` an earlier revision of this
+> document cited) — and the bare-image figure above is that fixed path run for
+> real.
 
 More important than the count: the tests are *differential against the real
 Python*, not written against a reading of it, and the machinery is committed and
@@ -175,8 +211,8 @@ earlier, uncommitted harness. The counts above are what the committed oracle
 emits, and `ParityTest` asserts them (`@documented` in
 `test/vitrial_sync/parity_test.exs`) against each fresh oracle run, so this
 document and the corpus cannot now drift apart silently. The gate runs the suite
-for real (that is what its image adds); `ci.yml`'s BEAM job is the one lane where
-neither half can run, and it says so in its output rather than pretending.
+for real (that is what its image adds); since `e279fb2`, CI's BEAM job runs it
+too and fails the job if either half of the harness ever has to skip.
 
 **On the wire format, measured rather than assumed.** The reference's own
 docstring at `app/sync_service.py:71-73` says the page-fit predicate exists
@@ -208,7 +244,7 @@ is the `non_utf8_payload` case of the parity corpus, so a reference fix that
 changes the shape of the failure is visible here. That is the argument for
 continuing in this mode rather than writing more from first principles.
 
-### 2.2 The other seven apps — declared, and declared on purpose
+### 2.2 The other six apps — declared, and declared on purpose
 
 Each is a `mix new` scaffold with a `@moduledoc` describing its eventual job, and
 each is listed in `beam/apps/PLANNED_APPS.txt` with that description.
@@ -217,8 +253,8 @@ This is sanctioned, not debt. `scripts/check_beam_scaffold.py` fails CI if an
 app is a scaffold nobody declared, and equally fails if a declared app is built
 but its line left behind. The umbrella is a map; declaring the destinations is
 what makes the map a plan rather than a directory of empty promises. Measured:
-`beam apps: 8  built: 1  declared scaffolds: 7`, and `vitrial_sync` carries 28
-modules beyond its scaffold.
+`beam apps: 8  built: 2  declared scaffolds: 6` (wave 6 built `vitrial_web`),
+with `vitrial_sync` at 38 file(s) beyond its scaffold and `vitrial_web` at 13.
 
 ### 2.3 Guards that keep it honest
 
@@ -230,15 +266,24 @@ modules beyond its scaffold.
   compiles perfectly clean.
 
 Both run in this tree on every push and pass now. The exact verdicts, measured
-2026-10-03:
+2026-10-03 after wave 6 landed (pre-wave-6 the same commands reported 100
+sources, 66 modules, built 1, declared scaffolds 7):
 
 ```
-check_beam_orphans.py  →  elixir sources: 100 (lib 55, test 36)  modules: 66
-                          reachable: 65  specified-by-test: 0  exempt: 0
+check_beam_orphans.py  →  elixir sources: 136 (lib 77, test 50)  modules: 88
+                          reachable: 87  specified-by-test: 0  exempt: 0
                           no dead modules
-check_beam_scaffold.py  →  beam apps: 8  built: 1  declared scaffolds: 7
+check_beam_scaffold.py  →  beam apps: 8  built: 2  declared scaffolds: 6
+                          built    vitrial_sync  (38 module(s) beyond the scaffold)
+                          built    vitrial_web   (13 module(s) beyond the scaffold)
                           scaffold registry is consistent
 ```
+
+(The counts above were measured by running the two commands on the landed
+wave-6 tree; run them to reproduce. The orphans total exceeds the lib+test sum
+by design: `check_beam_orphans.py` counts every hand-written `.ex`/`.exs` under
+`beam/` — including the nine `mix.exs` and the `config/*.exs` files — while its
+two buckets exclude mix files.)
 
 ---
 
@@ -260,7 +305,7 @@ decisions below. State measured 2026-10-03:
 | 4b | Pull visibility resolution | **Built.** `prefetch.ex` — `load_page_context/3`, `resolve_visible/3`, `resolve_delivery_visible/2` |
 | 4c | The push batch walk | **Built.** `batch.ex` — `EntityOrder` sort, one `Admission.decide/6` per record against the WORKING scope (entry scope widened after every accepted create, `app/ownership.py:865`/`:884`), outcomes keyed by original index, `MutationEvent`s in processing order, the `SyncResult` wire response built by `finish/2` from the caller's post-commit sequence read — and every database effect returned as data for the caller's one transaction. One reference step is deliberately absent: `validate_assembly_contract_mutation` (`app/sync_service.py:319-323`) is its own vertical, tracked as VITR-V015 and named in `batch.ex`'s step table. |
 | 4d | Differential harness | **Built** (`342f9be`) — see §2.1 |
-| 4e | Document truth | **Built** — this revision of this file is the slice. Its work: every count in §1–§3 re-measured against this tree on 2026-10-03 by running the three gate shapes, both guards and `wc -l` per module; stale figures corrected; the remainder restated below. Uncommitted at measurement time, like the 4c remainder above — nothing here is backdated |
+| 4e | Document truth | **Built** — the document-truth slice, performed twice on 2026-10-03 because the tree kept landing under it. Its first revision re-measured every count against the wave-4 tree (587 passing); waves 5 and 6 then landed on top of it, so this revision re-measured again against the landed tree (723 passing, §2.1) and corrected what the landing falsified — §1's "no database layer, no HTTP layer, no mix.lock" above all. Both revisions measured by running the gate shapes, both guards and `wc -l` per file; nothing is backdated to a commit |
 
 **4c was the last thing in wave 4 that can be built without a database, and it
 is built.** What wave 4 does NOT contain, on purpose: the database effects are
@@ -305,6 +350,12 @@ request, and that is the correct stopping point.
 
 ### Wave 5 — the first real dependency: PostgreSQL
 
+> **Superseded in part, 2026-10-03:** the `epgsql` ADOPT below was overtaken by
+> commit `3da3b87`, which landed a hand-written zero-dependency client
+> (`VitrialSync.Db.Pgconn`). `DEPENDENCY-DOCTRINE.md` §4.2/§5.3 carry the dated
+> amendment with the measurements and the flip-back condition; the pool,
+> startup-GUC and no-hex-dependency decisions below all stand.
+
 **This is the decision, and it is already made.** `DEPENDENCY-DOCTRINE.md` §4.2
 argues it in full; the short version:
 
@@ -327,18 +378,58 @@ argues it in full; the short version:
 
 The honest caveat, already recorded: `epgsql`'s last **hex release** is
 2025-06-06, ~16 months stale, though the repository itself is active (last push
-2026-08-16). That is a real risk to accept knowingly, not hide.
+2026-08-16). That is a real risk to accept knowingly, not hide. *(Historical:
+superseded with the ADOPT itself — the risk was retired by not taking the
+dependency, at the price recorded in the amendment above.)*
 
-Wave 5 delivers: the pool, the row codecs for the 18 tables, and the migration of
-`vitrial_sync`'s decision functions from pure maps onto real rows — at which
-point the differential harness gains a database-backed mode.
+**Wave 5 state, 2026-10-03: the floor is landed; the live-database green is
+not.** Measured on this tree:
+
+- **What stands committed:** `3da3b87` (a parallel agent) replaced `epgsql`
+  with the hand-written client — `db/pgconn.ex` (617 lines) behind
+  `db/conn.ex`'s three-call surface and the `Db` boundary, zero hex
+  dependencies.
+- **What the wave added on top:** the adaptation of Codec/Rows/Writes/Pool to
+  that client plus the configuration and URL modules (§2.1's `db/` rows —
+  2,922 lines across the nine `db` files), the live-database support and five
+  test files, two live-only pool defects fixed by executing (a `Map.pop`
+  remainder-as-state crash on the first check-in, and a phantom waiter a timed-out
+  checkout left for the next capacity event — now evicted with
+  `{:checkout_abandoned, owner}`), and the codec fixes the live server forced
+  (map-parameter encoding, the `, ` lexer trap, timestamp-clause coverage).
+  These were uncommitted working-tree edits when measured; the records pass
+  committed them.
+- **Coverage boundary:** row codecs and write SQL cover **14 of the 18** domain
+  tables — missing `auth_sessions`, `pairing_grants`,
+  `reference_publications`, `users` (`beam/README.md:58-59`).
+- **The verification line that matters:** the shared tree is
+  **serverless-green — 657 passed / 20 skipped**, both shapes of the gate
+  measured this session, with every skip printing
+  `[db] live-postgresql suite NOT RUN (no server reachable … "transport raised
+  exit: :badarg")`. The **677-passed live run against PostgreSQL 16.14 was
+  measured on a working copy whose transport carried ~12 wire fixes that are
+  deliberately NOT in this tree** — `db/pgconn.ex` and `db/conn.ex` are
+  byte-identical to `3da3b87` (`git diff HEAD` on both is empty, measured).
+  Consequence, stated rather than buried: this tree has never passed a
+  live-database test; the doctrine amendment's flip-back trigger is met as
+  written, and the transport fixes exist only in an ephemeral working copy.
+- **Named as not-live-verified:** the SCRAM-SHA-256 auth arm (test server was
+  MD5-only), extended-query pipelining or statement reuse, error-field parsing
+  beyond S/C/M/D/H/P, and an actual `statement_timeout` deadline cancellation
+  (`57014`) — the GUCs are sent and `idle_in_transaction_session_timeout` was
+  SHOW-verified live, but no test demonstrates the cancellation.
+
+What wave 5 still owes: the four uncovered tables, the transport fixes landed
+or consciously rejected, and the migration of `vitrial_sync`'s decision
+functions from pure maps onto real rows — at which point the differential
+harness gains a database-backed mode.
 
 ### Wave 6 — HTTP: `vitrial_web`
 
 **Also already decided.** `cowboy` 2.19.0 (+ mandatory `cowlib` 2.20.0,
 `ranch` 2.3.0) for HTTP/1.1. `beam/config/*.exs` already configures
-`VitrialWeb.Endpoint`, so the app is not inert — it is the only scaffold with
-live configuration.
+`VitrialWeb.Endpoint`, so the app was not inert even as a scaffold — it was the
+only one with live configuration, and it is built now (below).
 
 Rejected, with reasons in the doctrine: `bandit` (8 transitive dependencies to
 serve 23 routes with no WebSocket — byte-for-byte the mistake this repository's
@@ -355,6 +446,24 @@ generates its OpenAPI document from type hints and the contract validation
 (`scripts/validate_backend_contract.py`) checks against it.
 
 Wave 6 delivers the boundary only — no business logic, per the README.
+
+**Wave 6 state, 2026-10-03: landed.** `vitrial_web` is built: the cowboy
+listener (the umbrella's first hex dependency — `beam/mix.lock` now exists,
+pinned to the doctrine's exact shape), the hand-written 23-clause route table
+and dispatch (the doctrine's §4.4 shape; the middleware mechanism is decided on
+the record in `VitrialWeb.Handler`'s moduledoc, since cowboy's middleware runs
+in-only and cannot observe statuses), the byte guard, the fail-open rate
+limiter, correlation + NDJSON event wire shape, and two servable routes
+(`/health`, `/api/v1/version`). Every other clause answers one uniform 501
+until its engine lands. The contract check (`scripts/validate_backend_contract.py`)
+still cannot be satisfied from this side: no native OpenAPI generator exists,
+so the BEAM port carries no generated document — parity stays behavioural.
+One standing fact the pin buys: `cowlib` 2.20.0 — forced transitively by the
+doctrine's exact cowboy 2.19.0 pin, which leaves no version room — carries two
+open advisories, EEF-CVE-2026-43966 (MEDIUM) and EEF-CVE-2026-43969 (LOW),
+flagged by `mix hex.audit` when the dependency was vetted and visible in this
+session's gate output (the hex resolution prints both under `VULNERABLE!`).
+Advisory output only; recorded because the pin, not a choice, holds it open.
 
 ### Waves 7–9 — the remaining apps, in ascending order of risk
 
@@ -406,8 +515,12 @@ not the request path.
   code is right.
 - **No hex package without a written verdict.** Every adoption needs a row in
   `DEPENDENCY-DOCTRINE.md` explaining what it replaces and why the native option
-  is worse. `beam/mix.lock` does not exist yet, and that is correct: it appears
-  when the first package is admitted, not before.
+  is worse. `beam/mix.lock` appeared exactly the way this rule predicted — with
+  the first admission (cowboy 2.19.0, verdict at doctrine §4.4) and not before;
+  it is one lockfile covering the umbrella's eight apps, which is the collapse
+  of CVE surface the layout exists for. The PostgreSQL wire client that could
+  have been the first dependency was instead hand-written to zero of them
+  (§3 wave 5).
 - **No abstraction layers, no framework-shaped dependencies.** `bandit` and
   `plug` are rejected on exactly this ground, and the estate-wide lesson is that
   abstraction layers are where dependency chains go to become unmanageable.

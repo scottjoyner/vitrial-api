@@ -44,7 +44,7 @@ defmodule VitrialSync.Db.WritesTest do
                "dev-1",
                "customer",
                "cust-9",
-               :null,
+               nil,
                4,
                "accepted"
              ]
@@ -78,17 +78,17 @@ defmodule VitrialSync.Db.WritesTest do
       assert sql =~ "ON CONFLICT (organization_id, entity_type, entity_id)"
       assert sql =~ "DO UPDATE SET server_revision = EXCLUDED.server_revision"
 
-      # ISO-8601 strings from the wire record convert BEFORE binding: a raw
-      # string into timestamptz would kill the connection in
-      # epgsql_idatetime:timestamp2i/1. UTC conversion of 12:00Z is 12:00 UTC.
+      # ISO-8601 strings from the wire record convert BEFORE binding, where the
+      # wire record's format is known (VitrialSync.Db.Writes' moduledoc). UTC
+      # conversion of 12:00Z is 12:00 UTC; the bind is UTC wire text.
       assert params == [
                "org-1",
                "customer",
                "cust-9",
                4,
                ~s({"kind":"customer"}),
-               {{2026, 1, 1}, {12, 0, 0}},
-               :null
+               "2026-01-01 12:00:00.000000+00",
+               nil
              ]
     end
 
@@ -105,8 +105,8 @@ defmodule VitrialSync.Db.WritesTest do
 
       assert sql =~ "INSERT INTO sync_change_log"
       refute sql =~ "sequence"
-      # client_mutation_id is nullable — and nil binds as :null, not nil.
-      assert params == ["org-1", "customer", "cust-9", 4, :null, "upsert"]
+      # client_mutation_id is nullable — nil binds as the wire NULL.
+      assert params == ["org-1", "customer", "cust-9", 4, nil, "upsert"]
     end
 
     test "membership_grant appends the delta server-side onto the stored lists" do
@@ -133,15 +133,15 @@ defmodule VitrialSync.Db.WritesTest do
       # The Effects request carries neither field (evidence_gc.ex:55-63); the
       # encoder sources organization_id from the caller and stamps not_before
       # inside the transaction, matching app/evidence_gc.py:65-70.
-      # The timestamp binds as the encoded naive erl tuple (Codec.encode_param),
-      # not as a struct — a struct bind is a connection-kill.
+      # The timestamp binds as UTC wire text (Codec.encode_param), never as a
+      # struct or tuple.
       assert params == [
                "org-1",
                "doc-1",
                "s3",
                "org/doc-1",
                "metadata_tombstone",
-               {{2026, 10, 4}, {12, 0, 0}}
+               "2026-10-04 12:00:00.000000+00"
              ]
     end
 
@@ -155,7 +155,7 @@ defmodule VitrialSync.Db.WritesTest do
       }
 
       {_sql, params} = Writes.evidence_gc_insert(request, "org-1", @now)
-      assert List.last(params) == {{2026, 10, 3}, {12, 0, 0}}
+      assert List.last(params) == "2026-10-03 12:00:00.000000+00"
     end
 
     test "organization_revision_update writes the final threaded integer" do

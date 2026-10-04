@@ -22,7 +22,7 @@ defmodule VitrialSync.Db.LiveDbTest do
   use ExUnit.Case, async: false
 
   alias VitrialSync.Canonical
-  alias VitrialSync.Db.{Config, Conn, LiveDB, Pool, Rows, Url, Writes}
+  alias VitrialSync.Db.{Codec, Config, Conn, LiveDB, Pgconn, Pool, Rows, Url, Writes}
 
   if reason = LiveDB.unavailable_reason() do
     IO.write(
@@ -73,8 +73,19 @@ defmodule VitrialSync.Db.LiveDbTest do
 
   defp eventually(_fun, 0), do: flunk("condition not met in time")
 
+  # A poll may observe an intermediate state, so a failed MATCH inside the fun
+  # is a false, not a crash — the flunk after the last try names the condition.
   defp eventually(fun, tries) do
-    if fun.() do
+    ok? =
+      try do
+        fun.()
+      rescue
+        _ -> false
+      catch
+        _kind, _value -> false
+      end
+
+    if ok? do
       :ok
     else
       Process.sleep(20)
@@ -83,10 +94,12 @@ defmodule VitrialSync.Db.LiveDbTest do
   end
 
   # SHOW renders timeouts in human units ("15s", "2s", "15000ms"); normalize to
-  # milliseconds rather than pinning PostgreSQL's formatting whims.
+  # milliseconds rather than pinning PostgreSQL's formatting whims. Every cell
+  # on this transport is TEXT format: a one-cell one-row answer arrives as
+  # [[text]].
   defp show_ms(conn, name) do
-    {:ok, _cols, rows} = :epgsql.squery(conn, "SHOW #{name}")
-    text = String.trim(elem(hd(rows), 0))
+    {:ok, %{rows: [[text]]}} = Pgconn.query(conn, "SHOW #{name}", [])
+    text = String.trim(text)
     {digits, unit} = String.split_at(text, count_digits(text))
     n = String.to_integer(digits)
 
@@ -102,8 +115,21 @@ defmodule VitrialSync.Db.LiveDbTest do
     do: text |> String.to_charlist() |> Enum.take_while(&(&1 in ?0..?9)) |> length()
 
   defp text_of(conn, sql) do
-    {:ok, _cols, rows} = :epgsql.squery(conn, sql)
-    elem(hd(rows), 0)
+    {:ok, %{rows: [[text]]}} = Pgconn.query(conn, sql, [])
+    text
+  end
+
+  # A write through the transport: the CommandComplete payload is the command
+  # tag, NUL-terminated per the protocol (the payload length includes the
+  # terminator), so the assertion pins the exact wire payload instead of
+  # trimming it into shape. If the client ever strips the terminator, this
+  # fails and forces that decision to be made on the record.
+  defp assert_write(conn, sql, params, tag) do
+    expected = tag <> <<0>>
+
+    assert {:ok, %{rows: [], command_complete: ^expected}} = Pgconn.query(conn, sql, params)
+
+    :ok
   end
 
   # -- the connection's session settings ----------------------------------------
@@ -114,18 +140,19 @@ defmodule VitrialSync.Db.LiveDbTest do
 
       Pool.with_conn(pool, fn conn ->
         # Defaults: DATABASE_STATEMENT_TIMEOUT_MS = 15000 (app/settings.py:40),
-        # applied to both GUCs (app/db.py:33-44), re-achieved as post-connect
-        # SETs because epgsql 4.8.0 has no startup-parameter hook.
+        # applied to both GUCs (app/db.py:33-44), sent in the STARTUP PACKET —
+        # the one thing the native client does a driver without a
+        # startup-parameter hook could not (VitrialSync.Db.Pgconn).
         assert show_ms(conn, "statement_timeout") == 15_000
         assert show_ms(conn, "idle_in_transaction_session_timeout") == 15_000
-        # The UTC pin: TEXT-format determinism, not binary correctness —
-        # binary timestamptz decode is tz-independent epoch arithmetic
-        # (VitrialSync.Db.Conn's moduledoc carries the corrected fact).
+        # The UTC pin: TEXT-format determinism — timestamp text carries the
+        # session offset, so the session must be UTC for the wire contract
+        # (Codec's timestamptz note).
         assert text_of(conn, "SHOW timezone") == "UTC"
       end)
     end
 
-    test "squery output is TEXT format — raw binaries, never decoded terms" do
+    test "every cell arrives as TEXT format — raw binaries, never pre-decoded terms" do
       pool = live_pool()
 
       Pool.with_conn(pool, fn conn ->
@@ -274,12 +301,14 @@ defmodule VitrialSync.Db.LiveDbTest do
           Process.put(:attempts, Process.get(:attempts) + 1)
 
           if Process.get(:attempts) == 1 do
-            # A connection crash reaches its linked opener as an exit; the
-            # holder's next driver call is the noproc exit that with_conn
-            # translates into its one bounded retry.
+            # The native client's owner is unlinked, so the holder is not
+            # signaled synchronously: its next bounded exchange times out at
+            # the client's own deadline (a documented transport difference from
+            # a linked driver's instant exit) — and the caught failure against
+            # a dead connection is exactly what with_conn retries on.
             Process.exit(conn, :kill)
             Process.sleep(50)
-            :epgsql.squery(conn, "SELECT 1")
+            assert {:error, :query_timeout} = Pgconn.query(conn, "SELECT 1", [])
             flunk("the dead connection answered")
           else
             :second_attempt_on_live_connection
@@ -315,7 +344,9 @@ defmodule VitrialSync.Db.LiveDbTest do
 
   describe "recycle" do
     test "a connection past its age closes on check-in instead of parking; a fresh one parks" do
-      pool = live_pool(pool_size: 1, max_overflow: 0, recycle_seconds: 0.001)
+      # DATABASE_POOL_RECYCLE_SECONDS is an integer (Config.parse_int/2), so the
+      # smallest usable budget is one second, and the aging sleep must clear it.
+      pool = live_pool(pool_size: 1, max_overflow: 0, recycle_seconds: 1)
 
       {:ok, conn, _} = Pool.checkout(pool)
       :ok = Pool.checkin(pool, conn)
@@ -324,7 +355,7 @@ defmodule VitrialSync.Db.LiveDbTest do
 
       # Check the parked conn back out, age it past the limit, check it in.
       assert {:ok, conn, false} = Pool.checkout(pool)
-      Process.sleep(30)
+      Process.sleep(1_100)
       :ok = Pool.checkin(pool, conn)
 
       # Past DATABASE_POOL_RECYCLE_SECONDS: closed, capacity back to zero.
@@ -370,9 +401,9 @@ defmodule VitrialSync.Db.LiveDbTest do
       pool = live_pool(pool_size: 1, max_overflow: 0)
       parent = self()
 
-      {:ok, conn, _} = Pool.checkout(pool)
+      {:ok, _conn, _} = Pool.checkout(pool)
 
-      waiter =
+      _waiter =
         spawn(fn ->
           result = Pool.checkout(pool, pool_timeout_ms: 10_000)
           send(parent, {:waiter_got, result})
@@ -404,162 +435,180 @@ defmodule VitrialSync.Db.LiveDbTest do
         deleted_at: nil
       }
 
-      :ok =
-        Pool.with_conn(pool, fn conn ->
-          {sql, params} = Writes.entity_upsert(row)
-          # INSERT without RETURNING: {:ok, count} — the shape Codec's docs pin.
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+      Pool.with_conn(pool, fn conn ->
+        {sql, params} = Writes.entity_upsert(row)
+        # INSERT without RETURNING: the CommandComplete tag carries the count.
+        assert_write(conn, sql, params, "INSERT 0 1")
 
-          select =
-            "SELECT organization_id, entity_type, entity_id, server_revision, schema_version, payload_json, updated_at, deleted_at
+        select =
+          "SELECT organization_id, entity_type, entity_id, server_revision, schema_version, payload_json, updated_at, deleted_at
              FROM sync_entities WHERE organization_id = $1"
 
-          assert {:ok, columns, rows} = :epgsql.equery(conn, select, [org])
-          assert length(rows) == 1
+        assert {:ok, result} = Pgconn.query(conn, select, [org])
+        assert length(result.rows) == 1
 
-          decoded = Rows.sync_entities(columns, hd(rows))
-          assert decoded.organization_id == org
-          assert decoded.server_revision == 1
-          assert decoded.schema_version == 1
-          assert decoded.payload_json == %{"kind" => "customer", "n" => 1}
-          assert decoded.updated_at == DateTime.from_naive!(~N[2026-01-01 12:00:00], "Etc/UTC")
-          assert decoded.deleted_at == nil
+        decoded = Rows.sync_entities(result.row_description, hd(result.rows))
+        assert decoded.organization_id == org
+        assert decoded.server_revision == 1
+        assert decoded.schema_version == 1
+        assert decoded.payload_json == %{"kind" => "customer", "n" => 1}
+        assert decoded.updated_at == DateTime.from_naive!(~N[2026-01-01 12:00:00], "Etc/UTC")
+        assert decoded.deleted_at == nil
 
-          # The timestamptz binary decode is pure epoch arithmetic: the same
-          # instant written as 12:00Z reads back as 12:00 UTC regardless of the
-          # server host's timezone.
-          assert Rows.to_canonical_entity(decoded) == %Canonical.Entity{
-                   entity_type: "customer",
-                   entity_id: "cust-w5",
-                   payload: %{"kind" => "customer", "n" => 1},
-                   deleted_at: nil,
-                   server_revision: 1
-                 }
-        end)
+        # Timestamp TEXT carries the session offset; the session is UTC-pinned
+        # (the startup packet), so 12:00Z written reads back as 12:00 UTC.
+        assert Rows.to_canonical_entity(decoded) == %Canonical.Entity{
+                 entity_type: "customer",
+                 entity_id: "cust-w5",
+                 payload: %{"kind" => "customer", "n" => 1},
+                 deleted_at: nil,
+                 server_revision: 1
+               }
+      end)
     end
 
     test "the entity upsert conflict path rewrites revision and payload" do
       pool = live_pool()
       org = "w5live-upsert-" <> Integer.to_string(System.unique_integer([:positive]))
 
-      :ok =
-        Pool.with_conn(pool, fn conn ->
-          {sql, params} =
-            Writes.entity_upsert(%{
-              organization_id: org,
-              entity_type: "customer",
-              entity_id: "cust-w5",
-              server_revision: 1,
-              payload: %{"v" => 1},
-              updated_at: "2026-01-01T00:00:00Z",
-              deleted_at: nil
-            })
+      Pool.with_conn(pool, fn conn ->
+        {sql, params} =
+          Writes.entity_upsert(%{
+            organization_id: org,
+            entity_type: "customer",
+            entity_id: "cust-w5",
+            server_revision: 1,
+            payload: %{"v" => 1},
+            updated_at: "2026-01-01T00:00:00Z",
+            deleted_at: nil
+          })
 
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        assert_write(conn, sql, params, "INSERT 0 1")
 
-          {sql, params} =
-            Writes.entity_upsert(%{
-              organization_id: org,
-              entity_type: "customer",
-              entity_id: "cust-w5",
-              server_revision: 2,
-              payload: nil,
-              updated_at: "2026-01-02T00:00:00Z",
-              deleted_at: "2026-01-02T00:00:00Z"
-            })
+        {sql, params} =
+          Writes.entity_upsert(%{
+            organization_id: org,
+            entity_type: "customer",
+            entity_id: "cust-w5",
+            server_revision: 2,
+            payload: nil,
+            updated_at: "2026-01-02T00:00:00Z",
+            deleted_at: "2026-01-02T00:00:00Z"
+          })
 
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        # Stock PostgreSQL 16 reports the ON CONFLICT DO UPDATE path with the
+        # INSERT tag, not UPDATE — verified against the reference server with
+        # psql (a plain UPDATE reads UPDATE 1; this reads INSERT 0 1). The tag
+        # here proves only the affected row count; the conflict path itself is
+        # proven by the revision rewrite asserted below.
+        assert_write(conn, sql, params, "INSERT 0 1")
 
-          {:ok, columns, rows} =
-            :epgsql.equery(
-              conn,
-              "SELECT organization_id, entity_type, entity_id, server_revision, schema_version, payload_json, updated_at, deleted_at FROM sync_entities WHERE organization_id = $1",
-              [org]
-            )
+        {:ok, result} =
+          Pgconn.query(
+            conn,
+            "SELECT organization_id, entity_type, entity_id, server_revision, schema_version, payload_json, updated_at, deleted_at FROM sync_entities WHERE organization_id = $1",
+            [org]
+          )
 
-          assert length(rows) == 1
-          decoded = Rows.sync_entities(columns, hd(rows))
-          assert decoded.server_revision == 2
-          assert decoded.payload_json == nil
-          assert decoded.deleted_at == DateTime.from_naive!(~N[2026-01-02 00:00:00], "Etc/UTC")
-        end)
+        assert length(result.rows) == 1
+        decoded = Rows.sync_entities(result.row_description, hd(result.rows))
+        assert decoded.server_revision == 2
+        assert decoded.payload_json == nil
+        assert decoded.deleted_at == DateTime.from_naive!(~N[2026-01-02 00:00:00], "Etc/UTC")
+      end)
     end
 
     test "sync_mutations round-trips to to_prior/1; the idempotency constraint speaks SQLSTATE 23505 with its constraint name" do
       pool = live_pool()
       org = "w5live-mutation-" <> Integer.to_string(System.unique_integer([:positive]))
 
-      :ok =
-        Pool.with_conn(pool, fn conn ->
-          {sql, params} =
-            Writes.mutation_insert(%{
-              organization_id: org,
-              client_mutation_id: "m-w5",
-              submitted_by_user_id: "user-w5",
-              membership_id: "ms-w5",
-              session_id: "sess-w5",
-              authorization_revision: 5,
-              device_id: "dev-w5",
-              entity_type: "customer",
-              entity_id: "cust-w5",
-              base_server_revision: nil,
-              result_server_revision: 4,
-              result_status: "accepted"
-            })
+      Pool.with_conn(pool, fn conn ->
+        {sql, params} =
+          Writes.mutation_insert(%{
+            organization_id: org,
+            client_mutation_id: "m-w5",
+            submitted_by_user_id: "user-w5",
+            membership_id: "ms-w5",
+            session_id: "sess-w5",
+            authorization_revision: 5,
+            device_id: "dev-w5",
+            entity_type: "customer",
+            entity_id: "cust-w5",
+            base_server_revision: nil,
+            result_server_revision: 4,
+            result_status: "accepted"
+          })
 
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        # sync_mutation_fingerprints carries an FK to organizations (0001);
+        # the parent row must exist before the fingerprint insert.
+        assert_write(
+          conn,
+          "INSERT INTO organizations (id, name) VALUES ('#{org}', 'w5 mutation probe')",
+          [],
+          "INSERT 0 1"
+        )
 
-          {:ok, columns, rows} =
-            :epgsql.equery(
-              conn,
-              "SELECT id, organization_id, client_mutation_id, submitted_by_user_id, membership_id, session_id, authorization_revision, device_id, entity_type, entity_id, base_server_revision, result_server_revision, result_status, received_at FROM sync_mutations WHERE organization_id = $1",
-              [org]
-            )
+        assert_write(conn, sql, params, "INSERT 0 1")
 
-          assert length(rows) == 1
-          decoded = Rows.sync_mutations(columns, hd(rows))
-          assert decoded.id >= 1
-          # received_at is server-clocked (server_default=now()); it arrived as
-          # a timestamptz and decoded to a DateTime.
-          assert %DateTime{} = decoded.received_at
+        {:ok, result} =
+          Pgconn.query(
+            conn,
+            "SELECT id, organization_id, client_mutation_id, submitted_by_user_id, membership_id, session_id, authorization_revision, device_id, entity_type, entity_id, base_server_revision, result_server_revision, result_status, received_at FROM sync_mutations WHERE organization_id = $1",
+            [org]
+          )
 
-          assert Rows.to_prior(decoded) == %{
-                   entity_type: "customer",
-                   entity_id: "cust-w5",
-                   base_server_revision: nil,
-                   result_status: "accepted",
-                   result_server_revision: 4
-                 }
+        assert length(result.rows) == 1
+        decoded = Rows.sync_mutations(result.row_description, hd(result.rows))
+        assert decoded.id >= 1
+        # received_at is server-clocked (server_default=now()); it arrived as
+        # timestamptz TEXT and decoded to a DateTime.
+        assert %DateTime{} = decoded.received_at
 
-          # The composite-unique constraint is the idempotency mechanism
-          # working (S-55); its violation arrives as the verified 6-tuple with
-          # the constraint named in extra.
-          assert {:error, {:error, :error, <<"23505">>, :unique_violation, _message, extra}} =
-                   :epgsql.equery(conn, sql, params)
+        assert Rows.to_prior(decoded) == %{
+                 entity_type: "customer",
+                 entity_id: "cust-w5",
+                 base_server_revision: nil,
+                 result_status: "accepted",
+                 result_server_revision: 4
+               }
 
-          assert {_, "uq_sync_mutation_org_client"} =
-                   List.keyfind(extra, :constraint_name, 0)
+        # The composite-unique constraint is the idempotency mechanism working
+        # (S-55); its violation arrives as the client's decoded pg_error map —
+        # the shape its @type pins: %{severity, code, message, detail, hint,
+        # position}, `code` the SQLSTATE text. If THIS assertion fails, the
+        # failure is a finding against the client's ErrorResponse parsing,
+        # not a reason to weaken the test.
+        assert {:error,
+                %{
+                  code: "23505",
+                  message: message,
+                  detail: detail,
+                  severity: "ERROR"
+                }} = Pgconn.query(conn, sql, params)
 
-          # And the fingerprint companion row, 3 columns, composite PK.
-          {fsql, fparams} =
-            Writes.fingerprint_insert(%{
-              organization_id: org,
-              client_mutation_id: "m-w5",
-              request_fingerprint: String.duplicate("ab", 32)
-            })
+        assert message =~ "uq_sync_mutation_org_client" or
+                 detail =~ "uq_sync_mutation_org_client"
 
-          assert {:ok, 1} = :epgsql.equery(conn, fsql, fparams)
+        # And the fingerprint companion row, 3 columns, composite PK.
+        {fsql, fparams} =
+          Writes.fingerprint_insert(%{
+            organization_id: org,
+            client_mutation_id: "m-w5",
+            request_fingerprint: String.duplicate("ab", 32)
+          })
 
-          {:ok, fcols, frows} =
-            :epgsql.equery(
-              conn,
-              "SELECT organization_id, client_mutation_id, request_fingerprint FROM sync_mutation_fingerprints WHERE organization_id = $1",
-              [org]
-            )
+        assert_write(conn, fsql, fparams, "INSERT 0 1")
 
-          assert Rows.sync_mutation_fingerprints(fcols, hd(frows)).request_fingerprint ==
-                   String.duplicate("ab", 32)
-        end)
+        {:ok, fresult} =
+          Pgconn.query(
+            conn,
+            "SELECT organization_id, client_mutation_id, request_fingerprint FROM sync_mutation_fingerprints WHERE organization_id = $1",
+            [org]
+          )
+
+        assert Rows.sync_mutation_fingerprints(fresult.row_description, hd(fresult.rows)).request_fingerprint ==
+                 String.duplicate("ab", 32)
+      end)
     end
 
     test "membership_grant appends onto the stored lists, server-side" do
@@ -567,116 +616,117 @@ defmodule VitrialSync.Db.LiveDbTest do
       org = "w5live-grant-" <> Integer.to_string(System.unique_integer([:positive]))
       membership_id = org <> "-ms"
 
-      :ok =
-        Pool.with_conn(pool, fn conn ->
-          assert {:ok, [], []} =
-                   :epgsql.squery(
-                     conn,
-                     "INSERT INTO organizations (id, name) VALUES ('#{org}', 'w5 grant probe')"
-                   )
+      Pool.with_conn(pool, fn conn ->
+        assert_write(
+          conn,
+          "INSERT INTO organizations (id, name) VALUES ('#{org}', 'w5 grant probe')",
+          [],
+          "INSERT 0 1"
+        )
 
-          assert {:ok, [], []} =
-                   :epgsql.squery(
-                     conn,
-                     "INSERT INTO users (id, display_name) VALUES ('#{org}-u', 'w5')"
-                   )
+        assert_write(
+          conn,
+          "INSERT INTO users (id, display_name) VALUES ('#{org}-u', 'w5')",
+          [],
+          "INSERT 0 1"
+        )
 
-          assert {:ok, 1} =
-                   :epgsql.equery(
-                     conn,
-                     "INSERT INTO memberships (id, organization_id, user_id) VALUES ($1, $2, $3)",
-                     [membership_id, org, "#{org}-u"]
-                   )
+        assert_write(
+          conn,
+          "INSERT INTO memberships (id, organization_id, user_id) VALUES ($1, $2, $3)",
+          [membership_id, org, "#{org}-u"],
+          "INSERT 0 1"
+        )
 
-          {sql, params} =
-            Writes.membership_grant(%{customer_ids: ["c1"], project_ids: ["p1"]}, membership_id)
+        {sql, params} =
+          Writes.membership_grant(%{customer_ids: ["c1"], project_ids: ["p1"]}, membership_id)
 
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        assert_write(conn, sql, params, "UPDATE 1")
 
-          # The append happens on the SERVER's current value — grant again and
-          # both deltas accumulate, order preserved (the wire contract for the
-          # next authorization profile).
-          {sql, params} =
-            Writes.membership_grant(%{customer_ids: ["c2"], project_ids: []}, membership_id)
+        # The append happens on the SERVER's current value — grant again and
+        # both deltas accumulate, order preserved (the wire contract for the
+        # next authorization profile).
+        {sql, params} =
+          Writes.membership_grant(%{customer_ids: ["c2"], project_ids: []}, membership_id)
 
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        assert_write(conn, sql, params, "UPDATE 1")
 
-          {:ok, columns, rows} =
-            :epgsql.equery(
-              conn,
-              "SELECT organization_id, id, user_id, active, all_customers, all_projects, customer_ids, project_ids, roles, capabilities FROM memberships WHERE id = $1",
-              [membership_id]
-            )
+        {:ok, result} =
+          Pgconn.query(
+            conn,
+            "SELECT organization_id, id, user_id, active, all_customers, all_projects, customer_ids, project_ids, roles, capabilities FROM memberships WHERE id = $1",
+            [membership_id]
+          )
 
-          decoded = Rows.memberships(columns, hd(rows))
-          assert decoded.customer_ids == ["c1", "c2"]
-          assert decoded.project_ids == ["p1"]
-        end)
+        decoded = Rows.memberships(result.row_description, hd(result.rows))
+        assert decoded.customer_ids == ["c1", "c2"]
+        assert decoded.project_ids == ["p1"]
+      end)
     end
 
     test "evidence_gc_insert writes the durable GC row with org and not_before filled" do
       pool = live_pool()
       org = "w5live-gc-" <> Integer.to_string(System.unique_integer([:positive]))
 
-      :ok =
-        Pool.with_conn(pool, fn conn ->
-          request = %{
-            document_id: "doc-w5",
-            storage_provider: "s3",
-            object_key: "org/doc-w5",
-            reason: "metadata_tombstone",
-            grace_seconds: 60
-          }
+      Pool.with_conn(pool, fn conn ->
+        request = %{
+          document_id: "doc-w5",
+          storage_provider: "s3",
+          object_key: "org/doc-w5",
+          reason: "metadata_tombstone",
+          grace_seconds: 60
+        }
 
-          {sql, params} = Writes.evidence_gc_insert(request, org, DateTime.utc_now())
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        {sql, params} = Writes.evidence_gc_insert(request, org, DateTime.utc_now())
+        assert_write(conn, sql, params, "INSERT 0 1")
 
-          {:ok, columns, rows} =
-            :epgsql.equery(
-              conn,
-              "SELECT id, organization_id, document_id, storage_provider, object_key, reason, not_before, attempts, last_error, created_at FROM evidence_object_gc WHERE organization_id = $1",
-              [org]
-            )
+        {:ok, result} =
+          Pgconn.query(
+            conn,
+            "SELECT id, organization_id, document_id, storage_provider, object_key, reason, not_before, attempts, last_error, created_at FROM evidence_object_gc WHERE organization_id = $1",
+            [org]
+          )
 
-          decoded = Rows.evidence_object_gc(columns, hd(rows))
-          assert decoded.organization_id == org
-          assert decoded.document_id == "doc-w5"
-          assert decoded.attempts == 0
-          assert decoded.last_error == nil
-          assert DateTime.compare(decoded.not_before, DateTime.utc_now()) in [:gt, :eq]
-        end)
+        # evidence_object_gc has no Rows decoder by design (encode-only this
+        # slice); the read-back goes through the codec boundary directly.
+        decoded = Codec.decode_row(result.row_description, hd(result.rows))
+        assert decoded.organization_id == org
+        assert decoded.document_id == "doc-w5"
+        assert decoded.attempts == 0
+        assert decoded.last_error == nil
+        assert DateTime.compare(decoded.not_before, DateTime.utc_now()) in [:gt, :eq]
+      end)
     end
 
     test "the changelog write lands with server-clocked sequence and created_at" do
       pool = live_pool()
       org = "w5live-log-" <> Integer.to_string(System.unique_integer([:positive]))
 
-      :ok =
-        Pool.with_conn(pool, fn conn ->
-          {sql, params} =
-            Writes.changelog_insert(%{
-              organization_id: org,
-              entity_type: "customer",
-              entity_id: "cust-w5",
-              server_revision: 1,
-              client_mutation_id: nil,
-              operation: "upsert"
-            })
+      Pool.with_conn(pool, fn conn ->
+        {sql, params} =
+          Writes.changelog_insert(%{
+            organization_id: org,
+            entity_type: "customer",
+            entity_id: "cust-w5",
+            server_revision: 1,
+            client_mutation_id: nil,
+            operation: "upsert"
+          })
 
-          assert {:ok, 1} = :epgsql.equery(conn, sql, params)
+        assert_write(conn, sql, params, "INSERT 0 1")
 
-          {:ok, columns, rows} =
-            :epgsql.equery(
-              conn,
-              "SELECT sequence, organization_id, entity_type, entity_id, server_revision, client_mutation_id, operation, created_at FROM sync_change_log WHERE organization_id = $1",
-              [org]
-            )
+        {:ok, result} =
+          Pgconn.query(
+            conn,
+            "SELECT sequence, organization_id, entity_type, entity_id, server_revision, client_mutation_id, operation, created_at FROM sync_change_log WHERE organization_id = $1",
+            [org]
+          )
 
-          decoded = Rows.sync_change_log(columns, hd(rows))
-          assert decoded.sequence >= 1
-          assert decoded.operation == "upsert"
-          assert decoded.client_mutation_id == nil
-        end)
+        decoded = Rows.sync_change_log(result.row_description, hd(result.rows))
+        assert decoded.sequence >= 1
+        assert decoded.operation == "upsert"
+        assert decoded.client_mutation_id == nil
+      end)
     end
   end
 
@@ -697,7 +747,7 @@ defmodule VitrialSync.Db.LiveDbTest do
             "DELETE FROM evidence_object_gc WHERE organization_id = '#{org}'",
             "DELETE FROM organizations WHERE id = '#{org}'"
           ],
-          &:epgsql.squery(conn, &1)
+          &Pgconn.query(conn, &1, [])
         )
 
         Conn.close(conn)

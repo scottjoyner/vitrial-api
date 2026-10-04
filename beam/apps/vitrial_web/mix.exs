@@ -27,17 +27,27 @@ defmodule VitrialWeb.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      # :crypto -- UUIDv4 generation and SHA-256 correlation refs
+      # (VitrialWeb.Correlation). No hex UUID package: the doctrine sizes the
+      # native implementation at six lines over :crypto.strong_rand_bytes/1
+      # (DEPENDENCY-DOCTRINE.md §1.1).
+      extra_applications: [:logger, :crypto],
       mod: {VitrialWeb.Application, []}
     ]
   end
 
   defp deps do
     [
-      # Empty by design. Dependencies are admitted one at a time, with the specific
-      # need written down, so that the exposure window of any third-party code and
-      # its transitive CVE surface is a decision on the record rather than a side
-      # effect of scaffolding.
+      # The umbrella's first hex package, admitted 2026-10-03 with the verdict
+      # already on the record: DEPENDENCY-DOCTRINE.md §3.1 ADOPTs cowboy 2.19.0
+      # (+ mandatory cowlib 2.20.0, ranch 2.3.0 -- zero-dependency siblings) as
+      # the HTTP/1.1 edge, and §3.2 REJECTs bandit (8-package closure for 23
+      # routes and no WebSocket) and plug (a framework replacing 23 case
+      # clauses; its one useful export, Plug.Crypto.secure_compare/2, is already
+      # native as crypto:hash_equals/2). The pin is the doctrine's own shape
+      # (§3.3): a bare version, which Hex reads as an exact requirement, not a
+      # range. mix.lock comes into existence with this entry and is committed.
+      {:cowboy, "2.19.0"}
     ]
   end
 end

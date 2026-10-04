@@ -10,44 +10,51 @@ date: 2026-10-03
 # vitrial-api — Work Tracker
 
 > Reconciles GitHub issues against what has **actually shipped** on `main`
-> (HEAD `342f9be`, 2026-10-03). Only check a box when a commit in `git log` is
+> (HEAD `77c83c2`, 2026-10-03). Only check a box when a commit in `git log` is
 > evidence of it. Use `[~]` for the part-that-works, not `[x]`.
 
-> **Verification status of the rows below (2026-10-03, at `342f9be`).** `VITR-V008`,
-> `-009`, `-010`, `-011` and `-013` are marked Fixed and that is **executed** evidence,
-> not inspection: the CI run on `55876bd` is green on all four workflows — Unit + contract
-> `353 passed, 63 skipped`, PostgreSQL + S3 integration `416 passed`, BEAM umbrella
-> `532 passed (3 doctests, 529 tests)`, Container build and Security both success. Nothing
-> in this run touched `app/`, so those Python rows stand as they were.
-> Still true and still worth knowing: there is **no local Python environment**
-> (`python -m pytest` fails collection with `ModuleNotFoundError: No module named 'boto3'`,
-> no sqlalchemy) and PostgreSQL is unreachable from this workspace, so the Python half is
+> **Verification status of the rows below (2026-10-03, at `77c83c2` plus the
+> working tree).** `VITR-V008`, `-009`, `-010`, `-011` and `-013` are marked Fixed and
+> that is **executed** evidence, not inspection: the CI run on `55876bd` is green on all
+> four workflows — Unit + contract `353 passed, 63 skipped`, PostgreSQL + S3 integration
+> `416 passed`, Container build and Security both success. Nothing since has touched
+> `app/`, so those Python rows stand as they were. Still true and still worth knowing:
+> there is **no local Python environment** (`python -m pytest` fails collection with
+> `ModuleNotFoundError: No module named 'boto3'`, no sqlalchemy) and the durable
+> PostgreSQL is unreachable from this workspace — the BEAM gate's own live-db suites
+> print `no server reachable at $VITRIAL_TEST_DATABASE_URL` — so the Python half is
 > verifiable only by pushing.
 >
-> **The BEAM half moved this run and every BEAM number below was re-measured here.**
-> `./scripts/beam_gate.sh` → `Result: 555 passed (3 doctests, 552 tests)`, **exit 0**,
-> up from 532 + 23 skipped: `342f9be` landed the differential harness
-> (`parity_oracle.py` + `python_reference.ex` + `parity_test.exs` + `drift_test.exs`,
-> +23 tests) and `beam/Dockerfile.gate`, which gives the gate container the `python3` the
-> oracle needs to execute rather than skip itself. Guards re-run here, all exit 0:
-> `check_beam_scaffold.py` (8 apps, 1 built, 7 declared), `check_beam_orphans.py`
-> (97 sources, 60 modules, 59 reachable, no dead modules), `validate_backend_contract.py`,
-> `compileall`.
-> Full state and next steps: `memory-seeds/vitrial-api-state-2026-10-03.md`.
+> **The BEAM half moved again (waves 4c/4d/4e, then 5, then 6) and every BEAM number
+> below was re-measured here at the landed tree.** `./scripts/beam_gate.sh` → PASS,
+> exit 0: `vitrial_web` `66 passed`, `vitrial_sync` `657 passed (3 doctests, 654
+> tests), 20 skipped` — **723 passed, 20 skipped** in total, where the 2026-10-03
+> morning state was 555. All 20 skips are the wave-5 live-PostgreSQL suites without a
+> server; each prints its reason by name. Guards re-run here, all exit 0:
+> `check_beam_scaffold.py` (8 apps, **2 built**, 6 declared), `check_beam_orphans.py`
+> (136 sources, 88 modules, 87 reachable, no dead modules). The BEAM CI job now runs
+> the oracle and fails on any `SKIPPED` (`e279fb2`) — the "does not run in CI yet"
+> note this header used to carry is resolved, not forgotten.
+> Full state and next steps: `memory-seeds/vitrial-api-state-2026-10-03.md` (revised
+> in place by the records pass, which also committed the wave-5 and wave-6 working
+> trees that waves 4c/4d/4e had left behind them).
 
 > **A green gate is a statement about the gate, not about the port.** The pinned
 > `hexpm/elixir` image has no `python3`, so before `342f9be` the differential
 > harness skipped itself and `mix test` reported `532 passed / 23 skipped` — all
-> green, with the oracle that proves the port correct never executed. All three
-> figures below were reproduced by running each shape here, not quoted:
-> `./scripts/beam_gate.sh` (gate image) **555 passed**; the same gate with
-> `BEAM_IMAGE=<the bare pinned image>` **549 passed (3 doctests, 546 tests), 6 skipped**,
-> printing `[parity] differential suite SKIPPED: no python3 on PATH`; and `ci.yml`'s
-> BEAM job shape (`-v "$PWD/beam:/work"`, bare image) **532 passed (3 doctests,
-> 529 tests), 23 skipped**, printing both skip reasons. **`ci.yml` still runs the
-> bare image against a `beam/`-only mount, so the oracle does not run in CI yet** —
-> pointing that job at `beam/Dockerfile.gate` is the open item, and until it is done
-> the local gate is the only place the oracle executes.
+> green, with the oracle that proves the port correct never executed. That lesson
+> produced the two fixes this header used to carry as open items, both now landed:
+> `beam/Dockerfile.gate` gives the container the `python3` (measured: default gate
+> **723 passed / 20 skipped** on the landed tree; bare image via
+> `BEAM_BASE_IMAGE_ONLY=1` **715 passed / 28 skipped** — exactly the eight parity
+> blocks extra, both skip notices printed), and `e279fb2` pointed `ci.yml`'s BEAM
+> job at that image with a repository-root mount and a **fail-on-`SKIPPED`** check,
+> retiring the old `beam/`-only-mount lane (last measured there: 556 passed /
+> 31 skipped). The remaining skip class is honest by construction: the wave-5
+> live-database suites decline, by name, when no PostgreSQL is reachable — and the
+> reason they decline in this tree (`transport raised exit: :badarg`, the wave-5
+> wire fixes living only in an ephemeral working copy) is the first item under
+> **Open, and specific** below.
 >
 > **The two reds that hid behind each other** (between `4865052` and `55876bd`, both
 > arriving with the assembly-topology merge `d28cd62`) are the same defect class as the
@@ -315,11 +322,12 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - [ ] The four guard-prefix entries are a Rule-5 violation — after W1, add a lint rule so a
       matching-by-class failure fails, per `AGENTS.md` "measure, don't assert". (Done: W1 + guard lint)
 
-## BEAM waves — `beam/apps/vitrial_sync`
+## BEAM waves — the umbrella
 
-Ordered for long sessions, same shape as the Python queue. Verified 2026-10-03 at
-`342f9be`; the ordering argument is `beam/ARCHITECTURE.md` §3, which now carries the
-same per-slice state table.
+Ordered for long sessions, same shape as the Python queue. Re-verified 2026-10-03 at
+`77c83c2` plus the working tree that the records pass committed; the ordering argument
+is `beam/ARCHITECTURE.md` §3, which carries the same per-slice state table measured
+on the landed tree.
 
 - [x] **4a — push steps 5–9.** Five named decisions (S-58 item-delete guard, S-59
       lifecycle, S-60 delivery authority + its four handoffs, S-61 generic
@@ -331,44 +339,125 @@ same per-slice state table.
       branch-for-branch against `record_is_visible` and
       `delivery_execution_is_visible`, with the deliberate `deleted_at`
       asymmetry preserved in **both** directions.
-- [ ] **4c — wire assembly.** Turn `Page` plus visibility results into the exact
-      wire response. The last slice in wave 4 that can be built without a
-      database, and the only thing left in the wave. **Not built; this run
-      produced no files for it.**
+- [x] **4c — the push batch walk.** Built — not the pull-wire assembly this row
+      once described, and the row is corrected rather than left to imply a
+      missing slice. `VitrialSync.Batch` walks one push batch in `EntityOrder`
+      order: one `Admission.decide/6` per record against a WORKING scope taken
+      from the principal at entry and widened after every accepted generic
+      customer/project create (`app/ownership.py:865`/`:884`), commit visibility
+      threaded through `%Batch.Store{}`, outcomes keyed by ORIGINAL index, and
+      `%Batch.Effects{}` carrying every database effect for the caller's one
+      transaction; `finish/2` builds the `SyncResult` wire response.
+      Committed across `a2413ae` (a concurrent agent's commit of in-flight work)
+      and `9aa3582`. The parity oracle gained a 7-case batch section (including
+      the intra-batch A-stale-under-`m1`/B-reuses-`m1` case); 6 drift assertions
+      pin the reference's batch-assembly lines. Found and fixed while building it:
+      the **twelfth execution-only defect**, `ownership.ex`'s item-child arm firing
+      `absent_canonical` on `generic_exists` alone where the reference guards with
+      `canonical is None AND generic_entity_exists` (`app/ownership.py:597-598`)
+      — the port had refused every legitimate update of an existing item child.
+      One reference step is deliberately absent: `validate_assembly_contract_mutation`
+      is VITR-V015's own vertical (row above), fenced in `batch.ex`'s step table.
 - [x] **4d — the differential harness.** `342f9be`. `parity_oracle.py` AST-lifts
       the reference functions out of `app/` and executes them; `parity_test.exs`
       compares admission decisions, page wire sizes against real
       `SyncBatch.model_dump_json()` output, and payload decode; `drift_test.exs`
       re-reads the reference *source* and runs with or without an interpreter.
-      +23 tests. `beam/Dockerfile.gate` is the other half: the pinned image plus
+      `beam/Dockerfile.gate` is the other half: the pinned image plus
       `python3` and `pydantic`, so the oracle executes instead of skipping
-      itself. Measured parity: admission 44 cases / 50 records, page wire sizes
-      117 cases, payload decode 169 cases with exactly 13 documented divergences.
-- [ ] **4e — nothing was built, and there is nothing on record to build.** Neither
-      `beam/ARCHITECTURE.md` nor `beam/README.md` defines a 4e; the run labelled a
-      wave 4e and it produced no files. Logged as unbuilt rather than described,
-      because inventing a scope for it would be worse than admitting there isn't one.
+      itself. Measured parity (re-measured, never restated): admission 44 cases /
+      50 records; page wire sizes 117 cases, all three ceilings reached by a named
+      case; payload decode 169 cases with exactly 13 documented divergences; batch
+      7 cases. The harness also caught a **reference-side** defect: non-UTF-8
+      `SyncRecord.payload` (typed `bytes`, no UTF-8 check, `app/schemas.py:76`)
+      crashes `pull_page_accepts`' `model_dump_json()` — an unhandled 500 out of
+      the pull loop — pinned by the `non_utf8_payload` case.
+- [x] **4e — document truth.** This row used to read "nothing was built, and there
+      is nothing on record to build" — true at the time, and left standing until a
+      scope existed rather than inventing one. It exists now: 4e is the
+      document-truth slice, performed by `beam/ARCHITECTURE.md`'s revisions —
+      twice on 2026-10-03, because waves 5 and 6 landed on top of the first pass
+      and falsified its numbers within hours (587 passing → 723). Every count in
+      that document is re-measured by running the gates and guards, not copied.
+- [x] **5 — the database floor.** A hand-written zero-dependency PostgreSQL v3
+      client (`VitrialSync.Db.Pgconn`, 617 lines, landed by a parallel agent at
+      `3da3b87`, superseding the doctrine's `epgsql` ADOPT — amendment at
+      `vitrial-phase0/DEPENDENCY-DOCTRINE.md` §4.2/§5.3) plus the wave's
+      adaptation: `Codec`/`Rows`/`Writes`/`Pool`/`Config`/`Url` (2,922 lines over
+      the nine `db` files), five test files, and a pool that now survives contact
+      with a real server. Row coverage: **14 of the 18** domain tables. State is
+      split and must stay split in every record: the shared tree is
+      **serverless-green (657 passed / 20 skipped**, skip reason printed by name —
+      the transport still raises `:badarg` against a live server because the ~12
+      wire fixes live only in an ephemeral working copy, `/tmp/w5-live/server-api`
+      at last record); a working copy carrying those fixes ran the identical suite
+      **live-green (677 passed / 0 skipped) against PostgreSQL 16.14**. This tree
+      has never passed a live-database test. Flip-back trigger per the doctrine
+      amendment: met as written; the operator decides.
+- [x] **6 — the HTTP boundary.** `vitrial_web` is built: the cowboy 2.19.0
+      listener (the umbrella's first hex dependency — `beam/mix.lock` exists,
+      pinned to doctrine §4.4's exact shape), the 23-clause route table
+      (`router/table.ex`, counted) with two servable routes (`/health`,
+      `/api/v1/version`) and every other clause on one uniform 501, the byte
+      guard, the fail-open rate limiter, correlation + NDJSON events, and the four
+      reference middleware stages sequenced as function calls in
+      `VitrialWeb.Handler` (decided on the record in its moduledoc — cowboy 2.x
+      middleware has no outbound hook). **66 tests against the real listener.**
+      Standing cost of the pin: cowlib 2.20.0 carries two open advisories
+      (EEF-CVE-2026-43966 MEDIUM, EEF-CVE-2026-43969 LOW); no version room under
+      the exact pin.
 
 ### Open, and specific
-- [ ] **Point `ci.yml`'s BEAM job at `beam/Dockerfile.gate`.** Today it mounts
-      `$PWD/beam:/work` into the bare pinned image, so the oracle cannot run and
-      the suite reports `532 passed, 23 skipped` with both skip reasons printed.
-      The local gate is currently the only place the parity corpus executes.
-      Verified here by running the CI job's exact container shape.
-- [ ] **`BEAM_BASE_IMAGE_ONLY=1` does not force the bare image.**
-      `scripts/beam_gate.sh` consults the variable only inside the
-      build-on-demand block, and `IMAGE` is already defaulted to the gate image
-      above it — so on a host where the gate image exists, the documented
-      "prove the fallback path" switch keeps using the gate image. Measured:
-      it still reported `555 passed`. `BEAM_IMAGE=<base>` is the override that
-      works, and is what the 549/6-skipped figure above was measured through.
-- [ ] **`beam/apps/PLANNED_APPS.txt`'s `vitrial_ownership` line is stale.** It
-      still declares that `app/ownership.py:726` "carries a duplicate
-      delivery-policy block that is unreachable … (VITR-V006, filed)". That block
-      was deleted by the `VITR-V009` fix; `app/ownership.py:835-846` now
-      documents its absence as deliberate, and the defect it cited was `VITR-V009`,
-      not `VITR-V006`. `check_beam_scaffold.py` passes either way — it checks the
-      line's *presence*, not its truth — so nothing catches this class of rot.
+- [x] **Point `ci.yml`'s BEAM job at `beam/Dockerfile.gate`** — **done in
+      `e279fb2`** (read in `.github/workflows/ci.yml:242-281`): the job builds the
+      gate image, mounts the repository root, and fails the job on any `SKIPPED`
+      line, so the oracle runs in CI and a skip can no longer pass unnoticed. The
+      old `beam/`-only-mount lane this item described no longer exists in the
+      workflow; its last measured figure (556 passed / 31 skipped) is retained
+      above as history.
+- [x] **`BEAM_BASE_IMAGE_ONLY=1` does not force the bare image** — **fixed at
+      `414b7a0`**: the selection now reads the variable before `IMAGE` is chosen
+      (`scripts/beam_gate.sh:58-64`), and the bare-image shape was re-measured
+      through it on the landed tree (715 passed / 28 skipped — exactly the eight
+      parity blocks more than the default shape's 20 skips).
+- [ ] **The wave-5 transport wire fixes are not in this tree.** `db/pgconn.ex` and
+      `db/conn.ex` are byte-identical to `3da3b87` (measured: `git diff HEAD` on
+      both is empty); the ~12 live-wire defects a parallel agent reproduced
+      against PostgreSQL 16.14 were fixed only in an ephemeral working copy
+      (`/tmp/w5-live/server-api` — `/tmp`, therefore not durable). The shared
+      tree's live-db suites skip with `transport raised exit: :badarg`, so this
+      tree has never passed a live-database test, and the doctrine amendment's
+      flip-back trigger is met as written. Land the fixes (or land a
+      consciously-rejected verdict) before anything trusts the transport.
+- [ ] **Four tables have no row codec / write SQL:** `auth_sessions`,
+      `pairing_grants`, `reference_publications`, `users` — 14 of 18 covered
+      (`beam/README.md:58-59`). The store/query layer that executes wave 4's
+      `%Batch.Effects{}` through the pool is the next slice after that.
+- [ ] **cowlib 2.20.0 carries two open advisories** (EEF-CVE-2026-43966 MEDIUM,
+      EEF-CVE-2026-43969 LOW) with no version room under the doctrine's exact
+      cowboy 2.19.0 pin. Flagged by `mix hex.audit` at adoption; visible in every
+      gate run's hex resolution. Needs a doctrine-level decision (pin bump vs
+      accept), not a silent one.
+- [ ] **`beam/apps/PLANNED_APPS.txt`'s `vitrial_ownership` line is stale** (checked
+      again 2026-10-03, still at `:23`). It still declares that
+      `app/ownership.py:781-849` "carries a duplicate delivery-policy block that
+      is unreachable". That block was deleted by the `VITR-V009` fix;
+      `app/ownership.py:835-846` documents its absence as deliberate, and the
+      defect it cited was `VITR-V009`, not `VITR-V006`.
+      `check_beam_scaffold.py` passes either way — it checks the line's
+      *presence*, not its truth — so nothing catches this class of rot.
+- [ ] **Four stale sentences survive in docs the waves moved:** `vitrial_sync.ex:7`
+      still says "this app supervises no children" while `VitrialSync.Application`
+      now supervises the pool; `beam/README.md:14` still describes the Python
+      side as "7,884 lines … 11,487 lines of tests" where `wc -l` measures 10,274
+      and 15,199; `.github/workflows/beam.yml:9-13`'s "WAVE 5 CORRECTION" header
+      claims `beam/mix.lock` pins `epgsql 4.8.0` (one package, zero transitive
+      closure) — but `3da3b87` deleted that lock in the very commit that added the
+      sentence, and the lock the records pass commits pins cowboy/cowlib/ranch
+      (three packages, two transitive edges), so the self-hosted lane's provisioning
+      story no longer matches its lockfile. All prose, all wrong, all one-line fixes
+      that belong to whoever next touches those files — recorded here so they are
+      not rediscovered.
 
 ## Branch / pipeline hygiene (established 2026-10-02)
 

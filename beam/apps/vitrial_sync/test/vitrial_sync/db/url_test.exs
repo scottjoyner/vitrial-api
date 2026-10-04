@@ -6,7 +6,7 @@ defmodule VitrialSync.Db.UrlTest do
   describe "parse/1" do
     test "parses the reference default, stripping the +asyncpg driver segment" do
       # The Python default carries the driver tag (app/settings.py:8); the
-      # parser must not leak it into the scheme epgsql would see.
+      # parser must not leak it into the scheme the transport layer sees.
       assert {:ok, url} = Url.parse("postgresql+asyncpg://vitrial:vitrial@localhost:5432/vitrial")
 
       assert url == %Url{

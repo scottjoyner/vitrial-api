@@ -21,13 +21,14 @@ defmodule VitrialSync.Db.Pool do
   ## Where I/O happens, and under what bound
 
   The pool process performs exactly one kind of I/O: `VitrialSync.Db.Conn.connect/2`,
-  bounded by epgsql's 5,000 ms connect timeout (`epgsql_cmd_connect.erl:91`).
-  Every query — and the health ping — runs in a CALLER process, never here, so
-  no query can stall the pool, and no caller can stall the others beyond one
-  bounded connect. The health ping is additionally bounded by its own deadline
-  (`VitrialSync.Db.Conn.ping/2`): epgsql's synchronous commands are
-  `gen_server:call(..., infinity)` and a silently-dropped socket would otherwise
-  hang the pinging process forever.
+  bounded by the 5,000 ms connect timeout (`VitrialSync.Db.Pgconn`'s default,
+  applied to both the TCP open and the handshake). Every query — and the health
+  ping — runs in a CALLER process, never here, so no query can stall the pool,
+  and no caller can stall the others beyond one bounded connect. The health ping
+  is additionally bounded by its own deadline (`VitrialSync.Db.Conn.ping/2`):
+  a silently-dropped socket would otherwise hang the pinging process forever,
+  which is also why the native client carries no unbounded receive on either
+  side of an exchange.
 
   ## The checkout trap, and the API that hides it
 
@@ -50,8 +51,9 @@ defmodule VitrialSync.Db.Pool do
     * **connection dies while parked** — `{'EXIT', conn, _}` removes it from the
       idle set and the freed capacity serves the queue;
     * **connection dies while checked out** — the pool reclaims the slot, and
-      the holder's next driver call fails with a `noproc` exit, which
-      `with_conn/3` converts into its one bounded retry;
+      the holder learns through its own next bounded exchange (the native
+      client answers `{:error, :query_timeout}` or raises where it fails), which
+      `with_conn/3` converts into its one bounded retry via the liveness check;
     * **owner crashes while WAITING** — the waiter carries a monitor begun at
       enqueue; `{:DOWN, ...}` evicts it;
     * **owner dies between grant and first use** (reply lost) — the `DOWN`
@@ -99,6 +101,11 @@ defmodule VitrialSync.Db.Pool do
     :idle,
     :checked_out,
     :waiters,
+    # conn pid => monitor ref for EVERY tracked connection. The pool cannot
+    # rely on EXIT messages: the native client's owners are spawned unlinked
+    # (only a linked driver delivers EXITs), so liveness is carried by
+    # monitors, which work for any pid.
+    :monitors,
     draining?: false
   ]
 
@@ -171,7 +178,13 @@ defmodule VitrialSync.Db.Pool do
 
     # ZERO connections. No connect, no ping, no I/O — see the moduledoc.
     {:ok,
-     %__MODULE__{config: config, idle: :queue.new(), checked_out: %{}, waiters: :queue.new()}}
+     %__MODULE__{
+       config: config,
+       idle: :queue.new(),
+       checked_out: %{},
+       waiters: :queue.new(),
+       monitors: %{}
+     }}
   end
 
   # -- public API --------------------------------------------------------------
@@ -197,8 +210,14 @@ defmodule VitrialSync.Db.Pool do
       GenServer.call(pool, :checkout, timeout_ms)
     catch
       # A call timeout is an exit({:timeout, ...}) in the caller, not an error
-      # tuple — the translation is the pool's whole job on this path.
-      :exit, {:timeout, {GenServer, :call, [_pool, :checkout, _]}} -> {:error, :pool_timeout}
+      # tuple — the translation is the pool's whole job on this path. And the
+      # pool must be TOLD the caller walked away: a call timeout does not kill
+      # the caller, so the queued waiter's monitor never fires, and the next
+      # capacity event would grant a connection to a caller that can never
+      # receive the reply — a connection leaked to a phantom.
+      :exit, {:timeout, {GenServer, :call, [^pool, :checkout, _]}} ->
+        send(pool, {:checkout_abandoned, self()})
+        {:error, :pool_timeout}
     end
   end
 
@@ -373,19 +392,22 @@ defmodule VitrialSync.Db.Pool do
         # Already reclaimed: a connection death or an owner crash beat us here.
         {:reply, {:error, :unknown_connection}, s}
 
-      {{_owner, ref, opened_at}, s1} ->
+      {{_owner, ref, opened_at}, checked_out} ->
+        # Map.pop/2 yields the remaining checked_out MAP — the state must be
+        # rebuilt around it, not replaced by it (a live-only crash: serverless
+        # runs never check a real connection in).
         Process.demonitor(ref, [:flush])
+        s = %{s | checked_out: checked_out}
 
         cond do
           # Null pool: close on check-in, never park (app/db.py:52-57).
           # Recycle: close anything past its age instead of re-parking it.
           # Transient: overflow conns close on check-in, by definition.
-          s1.config.null_pool or expired?(opened_at, s1) or transient?(s1) ->
-            Conn.close(conn)
-            {:reply, :ok, serve_waiters(s1)}
+          s.config.null_pool or expired?(opened_at, s) or transient?(s) ->
+            {:reply, :ok, serve_waiters(close_conn(conn, s))}
 
           true ->
-            {:reply, :ok, serve_waiters(park(conn, opened_at, s1))}
+            {:reply, :ok, serve_waiters(park(conn, opened_at, s))}
         end
     end
   end
@@ -395,10 +417,10 @@ defmodule VitrialSync.Db.Pool do
       {nil, _} ->
         {:reply, :ok, s}
 
-      {{_owner, ref, _opened_at}, s1} ->
+      {{_owner, ref, _opened_at}, checked_out} ->
+        # Same rebuild as :checkin — the popped map is not the state.
         Process.demonitor(ref, [:flush])
-        Conn.close(conn)
-        {:reply, :ok, serve_waiters(s1)}
+        {:reply, :ok, serve_waiters(close_conn(conn, %{s | checked_out: checked_out}))}
     end
   end
 
@@ -428,8 +450,7 @@ defmodule VitrialSync.Db.Pool do
           s1 = %{s | idle: rest}
 
           if expired?(opened_at, s1) do
-            Conn.close(conn)
-            open_and_grant(from, s1)
+            open_and_grant(from, close_conn(conn, s1))
           else
             grant(conn, false, opened_at, from, s1)
           end
@@ -444,7 +465,7 @@ defmodule VitrialSync.Db.Pool do
 
   defp open_and_grant(from, s) do
     if total(s) < s.config.pool_size + s.config.max_overflow do
-      case Conn.connect(s.config.url, statement_timeout_ms: s.config.statement_timeout_ms) do
+      case open_connection(s) do
         {:ok, conn} ->
           grant(conn, true, now_ms(), from, s)
 
@@ -463,13 +484,39 @@ defmodule VitrialSync.Db.Pool do
     end
   end
 
+  # The pool's lazy connect is a GenServer callback: a transport that RAISES on
+  # a socket-level failure (the native client's gen_tcp call does — it raises
+  # :badarg on an unusable address rather than returning a tuple) must be
+  # flattened into the error tuple this pool's contract promises, or one
+  # unreachable database kills the pool itself and every checkout behind it.
+  defp open_connection(s) do
+    try do
+      Conn.connect(s.config.url,
+        statement_timeout_ms: s.config.statement_timeout_ms,
+        # The reference applies ONE timeout to BOTH GUCs (app/db.py:33-44);
+        # sending only the first left every connection without its
+        # idle-in-transaction bound (SHOW idle_in_transaction_session_timeout
+        # read 0 on a live server).
+        idle_in_transaction_session_timeout_ms: s.config.statement_timeout_ms
+      )
+    catch
+      kind, reason -> {:error, {kind, reason}}
+    end
+  end
+
   # Hand a connection to the checkout at `from`. The monitor begun at enqueue
   # (or taken fresh for a direct caller) is the OWNERSHIP monitor from here on:
   # a `{:DOWN, ...}` for it means the owner died holding the connection.
   defp grant(conn, fresh?, opened_at, from, s) do
     owner = elem(from, 0)
     ref = Process.monitor(owner)
-    s = %{s | checked_out: Map.put(s.checked_out, conn, {owner, ref, opened_at})}
+
+    s = %{
+      s
+      | checked_out: Map.put(s.checked_out, conn, {owner, ref, opened_at}),
+        monitors: Map.put_new(s.monitors, conn, Process.monitor(conn))
+    }
+
     GenServer.reply(from, {:ok, conn, fresh?})
     {:noreply, s}
   end
@@ -497,7 +544,12 @@ defmodule VitrialSync.Db.Pool do
           true ->
             case take_connection(s) do
               {:ok, conn, fresh?, opened_at, s1} ->
-                s2 = %{s1 | checked_out: Map.put(s1.checked_out, conn, {owner, ref, opened_at})}
+                s2 = %{
+                  s1
+                  | checked_out: Map.put(s1.checked_out, conn, {owner, ref, opened_at}),
+                    monitors: Map.put_new(s1.monitors, conn, Process.monitor(conn))
+                }
+
                 GenServer.reply(from, {:ok, conn, fresh?})
                 serve_waiters(s2)
 
@@ -519,8 +571,7 @@ defmodule VitrialSync.Db.Pool do
         s1 = %{s | idle: rest}
 
         if expired?(opened_at, s1) do
-          Conn.close(conn)
-          take_connection(s1)
+          take_connection(close_conn(conn, s1))
         else
           {:ok, conn, false, opened_at, s1}
         end
@@ -528,7 +579,7 @@ defmodule VitrialSync.Db.Pool do
       # Empty arm: residual queue, state unchanged.
       {:empty, _queue} ->
         if total(s) < s.config.pool_size + s.config.max_overflow do
-          case Conn.connect(s.config.url, statement_timeout_ms: s.config.statement_timeout_ms) do
+          case open_connection(s) do
             {:ok, conn} -> {:ok, conn, true, now_ms(), s}
             {:error, _reason} -> :none
           end
@@ -544,16 +595,47 @@ defmodule VitrialSync.Db.Pool do
   def handle_info(:drain_deadline, %{draining?: true} = s), do: {:noreply, sweep(s)}
   def handle_info(:drain_deadline, s), do: {:noreply, s}
 
+  # The caller of a timed-out checkout says so: evict its queued waiter, or
+  # the next capacity event grants a connection to a caller that can never
+  # receive the reply. Reclaiming an ALREADY-GRANTED conn is deliberately NOT
+  # done here — the pid owns every checkout it ever made, so ownership cannot
+  # distinguish a phantom grant from a legitimate one (a caller doing
+  # sequential checkouts). The residual race — the grant lands inside the one
+  # round-trip after the caller's deadline — is a documented limitation, the
+  # same one poolboy lives with; it self-heals at recycle/drain.
+  def handle_info({:checkout_abandoned, owner}, s) do
+    {_dropped, s1} = drop_waiter_by_owner(s, owner)
+    {:noreply, serve_waiters(s1)}
+  end
+
+  def handle_info({:DOWN, ref, :process, pid, _reason}, s) do
+    # A connection monitor (any tracked pid) means the CONNECTION died; an
+    # owner monitor means the CALLER died. The demux is on the monitor table.
+    if Map.get(s.monitors, pid) == ref do
+      connection_died(pid, s)
+    else
+      owner_departed(ref, s)
+    end
+  end
+
   # A connection process died — a crash. (The closes we initiate stop the
   # process normally, so a trapped EXIT here is always an unplanned death.)
-  def handle_info({:EXIT, conn, _reason}, s) do
+  # A linked transport (or any direct kill of the port's owner) also delivers
+  # EXITs; the monitor path above already covers the unlinked case, so both
+  # funnel into the same death handling.
+  def handle_info({:EXIT, conn, _reason}, s), do: connection_died(conn, s)
+
+  # One connection-death path for both signals: checked-out conns are reclaimed
+  # (session state unknown — never re-parked); idle ones are dropped. Capacity
+  # freed serves the queue. The holder finds out through its own next bounded
+  # exchange, and with_conn retries once.
+  defp connection_died(conn, s) do
     cond do
       Map.has_key?(s.checked_out, conn) ->
-        {{_owner, ref, _opened_at}, s1} = Map.pop(s.checked_out, conn)
-        Process.demonitor(ref, [:flush])
-        # Session state unknown; capacity restored; the holder finds out when
-        # its next driver call exits noproc, and with_conn retries once.
-        {:noreply, serve_waiters(s1)}
+        {{_owner, _ref, _opened_at}, checked_out} = Map.pop(s.checked_out, conn)
+
+        {:noreply,
+         serve_waiters(%{s | checked_out: checked_out, monitors: Map.delete(s.monitors, conn)})}
 
       true ->
         case drop_idle(s, conn) do
@@ -563,14 +645,26 @@ defmodule VitrialSync.Db.Pool do
     end
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, s) do
+  # Demonitor and close one tracked connection, in either order.
+  defp close_conn(conn, s) do
+    case Map.pop(s.monitors, conn) do
+      {nil, _} ->
+        Conn.close(conn)
+
+      {ref, monitors} ->
+        Process.demonitor(ref, [:flush])
+        Conn.close(conn)
+        %{s | monitors: monitors}
+    end
+  end
+
+  defp owner_departed(ref, s) do
     case find_by_owner_ref(s.checked_out, ref) do
       {conn, _owner} ->
         # Granted, then the owner died before using it: the reply is lost, the
         # session state is unknown, so the connection closes instead of parking.
-        Conn.close(conn)
         s1 = Map.delete(s.checked_out, conn)
-        {:noreply, serve_waiters(%{s | checked_out: s1})}
+        {:noreply, serve_waiters(close_conn(conn, %{s | checked_out: s1}))}
 
       nil ->
         case drop_waiter(s, ref) do
@@ -598,9 +692,14 @@ defmodule VitrialSync.Db.Pool do
       Conn.close(conn)
     end)
 
+    Enum.each(s.monitors, fn {conn, ref} ->
+      Process.demonitor(ref, [:flush])
+      Conn.close(conn)
+    end)
+
     reply_waiters_draining(s.waiters)
 
-    %{s | idle: :queue.new(), checked_out: %{}, waiters: :queue.new()}
+    %{s | idle: :queue.new(), checked_out: %{}, waiters: :queue.new(), monitors: %{}}
   end
 
   defp reply_waiters_draining(waiters) do
@@ -647,7 +746,7 @@ defmodule VitrialSync.Db.Pool do
 
     case matching do
       [] -> {false, s}
-      [_entry] -> {true, %{s | idle: :queue.from_list(rest)}}
+      [_entry] -> {true, %{close_conn(conn, s) | idle: :queue.from_list(rest)}}
     end
   end
 
@@ -655,6 +754,17 @@ defmodule VitrialSync.Db.Pool do
     Enum.find_value(checked_out, fn {conn, {owner, r, _opened_at}} ->
       if r == ref, do: {conn, owner}
     end)
+  end
+
+  # Evict every queued waiter entry of one owner. {count, state}.
+  defp drop_waiter_by_owner(s, owner) do
+    {matching, rest} =
+      s.waiters
+      |> :queue.to_list()
+      |> Enum.split_with(fn {o, _ref, _from} -> o == owner end)
+
+    Enum.each(matching, fn {_o, ref, _from} -> Process.demonitor(ref, [:flush]) end)
+    {length(matching), %{s | waiters: :queue.from_list(rest)}}
   end
 
   defp drop_waiter(s, ref) do

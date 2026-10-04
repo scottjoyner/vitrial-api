@@ -4,15 +4,20 @@ defmodule VitrialSync.Db.Rows do
 
   ## Decode: lossless by contract
 
-  One function per table over `{columns, row}` — an equery result pair —
-  producing a PLAIN MAP keyed by column-name atoms that carries **every
-  column**. The codec boundary never loses data: if a migration adds or renames
-  a column under one of these SELECTs, the map changes and the tests fail,
-  instead of a silently mis-read field. Each table's expected column list is
-  pinned in `@table_columns` below, transcribed from `app/models.py` and the
-  Alembic migrations (`migrations/versions/0001`–`0005`), and every decode test
-  runs its probe rows against that list — so the list itself is checked, not
-  just trusted.
+  One function per table over `(fields, cells)` — a `RowDescription` field list
+  plus one text-format cell list, exactly what `VitrialSync.Db.Pgconn.query/3`
+  returns inside its result map — producing a PLAIN MAP keyed by column-name
+  atoms that carries **every column**. The codec boundary never loses data: if
+  a migration adds or renames a column under one of these SELECTs, the map
+  changes and the tests fail, instead of a silently mis-read field. Each
+  table's expected column list is pinned in `@table_columns` below,
+  transcribed from `app/models.py` and the Alembic migrations
+  (`migrations/versions/0001`–`0005`), and every decode test runs its probe
+  rows against that list — so the list itself is checked, not just trusted.
+
+  `decode_result/1` is the entry point for a whole result map: it walks the
+  rows through the matching table decoder's machinery (the same
+  `VitrialSync.Db.Codec.decode_row/2` call) and returns the list of row maps.
 
   Fourteen tables, stated with their sources so the next reader does not recount:
 
@@ -52,9 +57,26 @@ defmodule VitrialSync.Db.Rows do
   alias VitrialSync.Canonical
   alias VitrialSync.Db.Codec
 
-  @type columns :: [tuple()]
-  @type row :: tuple()
+  # One RowDescription field, as Pgconn decodes it. Only `name` and `type_oid`
+  # participate in decoding; the rest is carried because the wire carries it.
+  @type field :: %{
+          optional(atom()) => term(),
+          name: String.t(),
+          type_oid: pos_integer()
+        }
+
+  @type fields :: [field()]
+  @type cells :: [binary() | nil]
   @type row_map :: %{optional(atom()) => term()}
+
+  # The result map Pgconn.query/3 returns (a plain map — see the findings note
+  # in the wave record: the client's @spec claims a %Rows{} struct it does not
+  # build). This module reads only the two keys that exist.
+  @type result :: %{
+          optional(atom()) => term(),
+          rows: [cells()],
+          row_description: fields() | nil
+        }
 
   # -- the pinned column lists (see moduledoc) ---------------------------------
 
@@ -97,43 +119,63 @@ defmodule VitrialSync.Db.Rows do
   # the drift tests can pin each table's SELECT without a catch-all.
 
   @doc "All of `organizations`, lossless."
-  def organizations(columns, row), do: Codec.decode_row(columns, row)
+  def organizations(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `memberships`, lossless."
-  def memberships(columns, row), do: Codec.decode_row(columns, row)
+  def memberships(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `canonical_customers`, lossless."
-  def canonical_customers(columns, row), do: Codec.decode_row(columns, row)
+  def canonical_customers(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `canonical_projects`, lossless."
-  def canonical_projects(columns, row), do: Codec.decode_row(columns, row)
+  def canonical_projects(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `canonical_project_sectors`, lossless."
-  def canonical_project_sectors(columns, row), do: Codec.decode_row(columns, row)
+  def canonical_project_sectors(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `canonical_items`, lossless."
-  def canonical_items(columns, row), do: Codec.decode_row(columns, row)
+  def canonical_items(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `canonical_project_children`, lossless."
-  def canonical_project_children(columns, row), do: Codec.decode_row(columns, row)
+  def canonical_project_children(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `canonical_item_children`, lossless."
-  def canonical_item_children(columns, row), do: Codec.decode_row(columns, row)
+  def canonical_item_children(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `sync_entities`, lossless."
-  def sync_entities(columns, row), do: Codec.decode_row(columns, row)
+  def sync_entities(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `sync_mutations`, lossless (14 columns, `app/models.py:193-208`)."
-  def sync_mutations(columns, row), do: Codec.decode_row(columns, row)
+  def sync_mutations(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `sync_change_log`, lossless."
-  def sync_change_log(columns, row), do: Codec.decode_row(columns, row)
+  def sync_change_log(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `sync_mutation_fingerprints`, lossless (3 columns, composite PK)."
-  def sync_mutation_fingerprints(columns, row), do: Codec.decode_row(columns, row)
+  def sync_mutation_fingerprints(fields, cells), do: Codec.decode_row(fields, cells)
 
   @doc "All of `evidence_blobs`, lossless."
-  def evidence_blobs(columns, row), do: Codec.decode_row(columns, row)
+  def evidence_blobs(fields, cells), do: Codec.decode_row(fields, cells)
+
+  # -- whole-result decode -------------------------------------------------------
+
+  @doc """
+  Decode every row of one `VitrialSync.Db.Pgconn.query/3` result map to plain
+  maps, through `VitrialSync.Db.Codec.decode_row/2`.
+
+  Takes the `{:ok, result}` tuple or the bare map, so a caller can pipe either.
+  The write path's result carries no `row_description` at all (the client omits
+  the key on the `CommandComplete`-without-`RowDescription` shape); there are no
+  rows to decode there either, so the field list defaults to empty rather than
+  being invented.
+  """
+  @spec decode_result({:ok, result()} | result()) :: [row_map()]
+  def decode_result({:ok, result}), do: decode_result(result)
+
+  def decode_result(%{rows: rows} = result) when is_list(rows) do
+    fields = Map.get(result, :row_description) || []
+    Enum.map(rows, &Codec.decode_row(fields, &1))
+  end
 
   # -- projections: the engine's lossy structs ----------------------------------
 

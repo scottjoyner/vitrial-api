@@ -35,26 +35,37 @@ defmodule VitrialSync.Db.LiveDB do
   # functions — they do not exist yet while the body is being evaluated.
   defmodule Probe do
     @moduledoc false
-    alias VitrialSync.Db.{Conn, Url}
+    alias VitrialSync.Db.{Conn, Pgconn, Url}
 
     @spec run(String.t()) :: {:ok, Url.t()} | {:error, String.t()}
     def run(url_string) do
       with {:ok, url} <- Url.parse(url_string) do
-        case Conn.connect(url, statement_timeout_ms: 15_000, connect_timeout_ms: 1_000) do
+        # The transport is allowed to RAISE (a socket-level failure surfaces as
+        # an exception, not a tuple); a probe that let it through would crash
+        # the compiler at module body instead of skipping the suite.
+        connect =
+          try do
+            Conn.connect(url, statement_timeout_ms: 15_000, connect_timeout_ms: 1_000)
+          catch
+            kind, reason -> {:error, "transport raised #{kind}: #{inspect(reason)}"}
+          end
+
+        case connect do
           {:ok, conn} ->
-            # ::text so the answer decodes as a plain binary (or :null) whatever
-            # the driver's regclass support looks like.
-            case :epgsql.squery(conn, "SELECT to_regclass('public.sync_entities')::text") do
-              {:ok, _columns, rows} ->
+            # ::text so the answer is a plain binary (or NULL) whatever the
+            # server's regclass rendering looks like. Every cell on this client
+            # is TEXT format — a one-cell row arrives as [["…"]].
+            case Pgconn.query(conn, "SELECT to_regclass('public.sync_entities')::text", []) do
+              {:ok, %{rows: [[table]]}} ->
                 Conn.close(conn)
 
-                case elem(hd(rows), 0) do
-                  :null ->
+                case table do
+                  nil ->
                     {:error,
                      "server reachable but schema not applied (sync_entities missing; " <>
                        "run migrations against #{url_string})"}
 
-                  _table ->
+                  _table_oid ->
                     {:ok, url}
                 end
 

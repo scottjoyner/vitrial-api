@@ -44,11 +44,39 @@ restart policy, which is a blunt instrument compared with a supervisor -- and it
 is the right one here, because a partially-alive sync engine serving requests is a
 worse outcome than one that is plainly down.
 
+## Where the database port stands
+
+Wave 5 landed the native database floor of `vitrial_sync` — pool, row/parameter
+codecs, and the SQL text for every write — over the hand-written wire client.
+Verified serverless: the full suite passes, with the live-PostgreSQL tests
+printing, by name, that they did not run. The same suite has passed against a
+live PostgreSQL 16 — demonstrated on a working copy whose transport carries
+wire-level fixes reproduced against that server which this tree's `Pgconn` does
+not yet contain (see `../vitrial-phase0/DEPENDENCY-DOCTRINE.md` §4.2's
+amendment); against this tree as it stands, those tests skip.
+
+The boundary, measured against the 18 domain tables in `migrations/`: the row
+codecs and write SQL cover **14 of 18**. Not yet covered: `auth_sessions`,
+`pairing_grants`, `reference_publications`, `users`. The next slice is the
+store/query layer that executes wave 4's Effects through the pool — without it
+the engine still cannot serve a request.
+
 ## Dependency doctrine
 
 Erlang/OTP and the Elixir standard library are the baseline. External packages
 are adopted only where a native rewrite is genuinely worse, and every adoption
 carries a written verdict in `../vitrial-phase0/DEPENDENCY-DOCTRINE.md`.
+
+> **Supersession, 2026-10-03.** The doctrine's §4.2 verdict for PostgreSQL was
+> `epgsql`. That verdict is now superseded: a hand-written, zero-dependency
+> PostgreSQL v3 client (`VitrialSync.Db.Pgconn`) has landed in this tree instead,
+> and `DEPENDENCY-DOCTRINE.md` §4.2 and §5.3 carry dated amendments recording the
+> measurements, the exact condition that would flip the decision back to a hex
+> driver, and one citation in the superseding commit message that could not be
+> verified from the tree. ~~The umbrella still has **no hex dependencies**.~~
+> Wave 6, the same day, admitted the FIRST hex dependency: `cowboy 2.19.0`
+> (+ `cowlib`, `ranch` — the doctrine's §3.1 ADOPT) as vitrial_web's HTTP edge.
+> `beam/mix.lock` now exists and is committed.
 
 **One resolved dependency set and one lockfile govern all eight applications**,
 at `beam/mix.lock`. In a Mix umbrella that is automatic: each app's `mix.exs`
