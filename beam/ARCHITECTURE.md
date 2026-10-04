@@ -591,3 +591,29 @@ not the request path.
   abstraction layers are where dependency chains go to become unmanageable.
 - **`vitrial_web` holds no business logic.** It is a boundary. The moment it
   grows a decision, the split has failed and the umbrella is eight monoliths.
+## Post-merge notes
+
+### The action bump is the one I had deliberately deferred
+
+actions/upload-artifact v4 -> v7 across ci.yml (x2), beam.yml, candidate-image.yml
+and release-image.yml. My note was that upload-artifact changes behavior between
+majors, so it should not ride along with an unrelated change. It arrived as its own
+commit, which is the right shape for it.
+
+Verifiable: every workflow still parses; the five uses are all step-level uploads
+with a name and a path. NOT verified: whether v7 artifact semantics break any
+consumer of .ci-beam.log, ubs-findings.json, the UBS history artifact, or the
+compiled log. That needs a run.
+
+### A supply-chain gap found while looking, and not fixed
+
+requirements-lock.txt pins VERSIONS but carries no HASHES (alembic==1.20.0,
+asyncpg==0.31.0, boto3==1.43.107). "Pinned" here means the version cannot
+float, not that the artifact is verified: a registry compromise republishing the
+same version would install silently. This repository collapses dependency surface
+on purpose, so unhashed pins are a gap in exactly the place the doctrine cares.
+
+Fixing it means pip-compile --generate-hashes plus pip install --require-hashes,
+which changes the install path CI and the Dockerfile both use. Recorded rather
+than done: it is a build-pipeline change on someone elses commits, and the right
+moment for it is deliberately, not as a follow-on to a dependabot merge.
