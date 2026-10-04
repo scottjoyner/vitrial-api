@@ -56,6 +56,37 @@ jobs:
           erl -noshell -eval 'io:format("OTP ~s~n", [erlang:system_info(otp_release)])' -eval 'halt().'
           elixir --version | tail -2
           rebar3 --version
+      - name: Differential oracle probe (fail loudly if the host cannot run it)
+        run: |
+          # The differential harness in vitrial_sync AST-lifts the Python reference
+          # and compares answers, and it is the only thing making the parity claims
+          # in beam/ARCHITECTURE.md 2.1 mean anything. When it cannot run it
+          # *skips* rather than fails, so `mix test` still reports
+          # "0 failures" -- the gate goes green while checking less than it
+          # claims to.
+          #
+          # That has already happened: this gate reported
+          # "552 tests, 0 failures, 6 skipped" on a host whose python3 could not
+          # import pydantic, while the same suite runs all 552 with nothing
+          # skipped elsewhere. Six tests were not being checked and nothing said so.
+          #
+          # beam/Dockerfile.gate was written to close this for the container path
+          # ("a gate that skips its own oracle is a gate that cannot fail"). This
+          # closes it for the self-hosted path, which ships a python3 that passes
+          # a bare interpreter check and fails the real one.
+          #
+          # Mirrors the two conditions in
+          # apps/vitrial_sync/test/support/python_reference.ex: an interpreter on
+          # PATH (line 78) and pydantic importable by it (line 97). The pydantic
+          # probe is explicit because a missing pydantic otherwise surfaces as a
+          # misleading {:error, :trailing_data} rather than a clean skip.
+          python3 -c 'import pydantic, sys; sys.exit(0)' || {
+            echo "::error::the differential oracle cannot run here: python3 on PATH cannot import pydantic."
+            echo "The harness would skip itself and this gate would pass while checking less than it claims."
+            echo "Install pydantic for the runner's interpreter, or run the container gate in beam/Dockerfile.gate."
+            exit 1
+          }
+          echo "differential oracle available (python3 $(python3 -V 2>&1 | cut -d" " -f2), pydantic $(python3 -c 'import pydantic; print(pydantic.VERSION)'))"
       # The dependency provision, matching ci.yml's container lane line for line
       # (mix local.hex / local.rebar / deps.get). --if-missing keeps it a no-op
       # on a primed runner; a cold runner reaches hex.pm here, once, and
