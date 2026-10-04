@@ -18,7 +18,7 @@ jobs:
     name: Publish GHCR image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build exact source image
         env:
@@ -68,7 +68,7 @@ jobs:
           test -n "$inspect"
 
       - name: Publish release evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-image-${{ github.sha }}
           path: release-image.txt
