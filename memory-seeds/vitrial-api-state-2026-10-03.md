@@ -4,7 +4,7 @@ recordKind: continuity
 category: goal-set
 seed_type: goal-set
 name: vitrial-api-state-2026-10-03
-description: "server-api at 77c83c2 with waves 4c/4d/4e/5/6 landed and committed: two of eight BEAM apps built, 723 passing (720 tests + 3 doctests) with 20 named live-PostgreSQL skips, wave 4 closed, wave 5's database floor serverless-green only (transport wire fixes live in an ephemeral working copy), wave 6's HTTP boundary on cowboy with 66 tests. The morning version of this seed said 555 passing, one app built, no mix.lock — every one of those claims is corrected here, not appended beside."
+description: "server-api at 702e0ff: the BEAM port is 3 of 8 apps built, and the five remaining scaffolds are LAYOUT decisions rather than porting work — 5,872 lines of their logic already live inside vitrial_sync. Zero hex dependencies in vitrial_sync (epgsql replaced by a hand-written Pgconn, SCRAM-SHA-256 included); vitrial_web carries the umbrella's only hex package, cowboy. The live-PostgreSQL suite runs in CI and is not skipped: 677 passed, 0 skipped."
 agent: nez
 date: 2026-10-03
 tasks: []
@@ -270,3 +270,38 @@ The 2026-10-02 guidance "commit your own files only" is **superseded**: this tre
 shared and concurrent, so a selective `git add` silently drops the other agent's
 work. Stage everything (`git add -A`) and name the foreign work in the commit
 message instead.
+
+## 2026-10-04 — where the port actually stands
+
+Measured, not carried forward. `beam/apps/` now has **3 built** (`vitrial_sync`,
+`vitrial_web`, `vitrial_auth`) and **5 declared scaffolds**.
+
+**The five remaining scaffolds are not porting work.** Their logic is already
+ported and sits inside `vitrial_sync`: ownership 1,916 lines, delivery 2,235,
+reference 854, lifecycle 748, evidence_gc 119 — 5,872 lines. Whether those modules
+should MOVE into their declared apps is a layout decision, and `Authority` ->
+`Ownership` -> `Canonical` plus `Batch` into all of them means a move can break a
+call cycle by accident. Nothing has ever been deployed here, so there is no
+evidence for the split and none against it.
+
+**`vitrial_auth` is done.** Six functions from `app/auth.py` + `app/pairing.py`.
+It declares its OWN `Principal` rather than reusing `VitrialSync.Canonical.Principal`
+because no app in this umbrella depends on a sibling (0 of 8) — coupling two
+deployable units for one struct is the wrong trade. The duplication is guarded by a
+field-list test against `app/auth.py:20-29`, not against the other Elixir module,
+which is not on its load path.
+
+**Zero hex dependencies in `vitrial_sync`.** epgsql is gone, replaced by
+`VitrialSync.Db.Pgconn` — a hand-written PostgreSQL v3 client over `:gen_tcp`,
+including SCRAM-SHA-256. The coupling that made the swap cheap was measured first:
+three functions, one module. `vitrial_web` carries the umbrella's only package
+(cowboy), which is the recorded wave-6 decision.
+
+**The live-PostgreSQL suite runs in CI.** It used to skip and report green: no
+`postgres:` service, then a skip guard matching `SKIPPED` when the suite says
+`NOT RUN`, then a probe reporting `{:error, :function_clause}`. All three are
+fixed and the job now fails rather than passing quietly. 677 passed, 0 skipped.
+
+**Still open:** branch protection and secret scanning both need GitHub Advanced
+Security on the org's plan. The `nezter/vitrial-api` fork is stale. And no Python
+test has ever been executed in this workspace — every Python result is CI's.
