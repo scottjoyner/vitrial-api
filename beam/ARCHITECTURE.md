@@ -495,6 +495,22 @@ weighs:
    that breaks a cycle by accident costs more than the layout is worth, and the
    umbrellas already exist to hold the whole service.
 
+**`vitrial_auth` is DONE** (2026-10-04). `token_hash`, `current_principal`,
+`profile_for`, `_normalized_code`, `issue_pairing_grant` and
+`exchange_pairing_code` are ported as pure decisions over the rows a lookup would
+have produced; `rate_limit` was already ported as `VitrialWeb.RateLimit`, and
+`profile_for/2` is a lookup with no decision in it, so it stayed with storage.
+
+It declares its OWN `Principal` rather than reusing `VitrialSync.Canonical.Principal`,
+because **no app in this umbrella depends on a sibling** — 0 of 8 do, and a
+dependency between them would couple two deployable units for one struct. That is a
+duplication with a real drift risk, handled by pinning the field list against the
+REFERENCE (`app/auth.py:20-29`) in `vitrial_auth`'s own test.
+
+`beam/apps/PLANNED_APPS.txt` now lists **5** declared scaffolds (down from 7):
+`vitrial_web` and `vitrial_auth` have left it as they gained real modules, which is
+what `scripts/check_beam_scaffold.py` exists to notice.
+
 **The call I would make, and why:** port `vitrial_auth`, then leave the other five
 as they are until there is a reason to move them that is not "the directory was
 declared first". The seven scaffolds were declared as a map before any of this
