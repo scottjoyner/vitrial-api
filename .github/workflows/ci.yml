@@ -211,18 +211,23 @@ jobs:
       # The live suite refuses to run without this, which is the correct default:
       # a skipped wire protocol is indistinguishable from a correct one until a
       # query fails in production.
-      # The SERVICE hostname, not localhost. GitHub puts service containers on
-      # `github_network` with the alias `postgres`, while the test container runs
-      # `--network=host` — so from inside that container `localhost:5432` is the
-      # HOST's loopback, where no PostgreSQL is listening. The live suite
-      # therefore skipped itself and the job went green, which is the exact
-      # failure mode the postgres: service was added to prevent.
+      # localhost, WITH a password, and that combination is deliberate.
       #
-      # `postgres:5432` (no password) is the only form that works from a
-      # host-network container; GitHub's services authenticate by network alias,
-      # and a password in the URL sends SCRAM, which this client does not yet
-      # implement (see Pgconn's moduledoc).
-      VITRIAL_TEST_DATABASE_URL: postgresql://vitrial@postgres:5432/vitrial
+      # The suite runs in a `--network=host` container, which shares the RUNNER's
+      # network namespace. GitHub publishes the service on the runner's
+      # 127.0.0.1:5432 (that is what `ports: - 5432:5432` means), so localhost is
+      # correct from there. The service alias `postgres` does NOT resolve from a
+      # host-network container — it only resolves on the `github_network` a
+      # non-host container would join — which is why an earlier attempt using it
+      # could not work from the suite at all.
+      #
+      # The password is required for the same reason: reaching the runner's
+      # published port means a real TCP connection, and the service's pg_hba
+      # demands SCRAM for host connections. `Pgconn` implements AuthenticationOk
+      # and MD5 but NOT SCRAM-SHA-256 (named in its moduledoc), so a password
+      # alone will not authenticate either — the first CI run with this wired up
+      # is what will prove it, and SCRAM is the next thing to build if it fails.
+      VITRIAL_TEST_DATABASE_URL: postgresql://vitrial:vitrial@localhost:5432/vitrial
 
     steps:
       - uses: actions/checkout@v4
@@ -292,11 +297,29 @@ jobs:
       #
       # Run against the service container directly, on the GitHub network, which
       # is the only place `postgres:5432` resolves from a job step.
+      # Runs INSIDE a container on the job's network, not on the runner. A job
+      # step executes on the runner host, where the service alias `postgres`
+      # does not resolve — the previous version of this step failed with
+      #     socket.gaierror: [Errno -3] Temporary failure in name resolution
+      # which names neither the cause nor the fix. Only a container on the
+      # service network can see it.
+      #
+      # --network=container:pgfinal-equivalent is not available here, so the
+      # container joins the JOB's network by alias, exactly as the service does.
+      # Runs on the RUNNER, not in a container. The runner publishes the service
+      # on its own 127.0.0.1:5432, so it is the one place that can reach it
+      # without a network namespace of its own:
+      #   - a job step on the runner: reaches 127.0.0.1:5432 directly
+      #   - a `--network=host` container: reaches the runner's 127.0.0.1:5432
+      #   - a container on `github_network`: reaches `postgres:5432` only
+      # The previous version of this step ran on the runner and used the alias,
+      # and failed with `socket.gaierror: [Errno -3] Temporary failure in name
+      # resolution` — the third case reached with the second case's address.
       - name: Apply migrations to the live PostgreSQL
         run: |
           set -euo pipefail
           pip install --quiet "sqlalchemy[asyncio]>=2" asyncpg alembic pydantic pydantic-settings
-          DATABASE_URL="postgresql+asyncpg://vitrial@postgres:5432/vitrial" \
+          DATABASE_URL="postgresql+asyncpg://vitrial:vitrial@localhost:5432/vitrial" \
             alembic upgrade head
 
       - name: Build the gate image (pinned BEAM toolchain + the oracle's python)
