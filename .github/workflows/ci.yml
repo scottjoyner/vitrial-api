@@ -211,7 +211,18 @@ jobs:
       # The live suite refuses to run without this, which is the correct default:
       # a skipped wire protocol is indistinguishable from a correct one until a
       # query fails in production.
-      VITRIAL_TEST_DATABASE_URL: postgresql://vitrial:vitrial@localhost:5432/vitrial
+      # The SERVICE hostname, not localhost. GitHub puts service containers on
+      # `github_network` with the alias `postgres`, while the test container runs
+      # `--network=host` — so from inside that container `localhost:5432` is the
+      # HOST's loopback, where no PostgreSQL is listening. The live suite
+      # therefore skipped itself and the job went green, which is the exact
+      # failure mode the postgres: service was added to prevent.
+      #
+      # `postgres:5432` (no password) is the only form that works from a
+      # host-network container; GitHub's services authenticate by network alias,
+      # and a password in the URL sends SCRAM, which this client does not yet
+      # implement (see Pgconn's moduledoc).
+      VITRIAL_TEST_DATABASE_URL: postgresql://vitrial@postgres:5432/vitrial
 
     steps:
       - uses: actions/checkout@v4
@@ -274,6 +285,20 @@ jobs:
       # memory cap, the `_build`/`deps` bind mounts (so the host runner cache is
       # populated and reused), and propagating the container exit code rather than
       # letting a non-zero `docker run` be swallowed by a pipeline.
+      # The live suite needs the schema the migrations produce. Without this the
+      # probe reports "schema not applied (sync_entities missing)" and skips,
+      # which is a correct verdict on a correct client and still leaves the wire
+      # protocol untested — so the table has to be there before the suite runs.
+      #
+      # Run against the service container directly, on the GitHub network, which
+      # is the only place `postgres:5432` resolves from a job step.
+      - name: Apply migrations to the live PostgreSQL
+        run: |
+          set -euo pipefail
+          pip install --quiet "sqlalchemy[asyncio]>=2" asyncpg alembic pydantic pydantic-settings
+          DATABASE_URL="postgresql+asyncpg://vitrial@postgres:5432/vitrial" \
+            alembic upgrade head
+
       - name: Build the gate image (pinned BEAM toolchain + the oracle's python)
         run: docker build -q -t server-api-beam-gate:ci -f beam/Dockerfile.gate .
 
@@ -305,16 +330,28 @@ jobs:
             exit "$DOCKER_EXIT"
           fi
 
-          # The differential harness skips itself and prints why. A skip is the one
-          # outcome that must not pass unnoticed: it means this job agreed with
-          # nothing, and a green tick beside 23 skipped oracle tests reads as
-          # parity when it is the absence of parity. Fail on the skip.
-          if grep -q 'SKIPPED' .ci-beam.log; then
-            echo "ERROR: the differential harness skipped itself, so its parity"
-            echo "claims were NOT checked by this job:"
-            grep 'SKIPPED' .ci-beam.log
+          # Two ways this job can quietly test nothing, and BOTH now fail it.
+          #
+          # The parity harness skips itself when it cannot execute the Python
+          # oracle; the live PostgreSQL suite skips itself when it cannot reach a
+          # server or find the schema. Either way the job would otherwise report
+          # green having agreed with nothing — and a green tick beside "20 skipped"
+          # reads as parity when it is the absence of parity.
+          #
+          # The previous guard matched only 'SKIPPED', so it caught the harness
+          # and MISSED the live suite, which announces itself as 'NOT RUN'. That
+          # is the same defect as the boto3 stub and the harness skipping itself:
+          # a check scoped to one shape of the thing it means to catch.
+          if grep -qE 'SKIPPED|NOT RUN' .ci-beam.log; then
+            echo "ERROR: a suite skipped itself, so this job verified nothing:"
+            grep -aE 'SKIPPED|NOT RUN' .ci-beam.log
             exit 1
           fi
+
+          # And say so when it did run, so "green" is distinguishable from "the
+          # live suite was never there" by reading the log rather than guessing.
+          grep -aE 'Result:' .ci-beam.log | tail -1
+
         env:
           # The gate image, not the bare pinned one. beam/Dockerfile.gate is the
           # pinned hexpm/elixir image plus python3 and pydantic and changes nothing

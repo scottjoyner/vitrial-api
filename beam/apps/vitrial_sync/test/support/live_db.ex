@@ -69,9 +69,15 @@ defmodule VitrialSync.Db.LiveDB do
                     {:ok, url}
                 end
 
+              # The server REFUSED the connection, so there is no conn to close.
+              # This clause did not exist, and a server that answers the startup
+              # packet with an ErrorResponse — which is what SCRAM-only
+              # PostgreSQL does to a client that cannot do SCRAM — made this
+              # `case` raise FunctionClauseError. The suite then reported
+              # `{:error, :function_clause}` as the reason, which names neither
+              # the server nor the client nor the cause.
               {:error, error} ->
-                Conn.close(conn)
-                {:error, "schema probe failed: #{inspect(error)}"}
+                {:error, "connect or auth failed: #{inspect(error)}"}
             end
 
           {:error, error} ->
