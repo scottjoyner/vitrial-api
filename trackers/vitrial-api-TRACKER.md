@@ -13,17 +13,30 @@ date: 2026-10-03
 > (HEAD `77c83c2`, 2026-10-03). Only check a box when a commit in `git log` is
 > evidence of it. Use `[~]` for the part-that-works, not `[x]`.
 
-> **Verification status of the rows below (2026-10-03, at `77c83c2` plus the
-> working tree).** `VITR-V008`, `-009`, `-010`, `-011` and `-013` are marked Fixed and
-> that is **executed** evidence, not inspection: the CI run on `55876bd` is green on all
-> four workflows — Unit + contract `353 passed, 63 skipped`, PostgreSQL + S3 integration
-> `416 passed`, Container build and Security both success. Nothing since has touched
-> `app/`, so those Python rows stand as they were. Still true and still worth knowing:
-> there is **no local Python environment** (`python -m pytest` fails collection with
-> `ModuleNotFoundError: No module named 'boto3'`, no sqlalchemy) and the durable
-> PostgreSQL is unreachable from this workspace — the BEAM gate's own live-db suites
-> print `no server reachable at $VITRIAL_TEST_DATABASE_URL` — so the Python half is
-> verifiable only by pushing.
+> **Verification status of the rows below — INDEPENDENTLY RE-EXECUTED 2026-10-04.**
+> The claim on `55876bd` was "executed evidence", but it was CI, not a Python run, and
+> the workspace had no interpreter. There **is** a working one
+> (`~/.venvs/vitrial-api`, PostgreSQL at `~/.pgdata/vitrial` on 5435). Re-run here at
+> `77c83c2`: **`415 passed, 1 skipped`**, UBS delta gate PASS, contract validation PASS,
+> guard-prefix lint ok. CI on `77c83c2` agrees: Unit + contract, PostgreSQL + S3
+> integration, Security, Acceptance deployment topology and Container build all
+> **success**. The one red lane is **BEAM umbrella (compile + format + test)**, which is
+> the in-flight wave-5/6 `Pgconn` work and not a Python regression.
+>
+> Each `Fixed` row was then checked individually rather than trusted from the suite:
+> - `-008` catch/rollback/bounded-retry is correct, and has a dedicated concurrency test.
+> - `-009` delivery **fails closed** — `ownership.py:847` raises
+>   `f"canonical authorization is not implemented for {entity_type}"` dynamically, so the
+>   generic gate refuses a delivery record before touching the database.
+> - `-010` backoff **measured**: three consecutive failures push `not_before` by
+>   300 s → 600 s → 1200 s with `attempts` incrementing.
+> - `-011` the SAVEPOINT-per-row design is sound, and its two tests are load-bearing:
+>   re-planting the per-row `commit()` turns **7 tests red**, including the
+>   two-sessions overlapping-collector behavioural test.
+> - `-013` the post-publish staging delete is best-effort and logs, so a published upload
+>   is never escalated to a 503.
+> - `-004` correctly left **not fixed** — `33ccee4` only splits out `_list_publications`;
+>   the four GET helpers still seed and commit.
 >
 > **The BEAM half moved again (waves 4c/4d/4e, then 5, then 6) and every BEAM number
 > below was re-measured here at the landed tree.** `./scripts/beam_gate.sh` → PASS,

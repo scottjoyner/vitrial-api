@@ -223,6 +223,32 @@ written to record a failed collection instead **aborted the whole run**, precise
 object storage is unhealthy. Same shape as `VITR-V007`: code that only executes on the
 error path is code nobody has run.
 
+## Verified another agent's unverified "Fixed" claims (2026-10-04)
+
+A concurrent agent closed `VITR-V008`/`-009`/`-010`/`-011`/`-013` and honestly admitted it
+could run **no Python test** (no sqlalchemy, no boto3, no venv; PostgreSQL unreachable) —
+"Fixed means pending a green suite". Its tests were written, just never executed.
+
+The environment existed all along: `~/.venvs/vitrial-api` + `~/.pgdata/vitrial` on 5435.
+Re-ran at `77c83c2`: **415 passed, 1 skipped**, all gates green. Then checked each claim
+individually instead of trusting the suite:
+
+- `-010` backoff **measured**: 300 s → 600 s → 1200 s across three failures.
+- `-011` tests are **load-bearing**: re-planting the per-row `commit()` turns **7 tests
+  red**, including the two-sessions overlapping-collector behavioural test.
+- `-009` delivery **fails closed** — the guard is an f-string at `ownership.py:847`, which
+  is why `rg 'not implemented for delivery_execution'` finds nothing and looks alarming.
+- `-004` correctly left unfixed.
+
+**Lesson: "no interpreter in this workspace" is a claim about the workspace, not about the
+repo.** Before accepting it, check `~/.venvs/` — the tooling seeds live outside the tree
+precisely so they survive, and a missing module in the default interpreter says nothing
+about whether the suite can run.
+
+Also: a green CI lane is evidence about *CI*, not a substitute for a local run. CI's
+integration job had already proven these; the value was in running it where a planted
+regression could be tested.
+
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
 - Run migrations before `python -m pytest` or you get 44 failures that look like defects but

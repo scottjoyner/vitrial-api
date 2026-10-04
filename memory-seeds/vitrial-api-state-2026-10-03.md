@@ -147,13 +147,23 @@ since the morning). The five fixed defects (`VITR-V008` race half, `-009`,
 re-verified against the files; `VITR-V004` is still open (a GET that writes), and
 `VITR-V015` is the named BEAM gap.
 
-**No Python test has ever run in this workspace.** `python -m pytest` fails
-collection (`ModuleNotFoundError`: no sqlalchemy, no boto3); no venv. PostgreSQL: the
-durable cluster named in the 2026-10-02 seed (`~/.pgdata/vitrial`, port 5435) remains
-unreachable from this workspace — wave 5 provisioned a **throwaway** PG 16.14,
-verified the client against it live, then stopped it and removed its datadir. Do not
-assume any Python-side green is reproducible here; the Python half is verifiable only
-by pushing, and every Python row in the tracker rests on the CI run of `55876bd`.
+**A Python environment DOES exist — this section was wrong when written.**
+`python -m pytest` failed collection for the agent that wrote it (no sqlalchemy, no
+boto3, no venv) and it concluded none existed. There is one:
+
+    venv      ~/.venvs/vitrial-api        (python -m pytest, NOT the pytest script)
+    postgres  ~/.pgdata/vitrial  port 5435
+
+    export DATABASE_URL="postgresql+asyncpg://vitrial@localhost:5435/vitrial"
+    DATABASE_NULL_POOL=true POSTGRES_INTEGRATION=1 ~/.venvs/vitrial-api/bin/python -m pytest -q
+
+Re-verified 2026-10-04 at `77c83c2`: **`415 passed, 1 skipped`**, UBS gate PASS, contract
+PASS, guard-prefix lint ok. Every Python "Fixed" row in the tracker has now been executed
+here, not inferred from a CI log — see the tracker's verification block for the
+per-defect results, including a planted-regression check proving the `VITR-V011` tests are
+load-bearing. If you hit a missing module, check that venv before concluding Python
+cannot be tested locally. Wave 5's throwaway PG 16.14 was a separate thing; it does not
+replace this cluster.
 
 ## What to do next
 
