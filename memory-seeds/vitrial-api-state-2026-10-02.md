@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **390 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
+`make check` runs contract validation + guard lint + tests. Baseline: **419 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -248,6 +248,27 @@ about whether the suite can run.
 Also: a green CI lane is evidence about *CI*, not a substitute for a local run. CI's
 integration job had already proven these; the value was in running it where a planted
 regression could be tested.
+
+## VITR-V004 reduced, not closed (commit 03e10d9)
+
+Four GET helpers each call `ensure_baseline_publications`, so every read route took a
+WRITE transaction and committed. That is why `VITR-V008` existed at all — the first
+writer was a GET, so two concurrent GETs raced — and it means reads can never come from a
+replica.
+
+`bootstrap_identity` now seeds at creation. **The lazy GET seed is kept deliberately.**
+Removing it would change what a GET returns for an organization that exists but was never
+bootstrapped through this path, and that is client-visible on a pinned contract. So
+`VITR-V004` is *reduced*: for new organizations the write path seeds and the GET finds
+nothing to insert. Closing it needs a backfill migration for existing organizations first,
+which is a deployment decision, not a code cleanup.
+
+Lesson from the test: the first version truncated the `organizations` table and **passed
+alone but failed in the full suite** — other tests leave `canonical_projects` rows whose FK
+chain reaches `organizations`. Cleanup is now scoped to the two org ids the file creates.
+A test that clears global tables is asserting on the absence of other tests' state as much
+as on its own, and it will look fine right up until someone adds a test with an FK into
+your tables.
 
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
