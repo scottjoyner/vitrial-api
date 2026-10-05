@@ -368,7 +368,44 @@ sequences them — one function, and it is the seam `Db`'s own moduledoc was wri
 to describe ("everything above this module talks to PostgreSQL through the four
 names here").
 
-## Why the push ROUTE is still 501, having built the push SERVICE
+## The push ROUTE is wired (2026-10-05, `f5e8f61`)
+
+`POST /api/v2/sync/push` is the FIRST of the 21 answering-501 routes to answer
+from an engine. `VitrialSync.Auth` (resolve the token) -> `VitrialSync.PushService`
+(load, decide, write, answer) -> `Batch.finish/2` (the wire response), and the
+route is out of the `:not_wired` table.
+
+**797 passing** (696 vitrial_sync + 67 vitrial_web + 34 vitrial_auth) with
+PostgreSQL 17 and the real migrations, 0 skipped; gate green with no database.
+
+Four reference behaviours that are easy to lose, each found by the tests:
+
+* **Auth before body.** FastAPI resolves every `Depends` before the handler body
+  (`app/main.py:212-217`), so an anonymous caller learns nothing about whether
+  its request was well-formed. Reading the body first answered 400 instead.
+* **401 for all four auth refusals** (`app/auth.py:42,49,54,59`). The first
+  mapping sent everything non-capability to 400, so an unauthenticated push said
+  "400 invalid mutation" — blaming the client's batch for a request that never
+  got that far. 403 is capability/organization; 500 is a failed load, which is
+  OURS.
+* **`ctx.body` is a raw binary.** `RequestSize.admit/1` bounds it and nothing
+  decodes it. Elixir 1.19+ ships `JSON` in the standard library, so the correct
+  decoder costs no dependency — an intermediate hand-rolled regex was the wrong
+  answer and is gone.
+* **Internal reasons must not leak.** `:econnrefused` reached the wire as
+  `{"detail":"econnrefused"}` before it was wrapped as `{:load, reason}`.
+
+**Both sibling dependencies now exist**: `vitrial_sync -> vitrial_auth` (the seam
+resolves a token) and `vitrial_web -> vitrial_sync` (the boundary reaches the
+engine). Both `in_umbrella`, neither versioned, because a path inside one
+deployment unit is not a published package. The estate was 0-of-8 independent,
+which worked right up until two built components had to compose.
+
+**Next is the same shape for pull**: `Prefetch.load_page_context/3` plus
+`Page.assemble/2`, behind `/api/v2/sync/pull`. The reads it needs are the same
+kind this session added.
+
+## Why the push ROUTE was 501 for a while, having built the push SERVICE
 
 `PushService` works end to end (688 passing live). Wiring
 `POST /api/v2/sync/push` to it was attempted and **reverted**, for a reason worth
