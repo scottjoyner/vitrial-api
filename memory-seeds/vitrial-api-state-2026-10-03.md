@@ -367,3 +367,32 @@ open-ended: `Writes` exports `effects/0`, `entity_upsert/3`, `mutation_insert/4`
 sequences them — one function, and it is the seam `Db`'s own moduledoc was written
 to describe ("everything above this module talks to PostgreSQL through the four
 names here").
+
+## Why the push ROUTE is still 501, having built the push SERVICE
+
+`PushService` works end to end (688 passing live). Wiring
+`POST /api/v2/sync/push` to it was attempted and **reverted**, for a reason worth
+keeping:
+
+The route cannot complete without authentication, and `authenticate/5` needs three
+rows — auth_session, membership, organization — for which **`Reads` has no read at
+all**. Writing the handler anyway produced a route that answers 401 for every
+request, and the compiler said so plainly:
+
+    warning: the following pattern will never match:
+        {:ok, principal} <- authenticate(ctx)
+    because the right-hand side has type: dynamic({:error, :authentication_required})
+
+A 501 that says "not implemented" is honest. A route that looks wired and refuses
+everything is not, and it also would not have been honest about WHY.
+
+Two things the attempt established and that are committed nowhere else:
+
+1. **`vitrial_web` needs a sibling dependency** to reach the engine. `in_umbrella:
+   true` on `{:vitrial_sync, in_umbrella: true}` is the standard Elixir shape and
+   is the only way two built apps compose. The estate was 0-of-8 independent, which
+   worked right up until two components had to compose.
+2. **The order is auth-first, not push-first.** The next three pieces, in order:
+   `Reads` gains `auth_sessions` / `memberships` / `organizations` (one table group
+   over, same module); `Handlers.authenticate/1` uses them; then the route.
+   Doing the route before the reads produces a handler that cannot succeed.
