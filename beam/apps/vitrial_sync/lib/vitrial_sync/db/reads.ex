@@ -79,6 +79,54 @@ defmodule VitrialSync.Db.Reads do
    WHERE organization_id = $1 AND client_mutation_id = $2
   """
 
+  # `MAX_SYNC_PULL_SCAN_CHANGES`, `app/sync_service.py:49`.
+  @max_scan_changes 500
+
+  @select_sync_change_log """
+  SELECT sequence, organization_id, entity_type, entity_id, server_revision,
+         client_mutation_id, operation, created_at
+    FROM sync_change_log
+   WHERE organization_id = $1 AND sequence > $2
+   ORDER BY sequence ASC
+   LIMIT $3
+  """
+
+  @doc """
+  One page of `sync_change_log` rows after `start_sequence`, oldest first.
+
+  `app/sync_service.py:498-506` — one query, one round trip:
+
+      SELECT SyncChangeLog
+       WHERE organization_id == ...
+         AND sequence > start
+       ORDER BY sequence ASC
+       LIMIT 500
+
+  The `LIMIT` is `MAX_SYNC_PULL_SCAN_CHANGES = 500` (`sync_service.py:49`), and it
+  is a SCAN bound rather than a page size: `Page.assemble/2` walks these changes
+  and stops when the response reaches its byte ceiling, so a change past the 500th
+  may be visible to a client that has not reached it yet.
+
+  Ordering is load-bearing and not incidental. `Page.assemble/2` advances the
+  cursor by MAX over the changes it consumed, and `pull_since`
+  (`sync_service.py:538`) advances `max_seq` past INVISIBLE changes precisely so
+  a client is not offered the same invisible rows on every pull forever.
+  """
+  @spec sync_change_log(conn(), String.t(), non_neg_integer(), pos_integer()) ::
+          {:ok, [map()]} | {:error, term()}
+  def sync_change_log(conn, organization_id, start_sequence, limit \\ @max_scan_changes) do
+    all(
+      conn,
+      @select_sync_change_log,
+      [organization_id, start_sequence, limit],
+      &Rows.sync_change_log/2
+    )
+  end
+
+  @doc "The scan bound above, named where the page assembly can refer to it."
+  @spec max_scan_changes() :: pos_integer()
+  def max_scan_changes, do: @max_scan_changes
+
   @select_max_sequence """
   SELECT COALESCE(MAX(sequence), 0) FROM sync_change_log WHERE organization_id = $1
   """
