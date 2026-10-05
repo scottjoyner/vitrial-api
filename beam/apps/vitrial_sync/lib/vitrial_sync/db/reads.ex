@@ -168,10 +168,16 @@ defmodule VitrialSync.Db.Reads do
   @spec memberships(conn()) :: {:ok, [map()]} | {:error, term()}
   def memberships(conn), do: all(conn, @select_memberships, [], &Rows.memberships/2)
 
-  @doc "The canonical chain, loaded whole. See `Canonical.World` for why the whole chain."
-  @spec canonical(conn()) :: {:ok, map()} | {:error, term()}
-  def canonical(conn) do
-    with {:ok, customers} <-
+  @doc """
+  One organization's canonical state, as `Canonical.World` carries it.
+
+  Returns the TABLES as lists plus the ONE organization row, and builds nothing:
+  `World` is a plain struct and assembling it is the caller's job.
+  """
+  @spec canonical(conn(), String.t()) :: {:ok, map()} | {:error, term()}
+  def canonical(conn, organization_id) do
+    with {:ok, organizations} <- all(conn, @select_organizations, [], &Rows.organizations/2),
+         {:ok, customers} <-
            all(conn, @select_canonical_customers, [], &Rows.canonical_customers/2),
          {:ok, projects} <- all(conn, @select_canonical_projects, [], &Rows.canonical_projects/2),
          {:ok, sectors} <-
@@ -184,6 +190,11 @@ defmodule VitrialSync.Db.Reads do
          {:ok, blobs} <- all(conn, @select_evidence_blobs, [], &Rows.evidence_blobs/2) do
       {:ok,
        %{
+         # ONE organization, by id. `Batch.organization_guard/1` refuses the whole
+         # batch when `World.organization` is nil, so a World built without this
+         # makes every push answer `:organization_unavailable` — the wiring was
+         # right and the LOAD incomplete, which no unit test of either would see.
+         organization: Enum.find(organizations, &(&1.id == organization_id)),
          customers: customers,
          projects: projects,
          project_sectors: sectors,

@@ -180,10 +180,25 @@ defmodule VitrialSync.Db.ReadsLiveTest do
     end
   end
 
-  describe "canonical/1" do
-    test "loads the whole chain the World needs", %{pool: pool} do
+  describe "canonical/2" do
+    test "loads the whole chain the World needs", %{pool: pool, org: org} do
       with_conn(pool, fn conn ->
-        assert {:ok, world} = Reads.canonical(conn)
+        # Seeded first, and deliberately: `canonical/2` selects the organization by
+        # id, so asserting on a row that was never inserted proves the selector
+        # returns nil rather than proving the SELECT works. The failure this
+        # assertion was written for — `Batch.organization_guard/1` refusing every
+        # push because `World.organization` was nil — needs the row to EXIST.
+        {:ok, _} =
+          Pgconn.query(
+            conn,
+            "INSERT INTO organizations (id, authorization_revision, name) VALUES ($1, 0, $2)",
+            [org, org]
+          )
+
+        assert {:ok, world} = Reads.canonical(conn, org)
+        assert world.organization, "the organization's row must be present"
+        assert world.organization.authorization_revision == 0
+
         # Structure, not contents: the tables exist and decode. The intra-batch
         # visibility rules are `Prefetch`'s, tested there.
         for key <- [
