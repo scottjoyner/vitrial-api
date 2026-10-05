@@ -84,6 +84,22 @@ defmodule VitrialSync.Db.Reads do
   """
 
   @select_organizations "SELECT id, authorization_revision, name FROM organizations"
+  @select_organizations_one "SELECT id, authorization_revision, name FROM organizations WHERE id = $1"
+
+  # From `information_schema` on a migrated database, not from the Python model.
+  @select_auth_sessions """
+  SELECT id, organization_id, membership_id, user_id, access_token_hash,
+         issued_at, expires_at, revoked_at
+    FROM auth_sessions
+   WHERE access_token_hash = $1
+  """
+
+  @select_memberships_one """
+  SELECT id, organization_id, user_id, active, all_customers, all_projects,
+         customer_ids, project_ids, roles, capabilities
+    FROM memberships
+   WHERE id = $1
+  """
   @select_memberships "SELECT * FROM memberships"
   @select_canonical_customers "SELECT * FROM canonical_customers"
   @select_canonical_projects "SELECT * FROM canonical_projects"
@@ -204,6 +220,51 @@ defmodule VitrialSync.Db.Reads do
          evidence_blobs: blobs
        }}
     end
+  end
+
+  # -- authentication ----------------------------------------------------------
+  #
+  # The three rows resolving a bearer token needs: `auth_sessions`,
+  # `memberships`, `organizations`. These are what the push ROUTE was missing —
+  # `Handlers.sync_push/2` compiled, wired to `PushService.push/4`, and could only
+  # ever answer 401, because nothing loaded the session it was supposed to resolve
+  # a principal from.
+  #
+  # Column lists from `information_schema`, not from the Python model, which is how
+  # `sync_mutations` went wrong the first time.
+  #
+  # NOT HERE: the resolution of those three rows into a principal. It belongs
+  # ABOVE both apps — see `VitrialSync.Auth` — because putting it here would make
+  # the engine's database layer depend on the authentication app, which inverts
+  # the layering and drags the rest of the umbrella in behind it.
+
+  @doc """
+  The `auth_sessions` row for an `access_token_hash`, or `nil`.
+
+  Looked up BY HASH, which is the whole point of storing it that way: the
+  plaintext bearer token never reaches a comparison, so a disclosure of this
+  table yields digests rather than usable credentials (`app/auth.py:24-26, 45`).
+  """
+  @spec auth_session(conn(), String.t()) :: {:ok, map() | nil} | {:error, term()}
+  def auth_session(conn, access_token_hash) when is_binary(access_token_hash) do
+    one(
+      conn,
+      @select_auth_sessions,
+      [access_token_hash],
+      &Rows.auth_sessions/2
+    )
+  end
+
+  @doc "The membership a session names, or `nil`. Cross-checked against the session's own ids by `VitrialAuth`."
+  @spec membership(conn(), String.t()) :: {:ok, map() | nil} | {:error, term()}
+  def membership(conn, membership_id) when is_binary(membership_id) do
+    one(conn, @select_memberships_one, [membership_id], &Rows.memberships/2)
+  end
+
+  @doc "One organization by id, or `nil`. The `authorization_revision` here is what `Batch` threads."
+  @spec organization(conn(), String.t()) :: {:ok, map() | nil} | {:error, term()}
+  def organization(conn, organization_id) when is_binary(organization_id) do
+    one(conn, @select_organizations_one, [organization_id], &Rows.organizations/2)
   end
 
   # -- the pair, once ------------------------------------------------------------

@@ -124,6 +124,16 @@ defmodule VitrialSync.Db.Rows do
   @doc "All of `memberships`, lossless."
   def memberships(fields, cells), do: Codec.decode_row(fields, cells)
 
+  @doc """
+  All of `auth_sessions`, lossless.
+
+  Present because `Reads.authenticate/2` needs it and the table was the one
+  `information_schema` knew about that had no decoder: every other table in this
+  module predates the authentication reads, and a decoder is the whole of what a
+  new table requires — `Codec.decode_row/2` already handles the shapes.
+  """
+  def auth_sessions(fields, cells), do: Codec.decode_row(fields, cells)
+
   @doc "All of `canonical_customers`, lossless."
   def canonical_customers(fields, cells), do: Codec.decode_row(fields, cells)
 

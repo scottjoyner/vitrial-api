@@ -52,6 +52,21 @@ defmodule VitrialSync.MixProject do
 
   defp deps do
     [
+      # `vitrial_sync` -> `vitrial_auth`, ONE WAY, and the direction is the whole
+      # point.
+      #
+      # `VitrialSync.Auth` resolves a bearer token to a `VitrialAuth.Principal`, so
+      # the engine needs the authentication app's decisions. The reverse edge does
+      # not exist and must not: `vitrial_auth` references `vitrial_sync` only in
+      # comments, so adding this here is acyclic. Adding it to `vitrial_auth`
+      # instead would be a cycle, and would make the app whose job is deciding
+      # about tokens depend on the whole sync engine to do it.
+      #
+      # This is the FIRST sibling dependency in the umbrella (it was 0 of 8). Like
+      # `vitrial_web`'s, it is `in_umbrella` rather than a versioned hex dep: a
+      # path inside one deployment unit is not a published package, and a version
+      # number on it would misdescribe the release process.
+      {:vitrial_auth, in_umbrella: true}
       # Empty by design, and now empty BY ACHIEVEMENT rather than by deferral.
       #
       # This list once carried epgsql, admitted for wave 5 (the PostgreSQL wire
