@@ -38,6 +38,15 @@ defmodule VitrialWeb.MixProject do
 
   defp deps do
     [
+      # The boundary reaches the engine. `in_umbrella` rather than a versioned
+      # hex dep: a path inside one deployment unit is not a published package,
+      # and a version number on it would misdescribe the release process.
+      #
+      # Direction is fixed by `vitrial_sync`'s own edge: the boundary depends on
+      # the engine, never the reverse. `vitrial_web` is the outermost layer in
+      # every sense — it owns the socket — and the engine must not know a socket
+      # exists.
+      {:vitrial_sync, in_umbrella: true},
       # The umbrella's first hex package, admitted 2026-10-03 with the verdict
       # already on the record: DEPENDENCY-DOCTRINE.md §3.1 ADOPTs cowboy 2.19.0
       # (+ mandatory cowlib 2.20.0, ranch 2.3.0 -- zero-dependency siblings) as

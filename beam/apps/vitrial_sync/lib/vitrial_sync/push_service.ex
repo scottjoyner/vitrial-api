@@ -283,8 +283,25 @@ defmodule VitrialSync.PushService do
   the engine refuses, which is 400. A failed LOAD is neither: it is ours, not the
   client's, and answering 400 would send them to fix a body that was fine.
   """
-  @spec refusal_status(RejectionCode.t() | atom()) :: 400 | 403 | 500
+  @spec refusal_status(RejectionCode.t() | atom()) :: 400 | 401 | 403 | 500
   def refusal_status({:load, _reason}), do: 500
+
+  # 401, not 403, for all FOUR authentication refusals. `app/auth.py` raises
+  # `HTTPException(401, ...)` at :42 (no credentials), :49 (expired or revoked),
+  # :54 (membership inactive) and :59 (session/membership mismatch) — every one
+  # of them, from `current_principal`. 403 is for a caller who IS authenticated
+  # and not permitted, which is `:capability_missing` (:218) and
+  # `:organization_unavailable` (:220).
+  #
+  # The first version of this mapped everything that was not a capability
+  # failure to 400, so an unauthenticated push answered "400 invalid mutation" —
+  # telling the client its batch was malformed when the request never got far
+  # enough for that to matter.
+  def refusal_status(:authentication_required), do: 401
+  def refusal_status(:session_expired_or_revoked), do: 401
+  def refusal_status(:membership_inactive), do: 401
+  def refusal_status(:session_membership_mismatch), do: 401
+
   def refusal_status(:capability_missing), do: 403
   def refusal_status(:organization_unavailable), do: 403
   def refusal_status(_rejection), do: 400

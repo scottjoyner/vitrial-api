@@ -94,11 +94,26 @@ defmodule VitrialWeb.RouterTest do
            }
   end
 
-  test "the wave's uniformity property: exactly two clauses are servable, all others are not-wired" do
+  test "the wave's uniformity property: no route is silently half-wired" do
     actions = Router.routes() |> Enum.map(& &1.action) |> Enum.frequencies()
 
+    # Three servable clauses now: health, version, and the v2 sync push, which
+    # reached `VitrialSync.PushService` and `VitrialSync.Auth` and is the first
+    # route that answers from an engine rather than for itself. The count was 21
+    # not-wired and is now 20.
     assert actions[{:serve, :health}] == 1
     assert actions[{:serve, :version}] == 1
-    assert actions[:not_wired] == 21
+    assert actions[{:serve, :sync_push}] == 1
+
+    # The property this test exists for is not a NUMBER — it is that no route is
+    # routed and then left unanswered. Asserting the exact not-wired count would
+    # make every honest wiring a test failure, which is how a test that guards a
+    # property becomes a test that guards a moment.
+    assert Map.has_key?(actions, :not_wired)
+
+    # v1 push stays not-wired deliberately: the reference registers the handler
+    # twice, but only after confirming v1's `deviceID` requirement, and that is
+    # not something to guess at.
+    assert actions[:not_wired] == Router.routes() |> length() |> Kernel.-(3)
   end
 end

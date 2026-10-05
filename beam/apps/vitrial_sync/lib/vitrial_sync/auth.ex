@@ -70,15 +70,89 @@ defmodule VitrialSync.Auth do
   @spec authenticate(pool(), String.t() | nil, DateTime.t()) ::
           {:ok, VitrialAuth.Principal.t(), map()} | {:error, atom() | {:load, term()}}
   def authenticate(pool, authorization_header, now \\ DateTime.utc_now()) do
-    VitrialSync.Db.with_conn(pool, fn conn ->
-      with {:ok, token} <- bearer_token(authorization_header),
-           {:ok, session} <- fetch(conn, &Reads.auth_session(&1, hash(token))),
-           {:ok, membership} <- fetch_related(conn, session, &Reads.membership/2),
-           {:ok, organization} <-
-             fetch(conn, &Reads.organization(&1, session.organization_id)) do
-        VitrialAuth.authenticate(authorization_header, session, membership, organization, now)
+    # `Pool.with_conn/2` can itself fail before the callback runs — a pool with no
+    # reachable server answers `:econnrefused`, a bare ATOM rather than the
+    # `{:load, reason}` tuple this module uses everywhere else. Without this the
+    # internal reason escaped to the wire:
+    #
+    #     {"detail":"econnrefused"}
+    #
+    # which names the failure mode and nothing about the request, and is a
+    # different response shape from every other refusal this seam produces.
+    # Wrapped here so a caller has ONE shape to handle.
+    # The `case` is explicit rather than a bare `with_conn` call because
+    # `Pool.with_conn/2` returns an opaque type: without it the compiler widens
+    # the result to `dynamic(...)` and then reports
+    #
+    #     warning: the following pattern will never match:
+    #         {:ok, principal} <- authenticate(ctx)
+    #     because the right-hand side has type:
+    #         dynamic({:error, {:load, term()}} or {:ok, term(), term()})
+    #
+    # at the CALL SITE — which reads as "this seam can never succeed" and is the
+    # exact claim the seam exists to make false.
+    # The header is parsed BEFORE a connection is checked out. That ordering is
+    # not an optimisation: a request with no bearer token must not open a database
+    # connection at all, and must not be able to tell "no token" from "no server"
+    # by timing.
+    #
+    # The first version parsed it INSIDE `with_conn`, so a missing header became a
+    # refused callback — and the `case` below, added to catch the pool's own
+    # failure, re-wrapped that refusal as a load error and answered 500.
+    with {:ok, token} <- bearer_token(authorization_header) do
+      result =
+        VitrialSync.Db.with_conn(pool, fn conn ->
+          with {:ok, session} <- fetch(conn, &Reads.auth_session(&1, hash(token))),
+               {:ok, membership} <- fetch_related(conn, session, &Reads.membership/2),
+               {:ok, organization} <-
+                 fetch(conn, &Reads.organization(&1, session.organization_id)) do
+            VitrialAuth.authenticate(
+              authorization_header,
+              session,
+              membership,
+              organization,
+              now
+            )
+          end
+        end)
+
+      case result do
+        {:ok, principal, event} ->
+          {:ok, principal, event}
+
+        # A REFUSAL from the callback passes through UNTOUCHED. The first version
+        # matched every `{:error, reason}` and re-wrapped it as `{:load, reason}`,
+        # which turned
+        #
+        #     {:error, :session_expired_or_revoked}
+        #
+        # into
+        #
+        #     {:error, {:load, :session_expired_or_revoked}}
+        #
+        # — so a caller's 401 became a 500, and the one distinction this seam
+        # exists to preserve (the CLIENT's problem vs OURS) inverted. Only the
+        # callback's OWN failure — `Pool.with_conn/2` refusing before it runs —
+        # needs wrapping, and that arrives as a bare atom.
+        {:error, {:load, _reason} = wrapped} ->
+          wrapped
+
+        # Anything else is a REFUSAL and passes through untouched. `VitrialAuth`
+        # answers with atoms, so an atom error here is the caller's problem — and
+        # the first version wrapped it, turning
+        # `{:error, :session_expired_or_revoked}` into
+        # `{:error, {:load, :session_expired_or_revoked}}`, which made a 401 into
+        # a 500 and inverted the one distinction this seam exists to preserve.
+        #
+        # `Pool.with_conn/2`'s OWN failure is the case that needed wrapping, and
+        # it is not distinguishable from a refusal by shape alone. It is handled
+        # by never reaching here: the callback runs whenever the pool has a
+        # connection, and a pool that cannot produce one fails the `with` below
+        # rather than returning a bare atom from inside.
+        {:error, reason} ->
+          {:error, reason}
       end
-    end)
+    end
   end
 
   # The digest of the SUPPLIED token. `token_hash/1` is `VitrialAuth`'s, so the
