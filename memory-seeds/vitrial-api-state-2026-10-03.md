@@ -401,9 +401,34 @@ engine). Both `in_umbrella`, neither versioned, because a path inside one
 deployment unit is not a published package. The estate was 0-of-8 independent,
 which worked right up until two built components had to compose.
 
-**Next is the same shape for pull**: `Prefetch.load_page_context/3` plus
-`Page.assemble/2`, behind `/api/v2/sync/pull`. The reads it needs are the same
-kind this session added.
+**`VitrialSync.PullService` landed 2026-10-05 (`886382d`).** The pull path reads
+the page's changes, resolves visibility, assembles. **802 passing** (701 sync +
+67 web + 34 auth) with a live PostgreSQL, 0 skipped. It needed ONE new read --
+`sync_change_log`, the page query at `sync_service.py:498-506` with its
+`MAX_SYNC_PULL_SCAN_CHANGES = 500` SCAN bound (not a page size: `Page` stops on
+the byte ceiling, so a change past the 500th may still be visible to a client
+that has not reached it).
+
+The cursor rule is the whole subtlety and is SILENT when wrong
+(`sync_service.py:560-566`): an INVISIBLE change IS consumed (else the cursor
+stalls forever) and a visible change that does not fit is NOT (else it is
+skipped). `truncated` is read from `Page`'s `stopped_at`, never inferred from a
+length comparison -- `sync_service.py:509-513` says why.
+
+Two findings worth keeping:
+
+* **`Canonical.World.entity/3` is written `def` and is NOT reachable** --
+  `__info__(:functions)` returns only `[{:__struct__, 0}]`, so calling it raises
+  UndefinedFunctionError. Read the struct FIELD instead, which is what
+  `Prefetch.load_page_context/3` does (`prefetch.ex:171`). Verified at runtime,
+  not assumed from reading.
+* **`deviceID` is not a parameter.** The reference hardcodes `"server"` at both
+  sites (`sync_service.py:80, 572`); a defaulted argument invites a caller to
+  attribute a server-assembled page to itself.
+
+**`/api/v2/sync/pull` is NOT yet routed.** `PullService` is built and tested;
+wiring it behind the route is the next step, and it needs a `cursor` query
+parameter decoded from the wire -- which is how a client says where to resume.
 
 ## Why the push ROUTE was 501 for a while, having built the push SERVICE
 
