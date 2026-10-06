@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **419 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
+`make check` runs contract validation + guard lint + tests. Baseline: **430 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -269,6 +269,26 @@ chain reaches `organizations`. Cleanup is now scoped to the two org ids the file
 A test that clears global tables is asserting on the absence of other tests' state as much
 as on its own, and it will look fine right up until someone adds a test with an FK into
 your tables.
+
+## Session lifecycle was unpinned (commit ddae47b)
+
+`app/auth.py::current_principal` is the single gate every authenticated route passes
+through, with four rejection branches. **None was exercised by name, and two were never
+exercised at all.**
+
+Expiry was the serious one. Every session the suite created had `expires_at` in the
+*future*, so `expires_at <= now` never fired. Deleting the clause — or inverting it to
+`>=` — would have left the suite green while every expired bearer token kept working. A
+revocation test existed; an expiry test did not. That asymmetry is the lesson: covering
+*one* revocation lever is not covering the gate, and the covered one is the one that
+looked more important.
+
+**A behavioural test cannot pin the expiry boundary, and I only found out by planting.**
+My first boundary test set `expires_at = now` and expected rejection — which passes
+under `<=` *and* under `<`, because `current_principal` computes its own `now` a few
+microseconds later. Planted `<`, the test stayed green. It is now an AST assertion, with
+the commit saying why. When a distinction is not observable from outside, say so and pin
+the shape rather than shipping a test that flatters itself.
 
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
