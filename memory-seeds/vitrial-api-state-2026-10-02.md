@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **430 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
+`make check` runs contract validation + guard lint + tests. Baseline: **448 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -317,6 +317,39 @@ All still 401. Not mine to change, so it is recorded for the BEAM agent.
 **`VITR-V018`** — Dependabot's default `increase` strategy rewrites `pyproject.toml`
 floors (PR #20), and grouping lets `pydantic-core` move without `pydantic` (PR #21). Both
 PRs are red and should be closed, not merged.
+
+## Long-session batch 2026-10-07 — main back to green, six items closed
+
+`main` CI was red on my own runtime-lock gate. Fixed and then worked down the list:
+
+- **`VITR-V017` fixed** (`4ec9341`) — runtime lock resolved with `-c requirements-lock.txt`,
+  so the image ships exactly what CI tests; `--check` is offline; CI proves closure with
+  `--no-deps` + `pip check`. `9d7d6d7` then landed sqlalchemy 2.1.2 through it, and the gate
+  caught the half-done state before regeneration. **To bump a Python dep now: edit
+  `requirements-lock.txt`, run `scripts/generate_runtime_lock.py`, install into the venv,
+  run the suite.** Never edit the runtime lock by hand.
+- **`VITR-V018` fixed** (`e248d9c`) — Dependabot `increase-if-necessary`, coupled-package
+  groups ordered before the catch-alls. PRs #20/#21 closed with reasons.
+- **Auth refusal wire pins** (`d20e767`) — exact status + body for every refusal; the
+  Python reference for `VITR-V016`. Both BEAM divergences, transplanted into Python, fail it.
+- **Admin control plane rate-limited**, one budget per (surface, client). UBS flagged the
+  429 `Retry-After` as header injection (path → bucket → retry_after). Validated FP,
+  suppressed with the **rule-scoped statement marker** `# ubs:ignore[rule]` — trailing on
+  the statement line; a marker five lines above is ignored. Prefer this over `.ubsignore`,
+  which is file-level and blinds the scanner to the whole file.
+- **Image scan now enforces** (was `exit-code: '0'`) + CycloneDX SBOM artifact (`f6440fe`).
+  Flipped only after measuring 0 fixable HIGH/CRITICAL across 36 targets.
+- **Rejection cost measured** in engine connection checkouts: 0 for every pre-auth refusal,
+  exactly 1 for an unknown token.
+- **Dead branch removed** from `validate_deployment.py`: a `mode == "production"` digest
+  check nested inside the acceptance-only branch. Never ran; read as enforcement.
+
+Two things that bit:
+- `make ubs` once returned **rc=5 (environment error)** and passed on rerun at the same tree.
+  Probably a concurrent UBS run by the other agent — both write `ubs-history.json`. The gate
+  correctly refused to call it a pass; just rerun, do not treat rc=5 as a finding.
+- A scratch venv on `/mnt/build-fast/tmp` came back half-populated with no `python`/`pip`
+  under a reused name. Use a unique name (`v017-$$`) and `python -m pip`.
 
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
