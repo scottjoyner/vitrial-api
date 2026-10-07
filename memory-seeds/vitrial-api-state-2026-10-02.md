@@ -290,6 +290,34 @@ microseconds later. Planted `<`, the test stayed green. It is now an AST asserti
 the commit saying why. When a distinction is not observable from outside, say so and pin
 the shape rather than shipping a test that flatters itself.
 
+## Remote review 2026-10-07 — two defects in my own earlier work, one BEAM parity gap
+
+Nothing new on `main` since `5ecfeaf`. Reviewed everything since `e4a0f9d`, the two open
+Dependabot PRs, and re-checked my own gates. Logged `VITR-V016`/`-017`/`-018`; none fixed yet.
+
+**`VITR-V017` (HIGH, mine, from `150c7ac`)** — two problems in the runtime lock:
+1. The image and CI run **different versions**: sqlalchemy 2.1.3 vs 2.1.1, boto3/botocore
+   .108 vs .107, markupsafe 3.0.4 vs 3.0.3. I claimed to fix "image resolves versions CI
+   never tested" and actually produced pinned-but-different. The generator resolves fresh
+   from `pyproject.toml` ranges instead of constraining to the combined lock's pins.
+2. `--check` re-resolves **live PyPI**, so it is non-deterministic. Red today with no code
+   change (asyncpg 0.32.0 and opentelemetry-api 1.45.1 were released after the commit). The
+   next push from either agent fails CI. Regenerating and committing would silently upgrade
+   the DB driver, so that is not the fix.
+**Lesson: a gate that checks against a moving external source is a timer, not a gate.**
+I had *seen* the drift when I built it (botocore .107→.108) and recorded it as "the point:
+it's now recorded." It wasn't the point. Drift visible at authoring time means the
+comparison is non-deterministic, and that should have been the finding.
+
+**`VITR-V016` (BEAM, read-only)** — `VitrialSync.Auth` diverges from `current_principal`
+on unknown token (`:authentication_required` vs Python's deliberate "session expired or
+revoked", which a BEAM test *pins*), missing organization, and wire text (underscores).
+All still 401. Not mine to change, so it is recorded for the BEAM agent.
+
+**`VITR-V018`** — Dependabot's default `increase` strategy rewrites `pyproject.toml`
+floors (PR #20), and grouping lets `pydantic-core` move without `pydantic` (PR #21). Both
+PRs are red and should be closed, not merged.
+
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 
 - Run migrations before `python -m pytest` or you get 44 failures that look like defects but
