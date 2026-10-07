@@ -63,6 +63,14 @@ DEFAULT_WINDOW_SECONDS = 60.0
 # shared egress for one noisy device.
 THROTTLED_PATH_PREFIXES: tuple[str, ...] = (
     "/api/v1/auth/pair",
+    # The admin control plane. Its only barrier is the admin key (`admin.py:60-72`,
+    # compared as a constant-time SHA-256 digest -- so this is not a timing fix), and a
+    # correct key mints a live session of up to 30 days (`AdminBootstrapRequest`). Before
+    # this, the 192-bit pairing code was rate-limited and the key guarding session
+    # issuance next to it was not: an unbounded guessing rate against the more powerful
+    # credential. Operators make a handful of these calls; 30/min per client is invisible
+    # to them and bounds both guessing and 404-probing when the plane is disabled.
+    "/internal/admin/v1",
 )
 
 # Never more than this many distinct keys retained, so the limiter's own memory is
@@ -203,5 +211,24 @@ def reset_limiter_for_tests() -> None:
     _limiter_key = None
 
 
+def throttled_surface_for(path: str) -> str | None:
+    """The throttled prefix this path belongs to, or None if it is not throttled."""
+    for prefix in THROTTLED_PATH_PREFIXES:
+        if path.startswith(prefix):
+            return prefix
+    return None
+
+
 def path_is_throttled(path: str) -> bool:
-    return any(path.startswith(prefix) for prefix in THROTTLED_PATH_PREFIXES)
+    return throttled_surface_for(path) is not None
+
+
+def limiter_key_for(surface: str, client_key: str) -> str:
+    """One bucket per (surface, client), not one per client.
+
+    With a single per-client bucket, admin calls and pairing attempts drew from the same
+    allowance: an operator provisioning devices could lock themselves out of pairing, and
+    -- the direction that matters -- pairing traffic could not be told apart from admin-key
+    guessing in the window. Separate surfaces are separate budgets.
+    """
+    return f"{surface}|{client_key}"

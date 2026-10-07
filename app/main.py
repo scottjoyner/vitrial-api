@@ -30,7 +30,8 @@ from app.request_size import RequestSizeLimitMiddleware
 from app.rate_limit import (
     client_key_for,
     limiter_for,
-    path_is_throttled,
+    limiter_key_for,
+    throttled_surface_for,
 )
 from app.observability import (
     begin_request,
@@ -106,7 +107,7 @@ async def request_correlation(request: Request, call_next):
 
 @app.middleware("http")
 async def auth_surface_rate_limit(request: Request, call_next):
-    """Bound request rate on the unauthenticated auth surface.
+    """Bound request rate on the unauthenticated auth surface and the admin plane.
 
     Registered after `request_correlation` so a throttled request still gets a request
     id and a completed-event log line, and so it is refused *before* the route handler:
@@ -120,10 +121,13 @@ async def auth_surface_rate_limit(request: Request, call_next):
     A limiter fault fails open: an internal error in the limiter must not become an
     outage on the sign-in path.
     """
-    if not path_is_throttled(request.url.path):
+    surface = throttled_surface_for(request.url.path)
+    if surface is None:
         return await call_next(request)
     try:
-        allowed, retry_after = limiter_for().allow(client_key_for(request))
+        allowed, retry_after = limiter_for().allow(
+            limiter_key_for(surface, client_key_for(request))
+        )
     except Exception as exc:  # pragma: no cover - defensive
         log_event(
             "auth.rate_limit_bypassed",
@@ -140,7 +144,11 @@ async def auth_surface_rate_limit(request: Request, call_next):
         routeTemplate=_route_template(request),
         retryAfterSeconds=retry_after_seconds,
     )
-    return JSONResponse(
+    # Validated false positive, suppressed on the statement below for this ONE rule. The
+    # only header value derived from the request path is Retry-After, and it is int() of a
+    # limiter timestamp difference: the path selects WHICH bucket (throttled_surface_for),
+    # it never contributes bytes to the header. The rest of main.py stays fully scanned.
+    return JSONResponse(  # ubs:ignore[py.security.header-injection]
         status_code=429,
         content={"detail": "too many requests"},
         headers={
