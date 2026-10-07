@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import token_hash
 from app.models import AuthSession, Membership, Organization, User, uid
+from app.metrics import auth_failures_total
 from app.observability import correlation_ref, log_event
 from app.reference_data import ensure_baseline_publications_for_organization
 from app.schemas import AuthorizationRole, Capability, StrictModel
@@ -66,10 +67,12 @@ async def require_admin_key(
         raise HTTPException(404, "admin API disabled")
     if not x_vitrial_admin_key:
         log_event("admin.authentication_failed", reason="missing_key")
+        auth_failures_total.inc(reason="admin_missing_key")
         raise HTTPException(401, "admin authentication required")
     supplied_hash = hashlib.sha256(x_vitrial_admin_key.encode("utf-8")).hexdigest()
     if not hmac.compare_digest(supplied_hash, configured_hash.lower()):
         log_event("admin.authentication_failed", reason="invalid_key")
+        auth_failures_total.inc(reason="admin_invalid_key")
         raise HTTPException(401, "admin authentication failed")
 
 

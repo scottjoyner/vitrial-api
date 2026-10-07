@@ -175,3 +175,43 @@ async def test_membership_in_another_organization():
     await _reset()
     await _seed(membership_org="org-wire-2")
     _assert_refusal(_get(_bearer()), MEMBERSHIP_MISMATCH)
+
+
+@pytest.mark.asyncio
+async def test_every_refusal_is_counted_under_its_own_reason():
+    """vitrial_auth_failures_total was declared and never written, so it was absent from
+    every scrape -- an auth-failure spike was invisible to monitoring. Each refusal now
+    increments its own bounded reason, asserted as a DELTA because the registry is
+    process-wide and other tests also authenticate."""
+    from app.metrics import auth_failures_total
+
+    def counts() -> dict[str, float]:
+        return {
+            reason: auth_failures_total.value(reason=reason)
+            for reason in (
+                "authentication_required",
+                "session_expired_or_revoked",
+                "membership_inactive",
+                "session_membership_mismatch",
+            )
+        }
+
+    before = counts()
+    _get()  # no header
+    await _reset()
+    await _seed(expires_in=-timedelta(seconds=1))
+    _get(_bearer())  # expired
+    await _reset()
+    await _seed(active=False)
+    _get(_bearer())  # inactive
+    await _reset()
+    await _seed(membership_org="org-wire-2")
+    _get(_bearer())  # mismatch
+    after = counts()
+
+    assert {k: after[k] - before[k] for k in after} == {
+        "authentication_required": 1,
+        "session_expired_or_revoked": 1,
+        "membership_inactive": 1,
+        "session_membership_mismatch": 1,
+    }

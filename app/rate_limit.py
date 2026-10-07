@@ -71,6 +71,11 @@ THROTTLED_PATH_PREFIXES: tuple[str, ...] = (
     # credential. Operators make a handful of these calls; 30/min per client is invisible
     # to them and bounds both guessing and 404-probing when the plane is disabled.
     "/internal/admin/v1",
+    # /metrics checks the SAME admin key. Leaving it unthrottled made it a side door for
+    # unbounded admin-key guessing around the limit above. Its own bucket (one per surface)
+    # means a Prometheus scraper -- 4/min at a 15 s interval -- neither consumes the
+    # operator budget nor comes near the 30/min ceiling.
+    "/metrics",
 )
 
 # Never more than this many distinct keys retained, so the limiter's own memory is

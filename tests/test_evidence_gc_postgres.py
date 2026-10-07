@@ -486,3 +486,34 @@ def test_the_collector_commits_once_per_run():
             "rows it has not reached yet (VITR-V011)"
         )
     assert len(commits(collect.body)) == 1, "the run should end in exactly one commit"
+
+
+@pytest.mark.asyncio
+async def test_backlog_gauge_reports_due_and_queued_separately(db, local_store):
+    """vitrial_evidence_gc_backlog was declared and never written. As an unlabelled gauge
+    it rendered 0 on every scrape -- "the queue is empty" -- whether or not the collector
+    had run in weeks. It now samples the queue at scrape time, splitting rows past their
+    grace (work the collector should already have done) from rows still inside it
+    (expected after any replace). Deltas, because the queue table is shared."""
+    from app.metrics import evidence_gc_backlog, refresh_gc_backlog
+
+    await _clear(db)
+    await _seed_org(db)
+    await refresh_gc_backlog(db)
+    queued0 = evidence_gc_backlog.value(state="queued")
+    due0 = evidence_gc_backlog.value(state="due")
+
+    now = datetime.now(timezone.utc)
+    await _queue(db, local_store, key="blobs/backlog-due", grace=0,
+                 due_at=now - timedelta(seconds=60))
+    from app.models import EvidenceObjectGC as _GC
+    db.add(_GC(organization_id="org-1", document_id="doc-1", storage_provider=local_store.provider,
+               object_key="blobs/backlog-future", reason="replaced",
+               not_before=now + timedelta(hours=1)))
+    await db.commit()
+
+    await refresh_gc_backlog(db)
+    assert evidence_gc_backlog.value(state="queued") - queued0 == 2
+    assert evidence_gc_backlog.value(state="due") - due0 == 1, (
+        "only the row past its grace is overdue work"
+    )

@@ -134,6 +134,8 @@ def test_only_the_unauthenticated_auth_surface_is_throttled():
     assert path_is_throttled("/internal/admin/v1/bootstrap")
     assert path_is_throttled("/internal/admin/v1/pairing-grants")
     assert path_is_throttled("/internal/admin/v1/sessions/s-1/revoke")
+    # /metrics checks the same admin key, so it must not be an unthrottled side door.
+    assert path_is_throttled("/metrics")
     # The only throttled route is the pairing exchange; /api/v1/auth/refresh has no live route.
     assert not path_is_throttled("/api/v1/auth/refresh")
     # Authenticated traffic is bounded by push serialization, not by client address.

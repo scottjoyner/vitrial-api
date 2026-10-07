@@ -24,6 +24,7 @@ from app.drain import lifespan as drain_lifespan
 from app.evidence import put_blob
 from app.models import EvidenceBlob
 from app.metrics import refresh_dependency_gauges
+from app.metrics import refresh_gc_backlog
 from app.metrics import registry
 from app.metrics_middleware import MetricsMiddleware
 from app.request_size import RequestSizeLimitMiddleware
@@ -193,6 +194,7 @@ async def ready(response: Response) -> ReadinessResponse:
 @app.get("/metrics", include_in_schema=False)
 async def metrics(
     _: None = Depends(require_admin_key),
+    db: AsyncSession = Depends(session_scope),
 ) -> Response:
     """Prometheus exposition of the counters that back the runbook.
 
@@ -203,6 +205,10 @@ async def metrics(
     configured, so a default deployment exposes nothing.
     """
     refresh_dependency_gauges()
+    # One cheap count per scrape (two indexed-or-small aggregates over the GC queue),
+    # behind the admin key, at Prometheus's scrape interval -- not per request. Fails soft:
+    # a database error leaves the backlog gauge unset for this scrape and the rest renders.
+    await refresh_gc_backlog(db)
     return Response(content=registry.render(), media_type="text/plain; version=0.0.4")
 
 

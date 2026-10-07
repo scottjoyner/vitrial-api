@@ -401,13 +401,11 @@ sync_mutations_total = registry.register(
     )
 )
 
-sync_commit_duration_seconds = registry.register(
-    Histogram(
-        "vitrial_sync_commit_duration_seconds",
-        "Time to commit a sync mutation, by outcome code.",
-        ("code",),
-    )
-)
+# There is deliberately no per-mutation commit-duration histogram. One was declared here
+# (`vitrial_sync_commit_duration_seconds{code}`) and never written: a push commits the whole
+# batch in ONE transaction, so there is no honest per-mutation commit time to observe, and a
+# declared-but-unwritten labelled metric is silently absent from every scrape. Push latency
+# is already covered per route by vitrial_request_duration_seconds.
 
 # Page size is a distribution, not a sum: a pull returning 3 records and one returning
 # 400 are both "working", and the ceiling is what tells them apart.
@@ -485,7 +483,9 @@ evidence_gc_total = registry.register(
 evidence_gc_backlog = registry.register(
     Gauge(
         "vitrial_evidence_gc_backlog",
-        "Evidence GC objects queued but not yet collected.",
+        "Evidence GC queue depth: state=queued is every row, state=due is rows past "
+        "their grace period that the collector should already have removed.",
+        ("state",),
     )
 )
 
@@ -519,6 +519,14 @@ def refresh_dependency_gauges() -> None:
     more dangerous lie -- an operator would conclude there is headroom during exactly
     the exhaustion they are trying to diagnose.
     """
+    # Build info is a process constant, but it is set here -- on every scrape -- rather
+    # than once at import. It was declared and never set at all (so absent from every
+    # scrape), and setting it at import would also be undone by registry.reset(). Setting
+    # it where it is read makes "present on every scrape" true by construction.
+    from app.settings import settings
+
+    service_info.set(1, service_version=settings.service_version)
+
     try:
         from app.db import engine
     except Exception:  # noqa: BLE001 -- never let a metric break a scrape
@@ -541,3 +549,38 @@ def refresh_dependency_gauges() -> None:
         db_pool_size.set(0)
         db_pool_checked_out.set(0)
         db_pool_saturated.set(0)
+
+
+async def refresh_gc_backlog(db) -> None:
+    """Sample the evidence-GC queue depth at scrape time.
+
+    `vitrial_evidence_gc_backlog` was declared and never written. Being an unlabelled gauge
+    it rendered `0` on every scrape -- reading as "the GC queue is empty" whether or not the
+    collector had run in weeks. That is worse than an absent metric: an absent one prompts a
+    question, a zero answers it wrongly.
+
+    Two numbers matter and are reported separately: rows that are DUE (not_before has
+    passed) are work the collector should already have done; rows still inside their grace
+    period are expected. Alerting on total depth would fire after every routine replace.
+
+    Fails soft: a database error must cost this metric, never the scrape. On failure the
+    gauges are left unset for this scrape rather than reporting a stale or fabricated value.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func, select
+
+    from app.models import EvidenceObjectGC
+
+    try:
+        now = datetime.now(timezone.utc)
+        total = await db.scalar(select(func.count()).select_from(EvidenceObjectGC))
+        due = await db.scalar(
+            select(func.count())
+            .select_from(EvidenceObjectGC)
+            .where(EvidenceObjectGC.not_before <= now)
+        )
+    except Exception:  # noqa: BLE001 -- see docstring
+        return
+    evidence_gc_backlog.set(float(total or 0), state="queued")
+    evidence_gc_backlog.set(float(due or 0), state="due")
