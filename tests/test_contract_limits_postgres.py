@@ -146,3 +146,59 @@ def test_evidence_filename_header_over_512_is_422():
         )
     assert response.status_code == 422, response.text[:300]
     assert "X-Vitrial-Filename" in response.text or "x-vitrial-filename" in response.text.lower()
+
+
+# ── #28: near-limit record and compressed-transport ──────────────────────────
+
+
+def test_a_record_exactly_at_the_payload_ceiling_is_accepted_and_one_byte_over_is_not():
+    """Off-by-one is how a ceiling silently drifts; both sides of the edge are pinned.
+
+    At the limit the batch passes transport validation (200 -- whatever the mutation's own
+    outcome); one byte over is refused by the schema before any mutation is attempted.
+    """
+    from app.schemas import MAX_SYNC_V1_WIRE_PAYLOAD_BYTES
+
+    at_limit = {"deviceID": "dev-1", "records": [_record(0, "A" * MAX_SYNC_V1_WIRE_PAYLOAD_BYTES)]}
+    over = {"deviceID": "dev-1", "records": [_record(0, "A" * (MAX_SYNC_V1_WIRE_PAYLOAD_BYTES + 1))]}
+    with TestClient(app) as client:
+        accepted = client.post("/api/v1/sync/push", json=at_limit, headers=AUTH)
+        refused = client.post("/api/v1/sync/push", json=over, headers=AUTH)
+    assert accepted.status_code == 200, accepted.text[:300]
+    assert refused.status_code == 422, refused.text[:300]
+    assert any(
+        e.get("loc", [])[-1:] == ["payload"] and e.get("type") == "bytes_too_long"
+        for e in _errors(refused)
+    ), refused.text[:300]
+
+
+def test_compressed_request_bodies_are_never_inflated():
+    """No decompression, so no decompression bomb.
+
+    The byte guard counts WIRE bytes. If any layer inflated `Content-Encoding: gzip`
+    request bodies, a few kilobytes on the wire could expand to gigabytes after the guard
+    had already approved them. This sends a gzip body that would inflate to ~64 MiB -- far
+    past every ceiling -- and asserts it is refused as unparseable rather than expanded.
+    """
+    import gzip
+    import time
+
+    bomb = gzip.compress(b"{" + b" " * (64 * 1024 * 1024) + b"}")
+    assert len(bomb) < 128 * 1024, "the fixture must be small on the wire to be a bomb"
+
+    with TestClient(app) as client:
+        started = time.perf_counter()
+        response = client.post(
+            "/api/v1/sync/push",
+            content=bomb,
+            headers={**AUTH, "Content-Type": "application/json", "Content-Encoding": "gzip"},
+        )
+        elapsed = time.perf_counter() - started
+
+    # 400, measured -- not the 422 first assumed here. Starlette refuses the raw gzip bytes
+    # at JSON PARSE time, before pydantic validation ever runs, which is exactly the
+    # evidence that nothing inflated them.
+    assert response.status_code == 400, response.text[:300]
+    assert response.json() == {"detail": "There was an error parsing the body"}
+    # Inflating and parsing 64 MiB takes seconds; refusing the raw bytes takes milliseconds.
+    assert elapsed < 2.0, f"took {elapsed:.2f}s -- the body may have been inflated"

@@ -103,14 +103,11 @@ No open PRs. No Jira, no in-repo board, no beads records.
 
 ### P0 — bound the data plane
 
-- [~] Define a hard **aggregate** sync request ceiling enforced while reading the body.
-  V1 has it (`MAX_SYNC_V1_BATCH_PAYLOAD_BYTES` + `RequestSizeLimitMiddleware`).
-  **V2 does not** — see `VITR-V001`. Chunked path is buffered by the middleware.
+- [x] Define a hard **aggregate** sync request ceiling enforced while reading the body. V1 and V2 both: `MAX_SYNC_V1_BATCH_PAYLOAD_BYTES` and the `SyncBatchV2` aggregate validator, plus a 4 MiB `RequestSizeLimitMiddleware` guard on BOTH push paths (`/api/v2/sync/push` added by W1 `18a4198`; the old "V2 does not — see VITR-V001" note was stale). Every value is listed in `docs/contract/LIMITS.md` and checked.
 - [x] Hard sync response/page byte budget, deterministic by record count **and** encoded bytes
   (`pull_page_accepts`, `MAX_SYNC_PULL_RESPONSE_BYTES`; `sync_service.py`).
 - [x] Evidence uploads on a separate streaming ceiling (`evidence_max_bytes`).
-- [~] Content-Length **and** chunked over-limit tests exist for V1
-  (`test_request_size.py`); near-limit-record and compressed-transport tests do not.
+- [x] Content-Length **and** chunked over-limit tests exist for V1 (`test_request_size.py`). Now also: **near-limit** — a record exactly at `MAX_SYNC_V1_WIRE_PAYLOAD_BYTES` is accepted and one byte over is refused (off-by-one control confirmed red) — and **compressed transport** — a gzip body that would inflate to 64 MiB is refused at parse time (400) in milliseconds, i.e. never inflated, so no decompression bomb past the wire-byte guard (`tests/test_contract_limits_postgres.py`).
 - [~] Edge/application rate limits. Pairing **and the admin control plane** (`/internal/admin/v1/*`, incl. the nested `pairing-grants`) are throttled, one budget per (surface, client), refused before the handler (commit "Rate-limit the admin control plane, with a separate budget per surface"). Still application-level and in-process; no edge (Caddy) limit, and per-instance only.
   Sync/evidence/admin are unthrottled; pairing limiter is XFF-evadable (`VITR-V003`).
 - [x] Load-test rejection paths so abusive traffic fails cheaply — measured, not load-tested: `tests/test_rejection_cost_postgres.py` counts engine connection checkouts per abusive request shape. No/non-bearer auth, oversized body, throttled pairing/admin: **0** connections. Unknown token: **exactly 1** (the irreducible lookup), pinned so it cannot grow. Two controls confirmed red.
@@ -128,16 +125,15 @@ No open PRs. No Jira, no in-repo board, no beads records.
 ### P1 — sync scalability & concurrency
 
 - [x] Benchmark org-wide `FOR UPDATE` serialization (`#59`) — measured, cost noted.
-- [ ] Replace repeated `max(server_revision)+1` with a safe revision allocator — not replaced; still correct under the org row lock.
+- [x] Revision allocator — **decided: kept.** `max(server_revision)+1` is correct because every push holds the organization row lock, which serializes allocation; the concurrency suite (`test_sync_concurrency.py`) and the serialization-retry tests pin it. A sequence would only be needed if allocation ever moved outside that lock.
 - [x] Remove/contain pull N+1 — `pull_prefetch.py` batched it; measured `#61` (604 → 4).
 - [x] Configure DB pool explicitly (`#42`).
 - [x] Deadlock/serialization retry policy (`#46/#49/#56`).
-- [~] Concurrency tests for duplicate mutation IDs (`test_sync_concurrency.py`),
-  tombstone resurrection (`#50`), cross-device lifecycle; evidence-replace contention not directly covered.
+- [x] Concurrency tests for duplicate mutation IDs (`test_sync_concurrency.py`), tombstone resurrection (`#50`), cross-device lifecycle, and now **evidence-replace contention**: two real concurrent `put_blob` replaces on separate sessions leave the canonical pointer naming an object that exists, no orphan (every written object canonical or queued), and the live object never queued (`tests/test_evidence_replace_contention_postgres.py`; control — dropping the replace GC queueing — names the orphans; 5/5 stable).
 
 ### P1 — reproducible deploy & supply chain
 
-- [~] Reproducible Python lock. `requirements-lock.txt` (CI) and `requirements-runtime-lock.txt` (image, `150c7ac`) both exist and the image installs pinned versions — but the two **disagree** on sqlalchemy/boto3/botocore/markupsafe and the runtime gate re-resolves live PyPI. See `VITR-V017`; not done until both are fixed.
+- [x] Reproducible Python lock. `requirements-lock.txt` (what CI tests) is the version source of truth; `requirements-runtime-lock.txt` (what the image installs) is generated from it as a pip constraint, so they cannot disagree (`VITR-V017`, `4ec9341`). Offline `--check`, a `--no-deps` + `pip check` closure step in CI, and Dependabot configured to propose only mergeable bumps (`VITR-V018`).
 - [x] Pin runtime images by digest. Production runs only `API_IMAGE` and `CADDY_IMAGE`, and `validate_deployment.py` refuses either without `@sha256:` (tested). Postgres/S3 images exist only in the ACCEPTANCE topology, which pins by tag deliberately and refuses `:latest` (now tested). The old "Caddy, Postgres, S3 floating" note was stale; it also hid an unreachable `mode == "production"` check nested inside the acceptance-only branch, removed in the same pass. `alpine:3.20` (acceptance-only chown helper) is the one literal tag left.
 - [x] Image/package vulnerability scanning and SBOM in candidate CI. The image scan ran with `exit-code: '0'` — a fixable HIGH/CRITICAL in the shipped image was printed and passed. Now enforced (`exit-code: '1'`, `ignore-unfixed`), flipped after measuring 0 such findings across all 36 image targets. A CycloneDX SBOM of the image is generated and uploaded (90 days). Verified green in CI on `f6440fe`.
 - [x] Validate production settings on startup/preflight (`validate_deployment.py`, `probe_production_preflight.py`, `deploy/README.md`).
@@ -333,7 +329,7 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - **Done when:** ✅ the sync outcome stream now carries aggregatable, refactor-stable codes.
 
 ### Smaller / hygiene
-- [ ] Close issue #30's checkbox (MinIO→RustFS already landed); reconcile #2/#28 in GitHub.
+- [x] Close issue #30 / reconcile #2/#28 — **not applicable on this repo.** Those issues live on the retired `scottjoyner/vitrial-api` (push denied to this account); `astrix-group-accounts/server-api` has no GitHub issues, and this tracker is the source of truth.
 - [x] The four guard-prefix entries are a Rule-5 violation (closed by W1 `18a4198`; `scripts/check_guard_prefixes.py` runs in CI) — after W1, add a lint rule so a
       matching-by-class failure fails, per `AGENTS.md` "measure, don't assert". (Done: W1 + guard lint)
 
