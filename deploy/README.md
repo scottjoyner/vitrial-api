@@ -193,6 +193,29 @@ silently under-deletes is visible in `systemctl status` rather than looking heal
 
 Add the unit's result to the release evidence list below once it is installed.
 
+## Baseline reference publications backfill (one-off)
+
+Four reference-data GET routes seed the bundled baseline publications on first read, so a
+read can write and commit (`VITR-V004`). New organizations no longer depend on that:
+`bootstrap_identity` seeds them at creation (`03e10d9`). Organizations created before that
+change still rely on the lazy GET seed, and it cannot be removed until they are complete.
+
+Run once, against the same pinned image and env as the live service:
+
+```bash
+python scripts/validate_deployment.py --env-file /etc/vitrial/vitrial.env --mode production
+docker compose --env-file /etc/vitrial/vitrial.env -f deploy/compose.production.yml run --rm api \
+  python scripts/backfill_baseline_publications.py              # reports only
+docker compose --env-file /etc/vitrial/vitrial.env -f deploy/compose.production.yml run --rm api \
+  python scripts/backfill_baseline_publications.py --execute    # seeds what is missing
+```
+
+It is a dry run by default, inserts only what is missing through the same race-tolerant
+path the write route uses (safe to re-run, safe alongside live traffic), and re-measures
+committed state after `--execute`. Exit status is the answer: `0` and `incomplete=0` mean
+every organization has its baselines. Record that line in the release evidence; it is the
+precondition for deleting the lazy GET seed and closing `VITR-V004`.
+
 
 ## Read-only production provider preflight
 
