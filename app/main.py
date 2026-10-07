@@ -62,6 +62,12 @@ app.include_router(sync_v2_router)
 
 DocumentID = Annotated[str, Path(min_length=1)]
 
+# Evidence PUT header ceilings (W2). Named so docs/contract/LIMITS.md can cite them and
+# tests/test_contract_limits_doc.py can check the doc against them; the values are pinned
+# by contracts/backend/v1/openapi.yaml (maxLength 256 / 512) and must not change silently.
+EVIDENCE_ITEM_ID_MAX_LENGTH = 256
+EVIDENCE_FILENAME_MAX_LENGTH = 512
+
 
 def _route_template(request: Request) -> str | None:
     route = request.scope.get("route")
@@ -313,8 +319,8 @@ async def evidence_head(
 async def evidence_put(
     documentID: DocumentID,
     request: Request,
-    x_vitrial_item_id: Annotated[str, Header(alias="X-Vitrial-Item-ID", min_length=1, max_length=256)],
-    x_vitrial_filename: Annotated[str, Header(alias="X-Vitrial-Filename", min_length=1, max_length=512)],
+    x_vitrial_item_id: Annotated[str, Header(alias="X-Vitrial-Item-ID", min_length=1, max_length=EVIDENCE_ITEM_ID_MAX_LENGTH)],
+    x_vitrial_filename: Annotated[str, Header(alias="X-Vitrial-Filename", min_length=1, max_length=EVIDENCE_FILENAME_MAX_LENGTH)],
     x_content_sha256: Annotated[
         str,
         Header(alias="X-Content-SHA256", pattern=r"^[0-9a-fA-F]{64}$"),

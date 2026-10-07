@@ -117,9 +117,7 @@ No open PRs. No Jira, no in-repo board, no beads records.
 
 ### P0/P1 — production auth/session model
 
-- [~] Separate admin control plane from public listener. Admin is
-  `include_in_schema=False` and disabled unless `ADMIN_API_KEY_HASH` is set, but it still
-  shares the one listener with public routes.
+- [~] Separate admin control plane from public listener. Admin is `include_in_schema=False`, disabled unless `ADMIN_API_KEY_HASH` is set, and now **rate-limited** (own budget; so is `/metrics`, which checks the same key). It still shares the public listener, and that is a **deployment decision, not a code fix**: operators reach it through the public HTTPS edge today (README: "send the original key at provisioning time … over HTTPS"; the acceptance bootstrap script does too), so blocking `/internal/*` at Caddy would break provisioning. Options for the owner: a Caddy source-IP allow-list on `/internal/*`, or a second internal-only listener with provisioning via `docker compose exec`.
 - [x] Pairing/auth attempt throttling. Implemented on `/api/v1/auth/pair` — but weakened by `VITR-V003`.
 - [ ] Production session renewal; today a fixed bearer TTL + revoke-only.
 - [ ] Device-bound sessions (copied bearer stays useful without proof-of-possession).
@@ -148,8 +146,8 @@ No open PRs. No Jira, no in-repo board, no beads records.
 ### P1 — resilience & operations
 
 - [x] Metrics for request rate/latency/status, auth failures, sync outcome, DB pool, S3 latency, GC backlog, page sizes — `app/metrics.py`, `GET /metrics` (admin-gated, out of the pinned schema). Labels on the matched route template with a series cap; sync outcomes on the stable `VITR-V006` vocabulary; pull page size plus a truncation counter.
-- [~] Trace/correlation propagation. `X-Request-ID` accepted/preserved and one-way `sha256:` refs for org/actor/membership/session/entity/device. It is not a W3C `traceparent`; nothing crosses the iOS→API→DB→S3 boundary as one trace.
-- [ ] SLOs/alerts for availability, p95, sync failure rate, dependency readiness.
+- [x] Trace/correlation propagation. A valid W3C `traceparent` joins the caller's trace: `traceID`/`parentSpanID` from the header, a fresh `spanID` per request, all on every JSON log line. Strictly parsed (version 00, lowercase hex, non-zero ids) — anything else starts a new trace and is never reflected, matching `X-Request-ID`. Not echoed as a response header, because the V1 response shape is pinned. Outbound propagation to S3/PostgreSQL is not done: neither consumes trace context today.
+- [x] SLOs/alerts for availability, p95, sync failure rate, dependency readiness. `deploy/prometheus/alerts.yml`, 12 rules (<1% 5xx, p95 <1 s per route excl. evidence uploads, sync internal errors / rejection share / pull truncation, auth spikes, admin-key guessing, pool saturation, slow object store, stuck drain, overdue GC). Checked by `promtool` in CI **and** by `tests/test_alert_rules.py` against the live registry (metric, label, and closed-value existence). Readiness is a probe, not a metric, so it is consumed by the edge rather than alerted on.
 - [x] Graceful shutdown/drain test with in-flight sync and evidence streams — `app/drain.py`, `/ready` 503 on SIGTERM while `/health` stays 200, 45s uvicorn budget inside a 60s `stop_grace_period`, `deploy.sh` awaits the replaced container and fails on non-zero exit.
 - [ ] PostgreSQL backup/PITR and restore drill.
 - [~] S3 versioning/retention/restore policy and orphan/GC reconciliation runbook — GC exists and is scheduled (`deploy/gc-evidence.timer`), but no documented restore policy.
@@ -157,7 +155,7 @@ No open PRs. No Jira, no in-repo board, no beads records.
 ### P1 — contract discipline
 
 - [ ] Make V2 the production sync contract target with an explicit V1 deprecation window. Both are served; no window defined.
-- [~] Aggregate-size, schema-version, pagination semantics in the OpenAPI/contract docs. `entitySchemaVersion` exists; aggregate byte budgets are enforced but not fully described in the pinned contract.
+- [x] Aggregate-size, schema-version, pagination semantics in the contract docs. `docs/contract/LIMITS.md` lists every enforced ceiling, its value, its source constant and what exceeding it returns, including pull paging (which ends pages, never errors). Values are checked against the constants (`tests/test_contract_limits_doc.py`, incl. that every size-limited path is documented and every source-citing row is parsed); responses are **measured** against the real app (`tests/test_contract_limits_postgres.py`). Deliberately a reference beside the pinned contract, not an edit to `contracts/backend/v1/`.
 - [x] Federation fixtures consumed by both Python and Swift tests (`contracts/`).
 - [~] Old-client-against-new-server and vice-versa acceptance tests. V1 is pinned to a client SHA, but no cross-version acceptance matrix exists.
 - [x] Server authority never depends on iOS-only validation — ownership/lifecycle re-derived server-side in `ownership.py`, `lifecycle.py`, `delivery_execution.py`.
