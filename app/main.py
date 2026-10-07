@@ -40,6 +40,7 @@ from app.observability import (
     end_request,
     log_event,
     request_id_for_header,
+    trace_context_for_header,
 )
 from app.ownership import AuthorizationRejected, require_item_access
 from app.readiness import collect_dependency_readiness
@@ -70,7 +71,12 @@ def _route_template(request: Request) -> str | None:
 @app.middleware("http")
 async def request_correlation(request: Request, call_next):
     request_id = request_id_for_header(request.headers.get("x-request-id"))
-    tokens = begin_request(request_id)
+    # W3C Trace Context: a valid caller `traceparent` joins this request to the caller's
+    # trace; anything else starts a new one. Logged on every line as traceID/spanID/
+    # parentSpanID. Not echoed in a response header -- the response shape is pinned to the
+    # V1 client contract, and logs are where cross-system correlation is consumed today.
+    trace = trace_context_for_header(request.headers.get("traceparent"))
+    tokens = begin_request(request_id, trace)
     bind_request_metadata(
         device_id=request.headers.get("x-vitrial-device-id"),
         app_version=request.headers.get("x-vitrial-app-version"),

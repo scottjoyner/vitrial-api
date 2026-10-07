@@ -25,14 +25,18 @@ from fastapi.testclient import TestClient
 from app.drain import drain_state
 from app.main import app
 
-logging.disable(logging.CRITICAL)
-
-
 @pytest.fixture(autouse=True)
 def _reset_drain():
+    # Logging is quietened for THIS file's tests only. It used to be a module-level
+    # logging.disable(logging.CRITICAL), which ran at import and silenced logging for the
+    # whole remaining test run -- so any later test asserting on emitted log lines saw
+    # nothing. tests/conftest.py now restores the disable level around every test as well.
+    previous = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
     drain_state.reset()
     yield
     drain_state.reset()
+    logging.disable(previous)
 
 
 def test_health_stays_ok_but_ready_fails_once_draining():

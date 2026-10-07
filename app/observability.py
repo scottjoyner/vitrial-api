@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import re
+import secrets
 import sys
 import uuid
 from dataclasses import dataclass
@@ -51,6 +52,15 @@ _app_version: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _app_build: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "vitrial_app_build", default=None
 )
+_trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "vitrial_trace_id", default=None
+)
+_span_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "vitrial_span_id", default=None
+)
+_parent_span_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "vitrial_parent_span_id", default=None
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +73,9 @@ class RequestContextTokens:
     device_ref: contextvars.Token
     app_version: contextvars.Token
     app_build: contextvars.Token
+    trace_id: contextvars.Token | None = None
+    span_id: contextvars.Token | None = None
+    parent_span_id: contextvars.Token | None = None
 
 
 def correlation_ref(value: str | None) -> str | None:
@@ -85,6 +98,54 @@ def request_id_for_header(value: str | None) -> str:
     return str(uuid.uuid4())
 
 
+@dataclass(frozen=True)
+class TraceContext:
+    """W3C Trace Context identity for one request.
+
+    `trace_id` is shared with the caller when it sent a valid `traceparent`, so an iOS
+    request and this service's log lines carry ONE trace id -- which X-Request-ID alone
+    could not give: it is this service's own correlation value, not a cross-system one.
+    `parent_span_id` is the caller's span; `span_id` is minted here for this request.
+    """
+
+    trace_id: str
+    span_id: str
+    parent_span_id: str | None
+    sampled: bool
+
+
+_TRACEPARENT = re.compile(r"00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})")
+
+
+def trace_context_for_header(value: str | None) -> TraceContext:
+    """Parse a W3C `traceparent`, or start a new trace.
+
+    Strict on purpose, matching `request_id_for_header`: only a well-formed version-00
+    header is honoured. Anything else -- wrong version, uppercase hex, the all-zero ids the
+    spec declares invalid, extra fields -- starts a fresh trace instead of being reflected
+    into every log line. A header is caller-controlled text, and the log is where a
+    credential copied into the wrong header would otherwise land.
+    """
+    span_id = secrets.token_hex(8)
+    if value:
+        match = _TRACEPARENT.fullmatch(value.strip())
+        if match:
+            trace_id, parent_id, flags = match.groups()
+            if trace_id != "0" * 32 and parent_id != "0" * 16:
+                return TraceContext(
+                    trace_id=trace_id,
+                    span_id=span_id,
+                    parent_span_id=parent_id,
+                    sampled=bool(int(flags, 16) & 0x01),
+                )
+    return TraceContext(
+        trace_id=secrets.token_hex(16),
+        span_id=span_id,
+        parent_span_id=None,
+        sampled=False,
+    )
+
+
 def _release_value(value: str | None) -> str | None:
     if not value:
         return None
@@ -97,7 +158,8 @@ def _release_value(value: str | None) -> str | None:
     return normalized
 
 
-def begin_request(request_id: str) -> RequestContextTokens:
+def begin_request(request_id: str, trace: TraceContext | None = None) -> RequestContextTokens:
+    trace = trace or trace_context_for_header(None)
     return RequestContextTokens(
         request_id=_request_id.set(request_id),
         organization_ref=_organization_ref.set(None),
@@ -107,10 +169,19 @@ def begin_request(request_id: str) -> RequestContextTokens:
         device_ref=_device_ref.set(None),
         app_version=_app_version.set(None),
         app_build=_app_build.set(None),
+        trace_id=_trace_id.set(trace.trace_id),
+        span_id=_span_id.set(trace.span_id),
+        parent_span_id=_parent_span_id.set(trace.parent_span_id),
     )
 
 
 def end_request(tokens: RequestContextTokens) -> None:
+    if tokens.parent_span_id is not None:
+        _parent_span_id.reset(tokens.parent_span_id)
+    if tokens.span_id is not None:
+        _span_id.reset(tokens.span_id)
+    if tokens.trace_id is not None:
+        _trace_id.reset(tokens.trace_id)
     _app_build.reset(tokens.app_build)
     _app_version.reset(tokens.app_version)
     _device_ref.reset(tokens.device_ref)
@@ -170,6 +241,9 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname.lower(),
             "event": event,
             "requestID": _request_id.get(),
+            "traceID": _trace_id.get(),
+            "spanID": _span_id.get(),
+            "parentSpanID": _parent_span_id.get(),
             "organizationRef": _organization_ref.get(),
             "actorRef": _actor_ref.get(),
             "membershipRef": _membership_ref.get(),
