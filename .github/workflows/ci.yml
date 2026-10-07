@@ -28,14 +28,26 @@ jobs:
       - run: python scripts/validate_backend_contract.py
       - name: Guard-prefix lint (no declared guard maps to a dead route)
         run: python scripts/check_guard_prefixes.py
-      # The image installs requirements-runtime-lock.txt, so that file -- not
-      # requirements-lock.txt -- is what governs the shipped artifact. It is GENERATED
-      # by scripts/generate_runtime_lock.py and must stay current. --check re-resolves
-      # (needs network, ~2 min) which is why it is here and not in the unit suite; the
-      # suite has the offline guarantee instead, that every dependency declared in
-      # pyproject.toml is pinned in it.
-      - name: Runtime lockfile is current (the image installs this file)
+      # The image installs requirements-runtime-lock.txt, so that file governs the
+      # shipped artifact, and every version in it must be the version CI tests above.
+      #
+      # VITR-V017: this step used to re-resolve against LIVE PyPI and compare, so it went
+      # red whenever any transitive dependency published -- no code change, both agents
+      # blocked, and the tempting "fix" (regenerate) would silently upgrade the DB driver.
+      # It is now two deterministic checks:
+      #   1. --check is OFFLINE: each runtime pin equals the combined-lock pin, every
+      #      declared runtime dependency is pinned, and no dev tooling ships.
+      #   2. Closure: install the runtime lock exactly as the Dockerfile does
+      #      (--no-deps, then the project --no-deps) in a clean venv and `pip check`.
+      #      Pinned versions, so downloads are needed but no resolution happens.
+      - name: Runtime lock agrees with the combined lock (offline, deterministic)
         run: python scripts/generate_runtime_lock.py --check
+      - name: Runtime lock is a complete closure (installs as the Dockerfile does)
+        run: |
+          python -m venv /tmp/runtime-closure
+          /tmp/runtime-closure/bin/python -m pip install --quiet --no-deps -r requirements-runtime-lock.txt
+          /tmp/runtime-closure/bin/python -m pip install --quiet --no-deps .
+          /tmp/runtime-closure/bin/python -m pip check
       # Structural guards on the BEAM umbrella. Both are pure-stdlib Python and
       # read only source, so they belong in this job rather than the BEAM one:
       # no toolchain needed, about a second to run, and a scaffold or a dead

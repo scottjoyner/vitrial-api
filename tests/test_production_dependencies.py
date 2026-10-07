@@ -129,6 +129,56 @@ def test_the_runtime_lock_pins_exact_versions():
     assert unlocked == [], f"runtime lock entries must be pinned with ==: {unlocked}"
 
 
+def test_the_image_ships_exactly_the_versions_ci_tests():
+    """VITR-V017: every runtime pin must equal the combined-lock pin.
+
+    The image installs requirements-runtime-lock.txt; CI tests requirements-lock.txt. Before
+    this, the runtime lock was resolved from pyproject ranges and drifted from the combined
+    lock -- sqlalchemy 2.1.3 shipped while 2.1.1 was tested, plus boto3/botocore and
+    markupsafe. A lockfile that pins a version nothing tested is reproducible but not
+    verified, which is the guarantee it existed to give.
+
+    Offline and deterministic by construction: it reads two committed files and nothing
+    else, so unlike the previous live-PyPI comparison it cannot go red because an upstream
+    project published a release.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "generate_runtime_lock", ROOT / "scripts" / "generate_runtime_lock.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    assert module.check() == [], "\n".join(module.check())
+
+
+def test_the_runtime_lock_check_is_offline():
+    """The gate must not touch the network, or it is a timer rather than a gate.
+
+    Asserted structurally: `check` must not call the resolver. A future edit that made the
+    offline check "more thorough" by re-resolving would reintroduce exactly the
+    non-determinism VITR-V017 removed, and nothing behavioural would notice until PyPI moved.
+    """
+    import ast
+
+    source = (ROOT / "scripts" / "generate_runtime_lock.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    check_fn = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "check"
+    )
+    called = {
+        node.func.id
+        for node in ast.walk(check_fn)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    for network in ("resolve_runtime_closure", "generate", "_run"):
+        assert network not in called, f"check() must stay offline; it calls {network}()"
+
+
 def test_the_dockerfile_installs_the_runtime_lock_rather_than_resolving_ranges():
     """The lockfile is only a guarantee if the artifact that ships consumes it.
 
