@@ -1,0 +1,143 @@
+# Prometheus alerting rules for the Vitrial API.
+#
+# Built only on metrics the service actually WRITES. Every metric named here is checked by
+# tests/test_alert_rules.py against the live registry in app/metrics.py, and that registry is
+# itself guarded so a metric cannot be declared without a call site. An alert on a metric that
+# is misspelled, or declared and never recorded, never fires and never says so -- the failure
+# these two guards exist to make impossible.
+#
+# Scrape target: GET /metrics on the API, with the admin key in X-Vitrial-Admin-Key (the
+# endpoint is admin-gated and 404s when ADMIN_API_KEY_HASH is unset). Counters are
+# per-process and in-memory, so they reset on every deploy; every rule uses rate()/increase(),
+# which handle resets, never a raw counter value.
+#
+# What is deliberately NOT alerted on, and why:
+# - vitrial_evidence_gc_total. The collector runs as a separate one-shot container
+#   (scripts/run_evidence_gc.sh -> `docker compose run --rm api python scripts/gc_evidence.py`),
+#   so it increments in a process Prometheus never scrapes. A rule on it could never fire.
+#   GC health is observed instead through the backlog gauge below, which the scraped API
+#   samples from the database, and through the systemd unit's exit status.
+# - Readiness. /ready is a probe, not a metric; the edge and orchestrator consume it.
+
+groups:
+  - name: vitrial-api-availability
+    rules:
+      - alert: VitrialApiDown
+        expr: up{job="vitrial-api"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Vitrial API scrape target is down"
+          description: "Prometheus cannot scrape /metrics. Either the API is down or the admin key the scrape uses is wrong (a wrong key answers 401, which also reads as down)."
+
+      - alert: VitrialApi5xxRateHigh
+        # Availability SLO: under 1% of requests answered 5xx over 10 minutes.
+        expr: |
+          sum(rate(vitrial_requests_total{status_class="5xx"}[10m]))
+            / clamp_min(sum(rate(vitrial_requests_total[10m])), 1e-9) > 0.01
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "More than 1% of API requests are failing with 5xx"
+
+      - alert: VitrialApiLatencyP95High
+        # Latency SLO: p95 under 1 s per route. Evidence blob routes are excluded: they
+        # stream up to 100 MiB, so their latency measures the client's link, not the service.
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, route) (
+              rate(vitrial_request_duration_seconds_bucket{route!~"/api/v1/sync/evidence-blobs/.*"}[10m])
+            )
+          ) > 1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 latency above 1 s on {{ $labels.route }}"
+
+      - alert: VitrialDrainStuck
+        # The drain budget is 45 s (uvicorn) inside a 60 s stop grace. A process still
+        # draining after 5 minutes was never stopped, or is stuck.
+        expr: max(vitrial_drain_active) == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "An API instance has been draining for over 5 minutes"
+
+  - name: vitrial-api-sync
+    rules:
+      - alert: VitrialSyncInternalErrors
+        # internal_error is the code for an exception the rejection vocabulary does not map
+        # (app/rejection_codes.py). Any occurrence is a server bug, not a client problem.
+        expr: sum(increase(vitrial_sync_mutations_total{code="internal_error"}[15m])) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Sync mutations are failing with internal_error"
+
+      - alert: VitrialSyncRejectionRateHigh
+        # Share of mutations NOT committed (excluding idempotent replays, which are a
+        # correct answer to a retry). A sustained high share means clients are sending
+        # what the server refuses -- usually a contract or authorization drift.
+        expr: |
+          sum(rate(vitrial_sync_mutations_total{code!~"committed|idempotent_replay"}[30m]))
+            / clamp_min(sum(rate(vitrial_sync_mutations_total[30m])), 1e-9) > 0.2
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Over 20% of sync mutations are being rejected"
+
+      - alert: VitrialPullTruncationSustained
+        # A truncated page means the next record did not fit; the client re-pulls from an
+        # unchanged cursor. Occasional truncation is normal. Sustained truncation suggests a
+        # single record larger than the page ceiling, which stalls that client's sync.
+        expr: sum(increase(vitrial_sync_pull_truncated_total[30m])) > 50
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Sync pulls are repeatedly truncated; a client may be stalled"
+
+  - name: vitrial-api-auth
+    rules:
+      - alert: VitrialAuthFailureSpike
+        expr: sum(rate(vitrial_auth_failures_total[5m])) > 0.5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Sustained authentication failures (>0.5/s)"
+
+      - alert: VitrialAdminKeyGuessing
+        # The admin key mints sessions of up to 30 days. Wrong-key attempts are rate-limited
+        # per client; this catches a slow or distributed guess the limiter will not.
+        expr: sum(increase(vitrial_auth_failures_total{reason="admin_invalid_key"}[10m])) > 5
+        labels: {severity: critical}
+        annotations:
+          summary: "Repeated invalid admin-key attempts"
+
+  - name: vitrial-api-dependencies
+    rules:
+      - alert: VitrialDbPoolSaturated
+        # Only a real pool can saturate; under NullPool the gauge is honestly 0.
+        expr: max(max_over_time(vitrial_db_pool_saturated[5m])) == 1
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Database connection pool exhausted"
+
+      - alert: VitrialObjectStoreSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(vitrial_object_store_operation_duration_seconds_bucket{operation="put_verified"}[15m]))
+          ) > 30
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Evidence uploads to object storage p95 above 30 s"
+
+      - alert: VitrialEvidenceGcOverdue
+        # Rows past their grace period that the daily collector should have removed. The
+        # timer runs once a day, so a non-zero 'due' count for over 26 hours means a run was
+        # missed or is failing. This is the GC alert that CAN fire (see header).
+        expr: max(vitrial_evidence_gc_backlog{state="due"}) > 0
+        for: 26h
+        labels: {severity: warning}
+        annotations:
+          summary: "Evidence GC has overdue objects for more than a day"

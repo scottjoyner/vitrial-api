@@ -193,6 +193,37 @@ silently under-deletes is visible in `systemctl status` rather than looking heal
 
 Add the unit's result to the release evidence list below once it is installed.
 
+## Monitoring and alerts
+
+`GET /metrics` exposes Prometheus metrics. It is admin-gated (send the admin key in
+`X-Vitrial-Admin-Key`), answers 404 when `ADMIN_API_KEY_HASH` is unset, and is rate-limited
+in its own bucket, so a 15 s scrape interval (4/min) is well inside the 30/min ceiling.
+
+```yaml
+scrape_configs:
+  - job_name: vitrial-api        # deploy/prometheus/alerts.yml matches on this job name
+    metrics_path: /metrics
+    scheme: https
+    static_configs: [{targets: ["<API_HOST>"]}]
+    http_headers:
+      X-Vitrial-Admin-Key: {files: [/etc/prometheus/vitrial-admin-key]}
+rule_files: [/etc/prometheus/vitrial-alerts.yml]   # copy of deploy/prometheus/alerts.yml
+```
+
+`deploy/prometheus/alerts.yml` encodes the SLOs: under 1% 5xx, p95 under 1 s per route
+(evidence uploads excluded), plus sync internal errors, sustained rejection and pull
+truncation, auth-failure spikes, admin-key guessing, pool saturation, slow object storage,
+a stuck drain, and overdue evidence GC. CI checks it two ways: `promtool` for syntax, and
+`tests/test_alert_rules.py` for whether every metric, label and closed label value it names
+is one the service actually exports.
+
+Two limits to know:
+- Counters are per-process and reset on every deploy; the rules use `rate()`/`increase()`.
+- Evidence GC runs in a one-shot container that Prometheus never scrapes, so
+  `vitrial_evidence_gc_total` is not observable in production and no rule uses it. GC
+  health is `vitrial_evidence_gc_backlog{state="due"}` (sampled by the scraped API from
+  the database) plus the `gc-evidence.service` exit status.
+
 ## Baseline reference publications backfill (one-off)
 
 Four reference-data GET routes seed the bundled baseline publications on first read, so a

@@ -40,6 +40,21 @@ jobs:
       #   2. Closure: install the runtime lock exactly as the Dockerfile does
       #      (--no-deps, then the project --no-deps) in a clean venv and `pip check`.
       #      Pinned versions, so downloads are needed but no resolution happens.
+      # Alert rules: promtool validates PromQL syntax; tests/test_alert_rules.py (in the
+      # suite) validates that every metric, label and closed label value the rules name is
+      # one the service actually exports. Each half catches what the other cannot -- valid
+      # PromQL against a misspelled metric matches nothing and never fires.
+      # Pinned exactly, like gitleaks: a validator that changes between runs makes two runs
+      # incomparable. v3.5.0 is the version the rules were first validated against.
+      - name: Alert rules are valid PromQL (promtool)
+        run: |
+          set -euo pipefail
+          PROM_VERSION=3.5.0
+          curl -sSfL \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz" \
+            -o /tmp/prometheus.tgz
+          tar -xzf /tmp/prometheus.tgz -C /tmp "prometheus-${PROM_VERSION}.linux-amd64/promtool"
+          "/tmp/prometheus-${PROM_VERSION}.linux-amd64/promtool" check rules deploy/prometheus/alerts.yml
       - name: Runtime lock agrees with the combined lock (offline, deterministic)
         run: python scripts/generate_runtime_lock.py --check
       - name: Runtime lock is a complete closure (installs as the Dockerfile does)
