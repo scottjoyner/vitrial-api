@@ -20,6 +20,10 @@ class StrictModel(BaseModel):
 class SectionInput(StrictModel):
     id: str = Field(min_length=1, max_length=128)
     type: str = Field(min_length=1, max_length=64)
+    openingDirection: str | None = Field(default=None, max_length=64)
+    widthMM: float | None = Field(default=None, gt=0)
+    heightMM: float | None = Field(default=None, gt=0)
+    relativeWidth: float | None = Field(default=None, gt=0)
 
 class VanoSegmentInput(StrictModel):
     id: str = Field(min_length=1, max_length=128)
@@ -36,6 +40,9 @@ class GlassPanelInput(StrictModel):
     thicknessID: str | None = Field(default=None, max_length=128)
     colorID: str | None = Field(default=None, max_length=128)
     treatmentID: str | None = Field(default=None, max_length=128)
+    classificationID: str | None = Field(default=None, max_length=128)
+    dimensionSource: str | None = Field(default=None, max_length=128)
+    calculationRuleID: str | None = Field(default=None, max_length=128)
     widthMM: float | None = Field(default=None, gt=0)
     heightMM: float | None = Field(default=None, gt=0)
     quantity: int = Field(default=1, ge=1, le=1000)
@@ -61,6 +68,7 @@ class CalculationInput(StrictModel):
     additionalVanoSegments: list[VanoSegmentInput] = Field(default_factory=list, max_length=64)
     glassPanels: list[GlassPanelInput] = Field(default_factory=list, max_length=256)
     sections: list[SectionInput] = Field(default_factory=list, max_length=256)
+    sectionWidthProvenance: dict[str, Literal["estimatedFromProductWidth", "operatorEntered"]] = Field(default_factory=dict)
     hardwareIDs: list[str] = Field(default_factory=list, max_length=256)
     accessoryIDs: list[str] = Field(default_factory=list, max_length=256)
     selectedComponentCatalogIDs: list[str] = Field(default_factory=list, max_length=256)
