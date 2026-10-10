@@ -181,9 +181,18 @@ async def preview_item_components(
         overrides=request.overrides,
         override_authorized="item.components.override" in principal.capabilities,
     )
+    # A malformed approved publication is a configuration conflict, not a 500
+    # and certainly not a reason to invent missing references.
+    selected_ids = set(request.configuration.selectedComponentCatalogIDs)
+    try:
+        snapshots = _catalog_snapshots(
+            catalog_payload, [entry for entry in catalog if entry.id in selected_ids]
+        )
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise HTTPException(409, "Published component references are invalid.") from exc
     return ComponentCalculationPreviewResponse(
         catalogContentSHA256=catalog_publication.content_sha256,
         rulesContentSHA256=rules_publication.content_sha256,
-        catalogEntries=_catalog_snapshots(catalog_payload, catalog),
+        catalogEntries=snapshots,
         calculation=calculation,
     )
