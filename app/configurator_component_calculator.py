@@ -228,6 +228,14 @@ def calculate_components(
             quantity = override.quantity
             origin = "authorized_override"
             reason = override.reason
+        # Counts of discrete panels/hardware cannot contain fractional units.
+        # Fractional linear metres and square metres remain legitimate.
+        if entry.unit in ("each", "panel") and not quantity.is_integer():
+            issues.append(f"non-integral quantity for discrete component: {component_id}")
+            continue
+        if quantity > 1_000_000:
+            issues.append(f"component quantity exceeds safety bound: {component_id}")
+            continue
         instance_id = "|".join([
             configuration.itemID, configuration.configurationID,
             str(configuration.configurationVersion), rule.id, entry.id
