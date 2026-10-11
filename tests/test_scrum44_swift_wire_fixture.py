@@ -113,8 +113,8 @@ def test_published_route_request_fields_still_match_swift_envelope():
         if isinstance(assignment, ast.AnnAssign)
         and isinstance(assignment.target, ast.Name)
     }
-    assert EXPECTED_FIELDS.issubset(fields)
-    assert "overrides" in fields  # Server capability remains disabled for iOS.
+    assert fields == EXPECTED_FIELDS | {"overrides"}
+    # iOS deliberately omits server-only override requests.
 
 
 def test_fixture_contains_no_manufacturing_authority_or_secrets():
@@ -129,3 +129,43 @@ def test_fixture_contains_no_manufacturing_authority_or_secrets():
     )
     for name in forbidden:
         assert name not in payload
+
+
+def test_preview_body_guard_tracks_composed_route_prefix_and_declaration():
+    """A router-prefix rename must fail before shipping an unguarded endpoint."""
+    from app.request_size import _COMPONENT_PREVIEW_PATH
+
+    src = (ROOT / "app/configurator_component_routes.py").read_text()
+    tree = ast.parse(src)
+    routers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "router" for t in node.targets)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "APIRouter"
+    ]
+    assert len(routers) == 1
+    prefixes = [
+        k.value.value
+        for k in routers[0].value.keywords
+        if k.arg == "prefix" and isinstance(k.value, ast.Constant)
+    ]
+    assert len(prefixes) == 1
+    endpoint_suffixes = [
+        decorator.args[0].value
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef)
+        and node.name == "preview_item_components"
+        for decorator in node.decorator_list
+        if isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "post"
+        and decorator.args
+        and isinstance(decorator.args[0], ast.Constant)
+    ]
+    assert len(endpoint_suffixes) == 1
+    actual_route = prefixes[0] + endpoint_suffixes[0]
+    assert actual_route.replace("{item_id}", "request-item") == PREVIEW_PATH
+    assert _COMPONENT_PREVIEW_PATH.fullmatch(PREVIEW_PATH)

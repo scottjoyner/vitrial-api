@@ -28,3 +28,15 @@ A **real Swift JSON encoder output**, generated from local iOS commit `0d49a04`,
 The API test `test_scrum44_swift_wire_fixture.py` exercises **the real Swift-encoded input**, using the pure `CalculationInput` model and static source checks of the preview request envelope. It verifies the 512 KiB iOS ceiling, the 2 MiB backend ceiling, milliseconds-to-millimeters conversion in the populated fields, corner vane provenance, per-panel references, pinned digests, negative dangling sections and zero width. **This is not full FastAPI request-model or authenticated HTTP coverage**: SQLAlchemy is absent from this sandbox, so importing the API route to validate `ComponentCalculationPreviewRequest` was not possible. The exact GitHub PR #149 head also remains separately untested.
 
 **Validation at this checkpoint:** **43 Python focused tests** passed, Ruff E/F passed, production and acceptance Compose parse checks passed. The paired iOS isolated source branch passed **10 relevant Swift tests**.
+
+## Independent free-model review and regression repairs
+
+A bounded `opencode/space-bunny-free` session reviewed this exact branch at `5dd3ac6` without editing any files. It confirmed the request-only scope and exposed three test false-positives, now repaired:
+
+- The Compose default is compared with the **actual source constant**, while a separately pinned 2 MiB invariant guards against an unreviewed cap change.
+- The effective `caddy.environment.CADDY_MAX_REQUEST_BODY` fallback is checked in **both** Compose files, not just an `.env.example`. This is still an offline default-only check, not an override-capacity proof.
+- The preview guard test now composes `APIRouter(prefix=...)` with the actual `@router.post(...)` decorator and verifies the resulting path is size-limited. The request envelope AST test requires the **exact** declared fields, including server-only optional `overrides`.
+
+Focused Python suite: **46 passed**, Ruff E/F passed. The Swift isolated branch separately passed **all 639 Swift package tests**. These findings are local static/source evidence; live auth, signed vendor rules, response receipt decoding, exact GitHub PR-head parity and iPhone acceptance remain unverified.
+
+**Next missing contract:** a *server-generated* `ComponentCalculationPreviewResponse` wire fixture (with `authorization: read_only_preview`, source digests and `CalculationReceipt`) successfully decoded by the exact Swift response model. The current Swift request fixture cannot prove response receipt authority; do not treat it as a manufacturing or quotation release.
