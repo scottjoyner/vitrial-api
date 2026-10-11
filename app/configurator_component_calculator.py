@@ -20,6 +20,33 @@ class StrictModel(BaseModel):
 class SectionInput(StrictModel):
     id: str = Field(min_length=1, max_length=128)
     type: str = Field(min_length=1, max_length=64)
+    openingDirection: str | None = Field(default=None, max_length=64)
+    widthMM: float | None = Field(default=None, gt=0)
+    heightMM: float | None = Field(default=None, gt=0)
+    relativeWidth: float | None = Field(default=None, gt=0)
+
+class VanoSegmentInput(StrictModel):
+    id: str = Field(min_length=1, max_length=128)
+    label: str = Field(min_length=1, max_length=256)
+    widthMM: float = Field(gt=0)
+    heightMM: float = Field(gt=0)
+    stage: Literal["reported", "confirmed", "final"] = "reported"
+
+
+class GlassPanelInput(StrictModel):
+    id: str = Field(min_length=1, max_length=128)
+    sectionID: str = Field(min_length=1, max_length=128)
+    glassTypeID: str | None = Field(default=None, max_length=128)
+    thicknessID: str | None = Field(default=None, max_length=128)
+    colorID: str | None = Field(default=None, max_length=128)
+    treatmentID: str | None = Field(default=None, max_length=128)
+    classificationID: str | None = Field(default=None, max_length=128)
+    dimensionSource: str | None = Field(default=None, max_length=128)
+    calculationRuleID: str | None = Field(default=None, max_length=128)
+    widthMM: float | None = Field(default=None, gt=0)
+    heightMM: float | None = Field(default=None, gt=0)
+    quantity: int = Field(default=1, ge=1, le=1000)
+
 
 class CalculationInput(StrictModel):
     itemID: str = Field(min_length=1, max_length=256)
@@ -27,9 +54,23 @@ class CalculationInput(StrictModel):
     configurationVersion: int = Field(ge=1)
     itemTypeID: str = Field(min_length=1, max_length=128)
     aluminumSystemID: str | None = Field(default=None, max_length=128)
+    aluminumProfileID: str | None = Field(default=None, max_length=128)
+    aluminumColorID: str | None = Field(default=None, max_length=128)
+    glassTypeID: str | None = Field(default=None, max_length=128)
+    glassThicknessID: str | None = Field(default=None, max_length=128)
+    glassColorID: str | None = Field(default=None, max_length=128)
+    glassTreatmentID: str | None = Field(default=None, max_length=128)
+    measurementStage: Literal["reported", "confirmed", "final"] = "reported"
+    vanoWidthMM: float | None = Field(default=None, gt=0)
+    vanoHeightMM: float | None = Field(default=None, gt=0)
     widthMM: float | None = Field(default=None, gt=0)
     heightMM: float | None = Field(default=None, gt=0)
+    additionalVanoSegments: list[VanoSegmentInput] = Field(default_factory=list, max_length=64)
+    glassPanels: list[GlassPanelInput] = Field(default_factory=list, max_length=256)
     sections: list[SectionInput] = Field(default_factory=list, max_length=256)
+    sectionWidthProvenance: dict[str, Literal["estimatedFromProductWidth", "operatorEntered"]] = Field(default_factory=dict)
+    hardwareIDs: list[str] = Field(default_factory=list, max_length=256)
+    accessoryIDs: list[str] = Field(default_factory=list, max_length=256)
     selectedComponentCatalogIDs: list[str] = Field(default_factory=list, max_length=256)
 
     @model_validator(mode="after")
@@ -38,6 +79,16 @@ class CalculationInput(StrictModel):
             raise ValueError("section IDs must be unique")
         if len(set(self.selectedComponentCatalogIDs)) != len(self.selectedComponentCatalogIDs):
             raise ValueError("component catalog IDs must be unique")
+        if len({s.id for s in self.additionalVanoSegments}) != len(self.additionalVanoSegments):
+            raise ValueError("additional vano segment identities must be unique")
+        if len({p.id for p in self.glassPanels}) != len(self.glassPanels):
+            raise ValueError("glass panel identities must be unique")
+        section_ids = {s.id for s in self.sections}
+        if any(panel.sectionID not in section_ids for panel in self.glassPanels):
+            raise ValueError("glass panel references missing structural section")
+        for field in (self.hardwareIDs, self.accessoryIDs):
+            if len(field) != len(set(field)):
+                raise ValueError("selected hardware/accessory identities must be unique")
         return self
 
 class TrustedCatalogEntry(StrictModel):
@@ -177,6 +228,14 @@ def calculate_components(
             quantity = override.quantity
             origin = "authorized_override"
             reason = override.reason
+        # Counts of discrete panels/hardware cannot contain fractional units.
+        # Fractional linear metres and square metres remain legitimate.
+        if entry.unit in ("each", "panel") and not quantity.is_integer():
+            issues.append(f"non-integral quantity for discrete component: {component_id}")
+            continue
+        if quantity > 1_000_000:
+            issues.append(f"component quantity exceeds safety bound: {component_id}")
+            continue
         instance_id = "|".join([
             configuration.itemID, configuration.configurationID,
             str(configuration.configurationVersion), rule.id, entry.id

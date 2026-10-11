@@ -121,3 +121,74 @@ def test_inputs_reject_nonfinite_counts_and_duplicate_sections():
             itemTypeID="window", sections=[SectionInput(id="same", type="fixed"),
                                           SectionInput(id="same", type="sliding")]
         )
+def test_glass_profile_and_additional_vano_changes_alter_input_lineage():
+    from app.configurator_component_calculator import GlassPanelInput, VanoSegmentInput
+
+    basis = fixture().model_dump()
+    original = run(CalculationInput.model_validate(basis))
+
+    glass_changed = CalculationInput.model_validate({
+        **basis, "glassTypeID": "glass-tempered",
+        "glassPanels": [
+            GlassPanelInput(id="g1", sectionID="left", glassTypeID="glass-tempered",
+                            thicknessID="glass-6mm", quantity=1).model_dump()
+        ]
+    })
+    segment_changed = CalculationInput.model_validate({
+        **basis, "additionalVanoSegments": [
+            VanoSegmentInput(id="return", label="corner return",
+                             widthMM=1260, heightMM=1260, stage="confirmed").model_dump()
+        ]
+    })
+    profile_changed = CalculationInput.model_validate({
+        **basis, "aluminumProfileID": "profile-7-44"
+    })
+    for changed in [glass_changed, segment_changed, profile_changed]:
+        assert run(changed).inputSHA256 != original.inputSHA256
+
+
+def test_orphan_panels_and_duplicate_segments_are_rejected():
+    from app.configurator_component_calculator import GlassPanelInput, VanoSegmentInput
+
+    basis = fixture().model_dump()
+    with pytest.raises(ValidationError):
+        CalculationInput.model_validate({
+            **basis,
+            "glassPanels": [
+                GlassPanelInput(id="p", sectionID="unknown").model_dump()
+            ]
+        })
+    with pytest.raises(ValidationError):
+        CalculationInput.model_validate({
+            **basis,
+            "additionalVanoSegments": [
+                VanoSegmentInput(id="dup", label="leg 1", widthMM=1200, heightMM=1500).model_dump(),
+                VanoSegmentInput(id="dup", label="leg 2", widthMM=1100, heightMM=1500).model_dump(),
+            ],
+        })
+
+
+def test_discrete_hardware_requires_integral_quantity_and_bound():
+    # Test-only counts; a fractional roller, panel or extreme order is invalid.
+    bad_rule = rules()[0].model_copy(update={"quantityPerOccurrence": 1.25})
+    fractional = run(rule_rows=[bad_rule])
+    assert not fractional.ready
+    assert fractional.components == []
+    assert any("non-integral" in issue for issue in fractional.issues)
+
+    oversized_rule = rules()[0].model_copy(update={"quantityPerOccurrence": 600_000})
+    too_many = run(rule_rows=[oversized_rule])
+    assert not too_many.ready
+    assert too_many.components == []
+    assert any("safety bound" in issue for issue in too_many.issues)
+
+
+def test_fractional_quantity_override_on_count_unit_fails_closed():
+    override = [AuthorizedQuantityOverride(
+        catalogEntryID="roller", quantity=2.5,
+        reason="Requested half of a discrete roller unit"
+    )]
+    receipt = run(overrides=override, authorized=True)
+    assert not receipt.ready
+    assert receipt.components == []
+    assert any("non-integral" in issue for issue in receipt.issues)
