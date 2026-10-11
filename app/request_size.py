@@ -55,6 +55,11 @@ Per-path, and derived from what the clients actually send rather than guessed:
   three orders of magnitude of headroom.
 * **Admin: 64 KiB.** Provisioning payloads are small, and the admin surface is
   disabled unless an admin key is configured.
+* **SCRUM-44 component preview: 256 KiB.** Only the exact, authenticated
+  `/api/v1/items/{item_id}/component-calculation/preview` route is capped.
+  The dynamic Item segment must match exactly one path component: other Item
+  endpoints are deliberately unaffected. The limit is provisional pending a
+  validated maximum-size iOS configuration fixture before release.
 
 Every limit is overridable per environment variable, because a fixed ceiling is wrong
 the moment a client changes.
@@ -67,11 +72,21 @@ blanket default would make every future route a false-rejection risk.
 from __future__ import annotations
 
 import os
+import re
 
 from starlette.requests import ClientDisconnect
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 MIB = 1024 * 1024
+
+# Match only the approved Item component-preview endpoint, including exactly one
+# Item identifier segment. A blanket /api/v1/items prefix would inadvertently
+# cap existing Item operations with different payload needs.
+_COMPONENT_PREVIEW_PATH = re.compile(
+    r"\A/api/v1/items/[^/]+/component-calculation/preview\Z"
+)
+_COMPONENT_PREVIEW_MAX_BYTES = 256 * 1024
+_COMPONENT_PREVIEW_LIMIT_ENV = "VITRIAL_MAX_BODY_BYTES_API_V1_ITEMS_COMPONENT_PREVIEW"
 
 # (path prefix, default limit). Longest matching prefix wins.
 DEFAULT_PATH_LIMITS: tuple[tuple[str, int], ...] = (
@@ -106,12 +121,16 @@ def limits() -> tuple[tuple[str, int], ...]:
     resolved = []
     for prefix, default in DEFAULT_PATH_LIMITS:
         override = os.getenv(f"VITRIAL_MAX_BODY_BYTES_{_env_suffix(prefix)}")
-        resolved.append((prefix, _positive_int(override, default) if override else default))
+        resolved.append(
+            (prefix, _positive_int(override, default) if override else default)
+        )
     return tuple(resolved)
 
 
 def limit_for_path(path: str) -> int | None:
-    """Longest matching prefix wins; `None` means this path is not size-limited."""
+    """Exact preview route first; then existing longest-prefix policy."""
+    if _COMPONENT_PREVIEW_PATH.fullmatch(path):
+        return _positive_int(_COMPONENT_PREVIEW_LIMIT_ENV, _COMPONENT_PREVIEW_MAX_BYTES)
     best: int | None = None
     best_length = -1
     for prefix, limit in limits():
