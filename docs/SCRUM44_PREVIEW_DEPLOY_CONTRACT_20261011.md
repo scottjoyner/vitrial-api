@@ -21,3 +21,10 @@ These are distinct constraints:
 ## Validation
 
 `python3 -m pytest -q tests/test_scrum44_preview_deploy_contract.py tests/test_scrum44_preview_body_guard.py tests/test_configurator_component_calculator.py` — **36 passed**, Ruff E/F green. `docker compose ... config --no-interpolate --quiet` — both passed. This is a **local draft deployment-configuration gate**, not a production deployment.
+## First actual Swift serialization bridge (after initial deployment check)
+
+A **real Swift JSON encoder output**, generated from local iOS commit `0d49a04`, is stored as `contracts/scrum44/scrum44_component_preview_swift_wire_20261011.json`. Exactly **1,229 bytes** are transmitted; the fixture file adds one trailing newline. SHA-256 of the original transmitted bytes: `818e8f982742a6086a35b99c54992ce1150dc0b649f9e4956816a88c7aeaf94d`.
+
+The API test `test_scrum44_swift_wire_fixture.py` exercises **the real Swift-encoded input**, using the pure `CalculationInput` model and static source checks of the preview request envelope. It verifies the 512 KiB iOS ceiling, the 2 MiB backend ceiling, milliseconds-to-millimeters conversion in the populated fields, corner vane provenance, per-panel references, pinned digests, negative dangling sections and zero width. **This is not full FastAPI request-model or authenticated HTTP coverage**: SQLAlchemy is absent from this sandbox, so importing the API route to validate `ComponentCalculationPreviewRequest` was not possible. The exact GitHub PR #149 head also remains separately untested.
+
+**Validation at this checkpoint:** **43 Python focused tests** passed, Ruff E/F passed, production and acceptance Compose parse checks passed. The paired iOS isolated source branch passed **10 relevant Swift tests**.
