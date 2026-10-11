@@ -62,7 +62,7 @@ def _request(path: str, chunks: list[bytes], size_header: bytes | None = None):
 
 
 def test_preview_limit_is_only_exact_single_item_route():
-    assert limit_for_path(PREVIEW) == 256 * 1024
+    assert limit_for_path(PREVIEW) == 2 * 1024 * 1024
     for path in (
         "/api/v1/items/item-123",
         "/api/v1/items/item-123/configuration",
@@ -88,23 +88,23 @@ def test_preview_env_override_only_affects_preview(monkeypatch):
 @pytest.mark.parametrize("invalid", ["0", "-1", "0.1", "invalid"])
 def test_bad_preview_override_uses_bounded_default(monkeypatch, invalid):
     monkeypatch.setenv("VITRIAL_MAX_BODY_BYTES_API_V1_ITEMS_COMPONENT_PREVIEW", invalid)
-    assert limit_for_path(PREVIEW) == 256 * 1024
+    assert limit_for_path(PREVIEW) == 2 * 1024 * 1024
 
 
 def test_oversized_header_is_rejected_before_downstream():
-    status, calls = _request(PREVIEW, [], str(300_000).encode("ascii"))
+    status, calls = _request(PREVIEW, [], str(3_000_000).encode("ascii"))
     assert status == 413
     assert calls == []
 
 
 def test_lying_small_header_still_rejects_oversize_stream():
-    status, calls = _request(PREVIEW, [b"x" * 140000, b"x" * 130000], b"10")
+    status, calls = _request(PREVIEW, [b"x" * 1_400_000, b"x" * 900_000], b"10")
     assert status == 413
     assert calls == []
 
 
 def test_missing_content_length_still_rejects_oversize_stream():
-    status, calls = _request(PREVIEW, [b"x" * 170000, b"x" * 100000])
+    status, calls = _request(PREVIEW, [b"x" * 1_700_000, b"x" * 600_000])
     assert status == 413
     assert calls == []
 
@@ -146,4 +146,127 @@ def test_exact_guard_stays_bound_to_registered_preview_route():
                 if isinstance(pattern, ast.Constant) and isinstance(pattern.value, str):
                     patterns.append(pattern.value)
     assert "/{item_id}/component-calculation/preview" in patterns
-    assert limit_for_path(PREVIEW) == 256 * 1024
+    # Route prefix and registration are independent sources of potential drift.
+    assigned_prefixes = [
+        keyword.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "APIRouter"
+        for keyword in node.keywords
+        if keyword.arg == "prefix" and isinstance(keyword.value, ast.Constant)
+    ]
+    assert "/api/v1/items" in assigned_prefixes
+    main = source.with_name("main.py").read_text(encoding="utf-8")
+    assert (
+        "from app.configurator_component_routes import router as "
+        "configurator_component_router" in main
+    )
+    assert "app.include_router(configurator_component_router)" in main
+    assert limit_for_path(PREVIEW) == 2 * 1024 * 1024
+
+
+def test_encoded_newline_matches_router_and_is_also_guarded():
+    from urllib.parse import unquote
+    from starlette.routing import compile_path
+
+    route_pattern, _, _ = compile_path(
+        "/api/v1/items/{item_id}/component-calculation/preview"
+    )
+    decoded = unquote(PREVIEW + "%0A")
+    assert decoded.endswith("\n")
+    assert route_pattern.match(decoded), "Starlette accepts terminal newline"
+    assert limit_for_path(decoded) == 2 * 1024 * 1024
+    status, calls = _request(decoded, [], b"3000000")
+    assert status == 413 and calls == []
+
+    for path in (
+        PREVIEW,
+        decoded,
+        PREVIEW + "\r\n",
+        PREVIEW + "/extra",
+        "/api/v1/items/a/b/component-calculation/preview",
+    ):
+        assert bool(route_pattern.match(path)) == (limit_for_path(path) is not None)
+
+
+def test_maximal_ascii_request_fits_provisional_2mib_cap():
+    """Source type limits, not invented vendor quantity rules or iOS proof."""
+    import json
+    from app.configurator_component_calculator import (
+        AuthorizedQuantityOverride,
+        CalculationInput,
+    )
+
+    def ident(index, prefix):
+        return (prefix + str(index).zfill(5)).ljust(128, "x")
+
+    sections = [
+        {
+            "id": ident(i, "S"),
+            "type": "sliding".ljust(64, "t"),
+            "openingDirection": "left".ljust(64, "d"),
+            "widthMM": 100.0,
+            "heightMM": 220.0,
+            "relativeWidth": 1.0,
+        }
+        for i in range(256)
+    ]
+    panels = [
+        {
+            "id": ident(i, "P"),
+            "sectionID": ident(i, "S"),
+            **{
+                k: ident(i, label)
+                for k, label in (
+                    ("glassTypeID", "G"),
+                    ("thicknessID", "T"),
+                    ("colorID", "C"),
+                    ("treatmentID", "H"),
+                    ("classificationID", "L"),
+                    ("dimensionSource", "D"),
+                    ("calculationRuleID", "R"),
+                )
+            },
+            "widthMM": 100.0,
+            "heightMM": 220.0,
+            "quantity": 1,
+        }
+        for i in range(256)
+    ]
+    vanos = [
+        {"id": ident(i, "V"), "label": "x" * 256, "widthMM": 100.0, "heightMM": 200.0}
+        for i in range(64)
+    ]
+    fields = {
+        "itemID": "item-123",
+        "configurationID": "b" * 256,
+        "configurationVersion": 1,
+        "itemTypeID": ident(1, "I"),
+        "sections": sections,
+        "glassPanels": panels,
+        "additionalVanoSegments": vanos,
+        "sectionWidthProvenance": {row["id"]: "operatorEntered" for row in sections},
+        "hardwareIDs": [ident(i, "W") for i in range(256)],
+        "accessoryIDs": [ident(i, "A") for i in range(256)],
+        "selectedComponentCatalogIDs": [ident(i, "K") for i in range(256)],
+    }
+    configuration = CalculationInput.model_validate(fields)
+    overrides = [
+        AuthorizedQuantityOverride(
+            catalogEntryID=ident(i, "K"), quantity=1.0, reason="r" * 2048
+        )
+        for i in range(256)
+    ]
+    body = {
+        "configuration": configuration.model_dump(mode="json"),
+        "overrides": [entry.model_dump(mode="json") for entry in overrides],
+        "catalogPublicationID": "c" * 256,
+        "catalogContentSHA256": "a" * 64,
+        "rulesPublicationID": "d" * 256,
+        "rulesContentSHA256": "b" * 64,
+    }
+    encoded = json.dumps(body, separators=(",", ":")).encode("utf-8")
+    assert 256 * 1024 < len(encoded) < limit_for_path(PREVIEW)
+    status, calls = _request(PREVIEW, [encoded[:600_000], encoded[600_000:]])
+    assert status == 200 and calls == [PREVIEW]
