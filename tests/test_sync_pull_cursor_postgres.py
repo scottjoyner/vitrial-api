@@ -86,7 +86,7 @@ async def seed_deliverable_customers(db, count: int, *, payload_bytes: int = 8) 
     for i in range(count):
         customer_id = f"customer-{i:04d}"
         db.add(CanonicalCustomer(organization_id="org-1", customer_id=customer_id))
-        db.flush()
+        await db.flush()
         db.add(SyncEntity(
             organization_id="org-1",
             entity_type="customer",
