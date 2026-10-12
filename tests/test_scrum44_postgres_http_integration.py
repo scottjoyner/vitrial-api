@@ -127,6 +127,7 @@ async def test_scoped_real_session_and_published_rules_over_http():
             assert success.status_code == 200, success.text
             output = success.json()
             assert output["authorization"] == "read_only_preview"
+            assert output["selectionCoverage"] == "explicit_selection_only"
             assert output["catalogContentSHA256"] == request["catalogContentSHA256"]
             assert output["rulesContentSHA256"] == request["rulesContentSHA256"]
             assert output["calculation"]["itemID"] == item

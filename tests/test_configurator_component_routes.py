@@ -111,6 +111,7 @@ async def test_authenticated_authorized_preview_loads_only_org_published_rules(p
     assert result.rulesContentSHA256 == "b" * 64
     assert len(result.catalogEntries) == 1
     assert result.catalogEntries[0].category == "hardware"
+    assert result.selectionCoverage == "explicit_selection_only"
     assert result.calculation.ready
     assert result.calculation.catalogVersionID == "catalog-v1"
     assert result.calculation.rulesVersionID == "rules-v1"

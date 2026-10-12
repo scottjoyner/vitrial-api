@@ -42,6 +42,8 @@ class ComponentCatalogSnapshot(StrictModel):
 class ComponentCalculationPreviewResponse(StrictModel):
     schemaVersion: Literal["vitrial.item-component-preview.v1"] = "vitrial.item-component-preview.v1"
     authorization: Literal["read_only_preview"] = "read_only_preview"
+    # Explicit caller selection is not evidence of the mandatory BOM subset.
+    selectionCoverage: Literal["explicit_selection_only"] = "explicit_selection_only"
     catalogContentSHA256: str = Field(pattern=r"^[0-9a-f]{64}$")
     rulesContentSHA256: str = Field(pattern=r"^[0-9a-f]{64}$")
     catalogEntries: list[ComponentCatalogSnapshot]
