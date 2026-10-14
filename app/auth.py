@@ -12,6 +12,9 @@ from app.db import session_scope
 from app.models import AuthSession, Membership, Organization, User
 from app.observability import bind_principal, log_event
 from app.schemas import AuthorizationProfile, AuthorizationRole
+from fastapi import APIRouter
+
+router = APIRouter()
 
 bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
 
@@ -98,4 +101,66 @@ async def profile_for(principal: Principal, db: AsyncSession) -> AuthorizationPr
         projectIDs=sorted(principal.project_ids),
         allProjects=principal.all_projects,
         roles=[AuthorizationRole.model_validate(r) for r in membership.roles],
+    )
+
+
+class RefreshTokenRequest(StrictModel):
+    refreshToken: str = Field(min_length=16, max_length=128)
+
+
+class RefreshTokenResponse(StrictModel):
+    accessToken: str
+    expiresAt: datetime
+
+
+@router.post(
+    "/api/v1/auth/refresh",
+    response_model=RefreshTokenResponse,
+    operation_id="refreshAccessToken",
+)
+async def refresh_access_token(
+    request: RefreshTokenRequest,
+    db: AsyncSession = Depends(session_scope),
+) -> RefreshTokenResponse:
+    """Exchange a refresh token for a new access token.
+
+    The refresh token is single-use: on successful exchange, the old refresh
+    token is invalidated and a new one is issued (rotating refresh tokens).
+    """
+    refresh_token = request.refreshToken.strip()
+    if len(refresh_token) < 16:
+        raise HTTPException(401, "invalid refresh token")
+
+    now = datetime.now(timezone.utc)
+    auth_session = await db.scalar(
+        select(AuthSession).where(
+            AuthSession.refresh_token_hash == token_hash(request.refreshToken)
+        )
+    )
+    if not auth_session or auth_session.refresh_token_hash is None:
+        raise HTTPException(401, "invalid refresh token")
+    if auth_session.revoked_at is not None:
+        raise HTTPException(401, "session revoked")
+    if auth_session.refresh_token_expires_at is None or auth_session.refresh_token_expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(401, "refresh token expired")
+
+    # Rotate refresh token
+    new_access_token = secrets.token_urlsafe(48)
+    new_refresh_token = secrets.token_urlsafe(48)
+    now = datetime.now(timezone.utc)
+    auth_session.access_token_hash = token_hash(new_access_token)
+    auth_session.refresh_token_hash = token_hash(new_refresh_token)
+    auth_session.expires_at = now + timedelta(hours=8)
+    auth_session.refresh_token_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
+    await db.commit()
+
+    log_event(
+        "auth.token_refreshed",
+        sessionRef=correlation_ref(auth_session.id),
+        organizationRef=correlation_ref(auth_session.organization_id),
+    )
+    return RefreshTokenResponse(
+        accessToken=new_access_token,
+        expiresAt=auth_session.expires_at,
     )
