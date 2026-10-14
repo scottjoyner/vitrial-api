@@ -18,6 +18,7 @@ from app.admin import (
 )
 from app.auth import Principal, current_principal, profile_for
 from app.auth_session_routes import router as auth_session_router
+from app.configurator_component_routes import router as configurator_component_router
 from app.db import session_scope
 from app.evidence import put_blob
 from app.models import EvidenceBlob
@@ -37,6 +38,7 @@ from app.observability import (
 from app.ownership import AuthorizationRejected, require_item_access
 from app.readiness import collect_dependency_readiness
 from app.reference_routes import router as reference_router
+from app.metrics import render_prometheus_metrics
 from app.schemas import AuthorizationProfile, HealthResponse, ReadinessResponse, SyncBatch, SyncResult, VersionResponse
 from app.settings import settings
 from app.storage import StorageError, store_for_provider
@@ -47,6 +49,7 @@ app = FastAPI(title="Vitrial Connected Operations API", version=settings.service
 app.include_router(auth_session_router)
 app.include_router(reference_router)
 app.include_router(sync_v2_router)
+app.include_router(configurator_component_router)
 
 DocumentID = Annotated[str, Path(min_length=1)]
 
@@ -162,6 +165,11 @@ async def ready(response: Response) -> ReadinessResponse:
 @app.get("/api/v1/version", response_model=VersionResponse, operation_id="version")
 async def version() -> VersionResponse:
     return VersionResponse(serviceVersion=settings.service_version)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    return Response(content=render_prometheus_metrics(), media_type="text/plain")
 
 
 @app.get("/api/v1/auth/me", response_model=AuthorizationProfile, operation_id="authMe")

@@ -60,7 +60,9 @@ class PairingExchangeRequest(StrictModel):
 
 class PairingExchangeResponse(StrictModel):
     accessToken: str
+    refreshToken: str
     expiresAt: datetime
+    refreshTokenExpiresAt: datetime
 
 
 def _normalized_code(value: str) -> str:
@@ -141,6 +143,9 @@ async def exchange_pairing_code(
         raise HTTPException(401, "pairing code invalid or expired")
 
     access_token = secrets.token_urlsafe(48)
+    refresh_token = secrets.token_urlsafe(48)
+    now = datetime.now(timezone.utc)
+    refresh_expires_at = now + timedelta(days=30)
     auth_session = AuthSession(
         id=uid(),
         organization_id=grant.organization_id,
@@ -149,6 +154,9 @@ async def exchange_pairing_code(
         access_token_hash=token_hash(access_token),
         issued_at=now,
         expires_at=now + timedelta(seconds=grant.session_ttl_seconds),
+        revoked_at=None,
+        refresh_token_hash=token_hash(refresh_token),
+        refresh_token_expires_at=now + timedelta(days=30),
     )
     grant.consumed_at = now
     db.add(auth_session)
@@ -163,5 +171,7 @@ async def exchange_pairing_code(
     )
     return PairingExchangeResponse(
         accessToken=access_token,
+        refreshToken=refresh_token,
         expiresAt=auth_session.expires_at,
+        refreshTokenExpiresAt=refresh_expires_at,
     )
