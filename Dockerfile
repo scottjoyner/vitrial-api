@@ -11,9 +11,10 @@ RUN groupadd --system --gid 10001 vitrial \
 
 WORKDIR /app
 COPY pyproject.toml README.md ./
+COPY requirements-lock.txt ./
 COPY app ./app
 COPY scripts ./scripts
-RUN pip install --no-cache-dir . \
+RUN pip install --no-cache-dir -r requirements-lock.txt \
     && chown -R vitrial:vitrial /app /home/vitrial
 COPY alembic.ini ./
 COPY migrations ./migrations
