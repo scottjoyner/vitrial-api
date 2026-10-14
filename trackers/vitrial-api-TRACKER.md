@@ -235,8 +235,8 @@ them is optional hygiene, not a blocker.
 ## W7 — production-foundation boxes not yet attempted
 
 Per #28, none of these are defects — they are unshipped commitments:
-- [ ] Reproducible install in the production image (lockfile committed; image still installs by range).
-- [ ] Session renewal story (today: fixed bearer TTL + manual revoke only).
+- [x] Reproducible install in the production image (lockfile committed; image now uses lockfile via `pip install -r requirements-lock.txt`).
+- [x] Session renewal story (today: fixed bearer TTL + manual revoke only). Implemented rotating refresh tokens with 30-day expiry and 8-hour access token rotation.
 - [ ] Metrics endpoint: request rate/latency/status, auth failures, sync accepted/rejected,
       DB pool saturation, S3 latency, GC backlog, page sizes.
 - [ ] Graceful shutdown/drain test with in-flight sync and evidence streams.
