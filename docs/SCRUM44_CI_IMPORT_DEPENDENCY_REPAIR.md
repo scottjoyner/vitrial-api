@@ -35,3 +35,39 @@ acceptance before it becomes part of a connected release.
 
 No merge, signing, API deployment, production DB migration, customer mutation,
 S3 network change or automatic failover is permitted by this research slice.
+
+## Second proof slice: SQL schema and pairing contract (October 14)
+
+The first GitHub PR #76 CI run advanced past missing imports, then exposed a
+real database/model mismatch: AuthSession and the pairing exchange write
+refresh_token_hash and refresh_token_expires_at, but migration 0007 does
+not add those columns. Additive migration 0008 now introduces both **nullable**
+columns and a unique, nullable SHA-256 digest index. Old sessions remain
+access-token-only; no refresh token can be inferred or manufactured. CI must
+recreate its disposable PostgreSQL database and run Alembic to 0008 before
+running integration tests; this patch does not execute production migrations.
+
+Synthetic rate-limit and request-size handlers were constructing an obsolete
+two-field pairing response. Test doubles now match the server's actual
+four-field PairingExchangeResponse (access and refresh tokens, both expiries).
+No server wire behavior is changed by the fixture correction.
+
+The unit job installs only requirements-lock.txt followed by dev package
+without dependencies, so declaring PyYAML under dev was **insufficient**.
+Explicitly pin PyYAML 6.0.3 in the test lock as well. It remains absent
+from runtime project dependencies; the packaged image needs separate audit.
+
+Independent isolated local Python 3.12 execution now reports **357 passed,
+51 skipped** (PostgreSQL/S3 opt-in integration skipped), plus the subset
+**54 passed** including response-fixture and migration-schema checks. This
+is not an independent physical DB readback or acceptance deployment.
+
+### Live real-app release implications
+
+The iOS pairing decoder currently consumes accessToken and expiresAt;
+extra server fields are ignored. The server research code creates refresh
+tokens, but /api/v1/auth/refresh is **not mounted**, so there is no verified
+iOS session-renewal path. This is a distinct HOLD, not a reason to expose
+incomplete token rotation. A new reviewed end-to-end refresh contract must
+cover Keychain token custody, atomic rotation, revocation, replay resistance,
+offline ambiguity and upgrade from existing paired devices.

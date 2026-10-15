@@ -248,7 +248,9 @@ def _stub_handler(monkeypatch):
     async def _stub(db, request):
         return PairingExchangeResponse(
             accessToken="stub-access-token",
+            refreshToken="stub-refresh-token",
             expiresAt=datetime(2100, 1, 1, tzinfo=timezone.utc),
+            refreshTokenExpiresAt=datetime(2100, 2, 1, tzinfo=timezone.utc),
         )
 
     monkeypatch.setattr("app.auth_session_routes.exchange_pairing_code", _stub)
