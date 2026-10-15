@@ -126,3 +126,27 @@ actually healthy. If Docker never reports healthy, the job still emits the
 bounded redacted dependency report and FAILS. It does not change production
 Compose readiness thresholds, repeat domain writes, start production servers,
 or tolerate permanently unhealthy API processes.
+
+### Exact Docker healthcheck root cause (October 15)
+
+The follow-up GitHub health log found repeated Docker health probe exit=1,
+while the identical running API container reported database=ok and
+objectStorage=ok when checked through an importable Python -c invocation.
+Running the configured healthcheck itself without --quiet exposed the root
+cause: ModuleNotFoundError: No module named app from
+/app/scripts/probe_dependencies.py at import time. It NEVER reached either
+external dependency, so previous unhealthy verdicts were falsely attributed
+to backend availability.
+
+When Python executes python scripts/probe_dependencies.py, sys.path[0] is
+/app/scripts rather than the repository's application root /app.
+Switching to python -m scripts.probe_dependencies fixes import resolution
+while keeping exactly the same probe, failure exit status and requirements.
+
+The research source now uses module form in Dockerfile, production and
+acceptance Compose healthchecks, deployment/rollback scripts and CI direct
+probe. Three regression assertions pin module importability, exact
+image/Compose health commands and both operator scripts. No probing or
+migration has been done on production; production Compose remains unchanged
+until separately reviewed and deployed. The source patch is not yet
+evidence of a successful cold-start Compose lifecycle.

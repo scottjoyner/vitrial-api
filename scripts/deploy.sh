@@ -65,7 +65,7 @@ if [[ "$RUNNING_API_IMAGE" != "$API_IMAGE" ]]; then
 fi
 
 echo "==> verifying dependency health inside the running API container"
-compose exec -T api python scripts/probe_dependencies.py
+compose exec -T api python -m scripts.probe_dependencies
 
 echo "==> verifying public HTTPS liveness, readiness, and version"
 curl --fail --silent --show-error \
