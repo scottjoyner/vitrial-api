@@ -109,3 +109,20 @@ probes *inside the failed container* and emits only categorical ok/unavailable
 statuses. It preserves exit 1 and tears down disposable CI services; it never
 prints a connection URL or credential. This is fault isolation, not an
 acceptance pass or permission to deploy.
+
+### Cold-boot health convergence
+
+The latest isolated acceptance CI diagnosis found that the API was running,
+PostgreSQL and RustFS were healthy, and an in-container manual read-only
+dependency probe reported database=ok, objectStorage=ok, status=ready even
+though Docker Compose had already marked its earlier startup healthcheck
+unhealthy. This is a cold-boot/health convergence failure, not permission
+to skip dependency health.
+
+The disposable-only acceptance runner now checks Docker's own API container
+health status for up to 12 bounded 5-second attempts after an initial Compose
+rejection, and only re-evaluates the unchanged Compose graph after status is
+actually healthy. If Docker never reports healthy, the job still emits the
+bounded redacted dependency report and FAILS. It does not change production
+Compose readiness thresholds, repeat domain writes, start production servers,
+or tolerate permanently unhealthy API processes.
