@@ -385,6 +385,12 @@ jobs:
             echo "::error::Acceptance startup failed; collecting bounded service health diagnostics."
             docker compose --env-file /tmp/vitrial-acceptance.env \
               -f deploy/compose.acceptance.yml ps || true
+            # Categorical read-only diagnosis inside the *same* API container
+            # whose healthcheck failed. Neither URLs nor secrets are printed.
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml exec -T api \
+              python -c 'import asyncio,json; from app.readiness import collect_dependency_readiness; r=asyncio.run(collect_dependency_readiness()); print(json.dumps({"database":r.database,"objectStorage":r.object_storage,"status":r.status},sort_keys=True))' \
+              || true
             docker compose --env-file /tmp/vitrial-acceptance.env \
               -f deploy/compose.acceptance.yml logs --no-color --tail 65 \
               api migrate s3-init postgres s3 2>/dev/null || true

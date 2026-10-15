@@ -97,3 +97,15 @@ service logs and health statuses even when Compose up fails before the
 existing readiness loop. The failure still fails CI and never causes an
 automatic redeploy. Do not infer production topology readiness until that
 diagnostic run identifies and resolves the fault.
+
+### October 14 acceptance container health investigation
+
+At research head d5abe40, Docker Compose started Uvicorn successfully, PostgreSQL
+and RustFS reported healthy, and s3-init created the evidence bucket, yet the
+API container's composite dependency readiness healthcheck still failed. Logs
+alone exposed no dependency-specific error because the probe uses quiet mode.
+The next diagnostic iteration runs the same read-only database and storage
+probes *inside the failed container* and emits only categorical ok/unavailable
+statuses. It preserves exit 1 and tears down disposable CI services; it never
+prints a connection URL or credential. This is fault isolation, not an
+acceptance pass or permission to deploy.
