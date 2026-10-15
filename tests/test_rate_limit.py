@@ -152,7 +152,9 @@ def _reset(monkeypatch):
     async def _stub_exchange(db, request):
         return PairingExchangeResponse(
             accessToken="stub-access-token",
+            refreshToken="stub-refresh-token",
             expiresAt=datetime(2100, 1, 1, tzinfo=timezone.utc),
+            refreshTokenExpiresAt=datetime(2100, 2, 1, tzinfo=timezone.utc),
         )
 
     monkeypatch.setattr(

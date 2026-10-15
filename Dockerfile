@@ -23,7 +23,7 @@ USER 10001:10001
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["python", "scripts/probe_dependencies.py", "--quiet"]
+    CMD ["python", "-m", "scripts.probe_dependencies", "--quiet"]
 
 # NOTE on --forwarded-allow-ips: in production this API container publishes NO host port;
 # its only TCP peer is the Caddy ingress on the internal network, so `*` is reachable only

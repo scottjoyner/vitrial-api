@@ -72,7 +72,7 @@ services:
         soft: 4096
         hard: 4096
     healthcheck:
-      test: ["CMD", "python", "scripts/probe_dependencies.py", "--quiet"]
+      test: ["CMD", "python", "-m", "scripts.probe_dependencies", "--quiet"]
       interval: 30s
       timeout: 10s
       start_period: 20s

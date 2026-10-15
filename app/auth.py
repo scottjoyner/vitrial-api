@@ -1,17 +1,19 @@
 from __future__ import annotations
 import hashlib
+import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException
+from pydantic import Field
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import session_scope
 from app.models import AuthSession, Membership, Organization, User
-from app.observability import bind_principal, log_event
-from app.schemas import AuthorizationProfile, AuthorizationRole
+from app.observability import bind_principal, correlation_ref, log_event
+from app.schemas import AuthorizationProfile, AuthorizationRole, StrictModel
 from fastapi import APIRouter
 
 router = APIRouter()
