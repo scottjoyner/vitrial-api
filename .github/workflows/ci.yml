@@ -405,6 +405,14 @@ jobs:
             done
             if [[ "$recovered" != "true" ]]; then
               echo "::error::Acceptance startup failed; collecting bounded service health diagnostics."
+              api_id="$(compose ps -q api 2>/dev/null || true)"
+              if [[ -n "$api_id" ]]; then
+                echo "Docker healthcheck command and bounded last six exit statuses:"
+                docker inspect --format '{{json .Config.Healthcheck.Test}}' "$api_id" || true
+                docker inspect --format '{{range .State.Health.Log}}health_start={{.Start}} health_end={{.End}} exit={{.ExitCode}}{{println}}{{end}}' "$api_id" | tail -6 || true
+              fi
+              echo "Same executable used by healthcheck, invoked once with categorical failure only:"
+              compose exec -T api python scripts/probe_dependencies.py || true
             docker compose --env-file /tmp/vitrial-acceptance.env \
               -f deploy/compose.acceptance.yml ps || true
             # Categorical read-only diagnosis inside the *same* API container
