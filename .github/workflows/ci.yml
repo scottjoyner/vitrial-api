@@ -377,8 +377,19 @@ jobs:
             -f deploy/compose.acceptance.yml config >/dev/null
       - name: Boot migrations, persistent services, API and internal-CA HTTPS edge
         run: |
-          docker compose --env-file /tmp/vitrial-acceptance.env \
-            -f deploy/compose.acceptance.yml up -d
+          # Compose can exit when the API is unhealthy *before* the
+          # health-loop below. Preserve bounded diagnostics on that path too;
+          # keep the job failing rather than bypassing the health gate.
+          if ! docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml up -d; then
+            echo "::error::Acceptance startup failed; collecting bounded service health diagnostics."
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml ps || true
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml logs --no-color --tail 65 \
+              api migrate s3-init postgres s3 2>/dev/null || true
+            exit 1
+          fi
           for attempt in $(seq 1 30); do
             if curl -kfsS https://localhost:8443/health >/dev/null; then
               exit 0

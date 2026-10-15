@@ -71,3 +71,29 @@ iOS session-renewal path. This is a distinct HOLD, not a reason to expose
 incomplete token rotation. A new reviewed end-to-end refresh contract must
 cover Keychain token custody, atomic rotation, revocation, replay resistance,
 offline ambiguity and upgrade from existing paired devices.
+
+## HTTP-to-durable-database acceptance extension
+
+The isolated PostgreSQL/S3 GitHub integration lane has now completed its
+actual Alembic upgrade/downgrade/re-upgrade exercise and 408 tests PASS.
+RustFS reported live S3 readiness during the run.
+
+A new opt-in PostgreSQL test exercises FastAPI ASGI HTTP (not internal
+apply_push alone) with **two independently paired synthetic operators**:
+two scoped /auth/me checks, a deliberately unordered
+Customer -> Project -> ProjectSector -> Item sync/push, separate PostgreSQL
+canonical row readback, second-operator sync/pull, durable mutation-id
+acknowledgements, idempotent replay, logout revocation, and continued access
+from the remaining operator. Records use disposable CI-only identity IDs and
+are cleaned up after execution.
+
+This test is SKIPPED unless POSTGRES_INTEGRATION=1 and requires a properly
+migrated disposable database; an unexecuted fixture is not evidence. Its
+actual CI result must be evaluated independently at the exact branch head.
+
+The acceptance Compose lane still failed on API health despite the separate
+successful DB/S3 job. Its boot step has been changed to collect bounded
+service logs and health statuses even when Compose up fails before the
+existing readiness loop. The failure still fails CI and never causes an
+automatic redeploy. Do not infer production topology readiness until that
+diagnostic run identifies and resolves the fault.
