@@ -48,7 +48,11 @@ Expected October 17 observed state:
   each checkpoint/REDO starting location; see
   `VM101_WAL_CHECKPOINT_READONLY_20261017.md`. This observes LIVE source
   WAL, NOT necessarily WAL inside the backup and not end-to-end WAL replay.
-  PostgreSQL data-page checksums are disabled on this cluster.
+  PostgreSQL data-page checksums are disabled on this cluster. An extended
+  bounded prefix probe decodes 5 WAL records, then encounters a `got 0`
+  record-length marker at `0/1B000060`. The marker may be normal end-of-
+  written-WAL padding, but this does not establish a valid WAL replay or
+  prove that all five allocated segments contain meaningful WAL data.
 - clone_quarantine UNKNOWN/FAIL: VM9101 does not exist.
 - clone_disk UNKNOWN/FAIL: independent VM9101 disk does not exist.
 - signed_approvals UNKNOWN/FAIL: no authentic four-role human approval bundle
