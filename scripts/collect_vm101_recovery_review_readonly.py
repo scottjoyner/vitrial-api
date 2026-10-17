@@ -47,8 +47,16 @@ def component(worker,field,authorize="restore_authorized"):
                 value.get("full_replay_verified") is not False or
                 value.get("tenant_data_verified") is not False or
                 value.get("wal_archival_independently_proven") is not False or
-                value.get("checkpoint_record_sampled_only") is not True):
+                value.get("wal_end_of_written_data_proven") is not False or
+                value.get("checkpoint_record_sampled_only") is not True or
+                type(value.get("wal_readable_prefix_records")) is not int or
+                not 0<=value["wal_readable_prefix_records"]<=16 or
+                value.get("wal_first_boundary") not in
+                ("zero_length_record_boundary","not_observed_within_16",
+                 "unclassified_failure")):
                 raise ValueError("WAL sample must not be mislabeled as full recovery")
+            result["wal_readable_prefix_records"]=value["wal_readable_prefix_records"]
+            result["wal_first_boundary"]=value["wal_first_boundary"]
         if field=="technical_diagnostic_complete":
             if (value.get("root_cause_proven") is not False or
                 value.get("postgresql_recovery_proven") is not False or
