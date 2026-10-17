@@ -7,11 +7,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Header, HTTPException
-from pydantic import Field
-from sqlalchemy import select
+from pydantic import Field, model_validator
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import token_hash
+from app.company_policy import effective_member_scope, ensure_seat_limit
 from app.models import AuthSession, Membership, Organization, User, uid
 from app.observability import correlation_ref, log_event
 from app.schemas import AuthorizationRole, Capability, StrictModel
@@ -28,12 +29,20 @@ class AdminBootstrapRequest(StrictModel):
     active: bool = True
     allCustomers: bool = False
     allProjects: bool = False
+    sharedCompanyAccess: bool = False
+    pilotSeatLimit: int | None = Field(default=None, ge=1, le=10000)
     customerIDs: list[str] = Field(default_factory=list)
     projectIDs: list[str] = Field(default_factory=list)
     roles: list[AuthorizationRole] = Field(default_factory=list)
     capabilities: list[Capability] = Field(default_factory=list)
     sessionID: str | None = Field(default=None, min_length=1, max_length=128)
     sessionTTLSeconds: int = Field(default=8 * 60 * 60, ge=300, le=30 * 24 * 60 * 60)
+
+    @model_validator(mode="after")
+    def shared_company_member_must_be_able_to_sync(self) -> "AdminBootstrapRequest":
+        if self.sharedCompanyAccess and "sync" not in self.capabilities:
+            raise ValueError("shared company access requires sync capability")
+        return self
 
 
 class AdminBootstrapResponse(StrictModel):
@@ -85,10 +94,17 @@ def _membership_authority(membership: Membership) -> tuple:
 
 
 def _requested_authority(request: AdminBootstrapRequest) -> tuple:
+    all_customers, all_projects = effective_member_scope(
+        shared_company_access=request.sharedCompanyAccess,
+        all_customers=request.allCustomers,
+        all_projects=request.allProjects,
+        customer_ids=request.customerIDs,
+        project_ids=request.projectIDs,
+    )
     return (
         request.active,
-        request.allCustomers,
-        request.allProjects,
+        all_customers,
+        all_projects,
         tuple(sorted(set(request.customerIDs))),
         tuple(sorted(set(request.projectIDs))),
         tuple(sorted((role.id, role.displayName) for role in request.roles)),
@@ -100,17 +116,36 @@ async def bootstrap_identity(
     db: AsyncSession,
     request: AdminBootstrapRequest,
 ) -> AdminBootstrapResponse:
-    organization = await db.get(Organization, request.organizationID)
+    # Serialize both first-company creation and later seat writes. Locking only
+    # the Organization row cannot protect a company that does not exist yet.
+    # A transaction-scoped advisory lock prevents duplicate concurrent inserts.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+        {"lock_key": "vitrial.company.bootstrap." + request.organizationID},
+    )
+    organization = await db.scalar(
+        select(Organization)
+        .where(Organization.id == request.organizationID)
+        .with_for_update()
+    )
     if organization is None:
         organization = Organization(
             id=request.organizationID,
             name=request.organizationName,
+            seat_limit=request.pilotSeatLimit or 4,
             authorization_revision=0,
         )
         db.add(organization)
         await db.flush()
+        limit_changed = False
     else:
         organization.name = request.organizationName
+        limit_changed = (
+            request.pilotSeatLimit is not None
+            and request.pilotSeatLimit != organization.seat_limit
+        )
+        if request.pilotSeatLimit is not None:
+            organization.seat_limit = request.pilotSeatLimit
 
     user = await db.get(User, request.userID)
     if request.email:
@@ -145,7 +180,25 @@ async def bootstrap_identity(
         raise HTTPException(409, "organization/user already has another membership ID")
 
     membership = membership_by_id or membership_for_pair
-    requested_authority = _requested_authority(request)
+    try:
+        requested_authority = _requested_authority(request)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    active_seats = await db.scalar(
+        select(func.count(Membership.id)).where(
+            Membership.organization_id == organization.id,
+            Membership.active.is_(True),
+        )
+    )
+    is_new_active_seat = request.active and (membership is None or not membership.active)
+    try:
+        ensure_seat_limit(
+            requested_limit=organization.seat_limit,
+            active_members=int(active_seats or 0),
+            additional_active=is_new_active_seat,
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
     authority_changed = membership is None
     if membership is None:
         membership = Membership(
@@ -158,13 +211,13 @@ async def bootstrap_identity(
         authority_changed = _membership_authority(membership) != requested_authority
 
     membership.active = request.active
-    membership.all_customers = request.allCustomers
-    membership.all_projects = request.allProjects
+    membership.all_customers = requested_authority[1]
+    membership.all_projects = requested_authority[2]
     membership.customer_ids = sorted(set(request.customerIDs))
     membership.project_ids = sorted(set(request.projectIDs))
     membership.roles = [role.model_dump() for role in request.roles]
     membership.capabilities = sorted(set(request.capabilities))
-    if authority_changed:
+    if authority_changed or limit_changed:
         organization.authorization_revision += 1
     await db.flush()
 

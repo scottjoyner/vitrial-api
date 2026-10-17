@@ -2,7 +2,7 @@
 id: VITR-GOV-002
 title: "vitrial-api documentation index"
 status: active
-date: 2026-10-02
+date: 2026-10-16
 ---
 
 # Documentation Index
@@ -18,6 +18,7 @@ Entry point to the in-repo documentation. See `docs/CONVENTIONS.md` for the rule
 | `memory-seeds/` | Cross-session continuity seeds harvested by memory_seed_service |
 | `deploy/README.md` | Deploy, rollback, acceptance, preflight, GC runbook, evidence list |
 | `docs/DEVICE_PAIRING_AND_SESSION_SECURITY.md` | Pairing operator flow + session security + resource bounds |
+| `docs/COMPANY-WORKSPACE-PILOT.md` | Tenant-bound workspace, four-seat default, company memberships and acceptance gates |
 | `docs/REAL-WORLD-QUOTE-DOMAIN-MAPPING.md` | Villa Camila real-quote domain mapping, current-contract fit, and proposed narrow extensions |
 | `contracts/backend/v2/README.md` | V2 native-JSON protocol compatibility rules |
 | `README.md` | Contract boundary, stack, V1 endpoints, observability, admin plane, invariants |

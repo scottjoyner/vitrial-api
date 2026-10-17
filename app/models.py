@@ -22,6 +22,7 @@ class Organization(Base):
     id: Mapped[str] = mapped_column(String(128), primary_key=True, default=uid)
     name: Mapped[str] = mapped_column(String(256))
     authorization_revision: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    seat_limit: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
