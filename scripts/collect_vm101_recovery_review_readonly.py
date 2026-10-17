@@ -14,6 +14,7 @@ import audit_vm101_disk_chain_readonly as disk
 import audit_vm101_restore_precreation_readonly as precreation
 import diagnose_vm101_postgres_startup_readonly as startup
 import audit_vm101_wal_checkpoint_readonly as wal
+import audit_vm101_pinned_archive_metadata_readonly as archive
 import verify_vm101_approval_receipts as approval
 
 
@@ -42,6 +43,23 @@ def component(worker,field,authorize="restore_authorized"):
         if value[field] and holds and field!="technical_diagnostic_complete":
             raise ValueError("Passing component conflicts with reported hold reasons")
         result={"pass":value[field],"unavailable":False,"finding_count":len(holds)}
+        if field=="technical_archive_metadata_pass":
+            if (value.get("archived_config_safe_to_boot") is not False or
+                value.get("clone_config_scrubbing_required") is not True or
+                value.get("archive_full_sha256_rechecked_now") is not False or
+                value.get("archive_compressed_payload_verified_now") is not False or
+                value.get("archive_postgres_consistency_verified") is not False or
+                value.get("disk_blocks_extracted") is not False or
+                value.get("nfs_access_controls_independently_verified") is not False or
+                value.get("archive_permissions_custodian_approved") is not False or
+                value.get("archive_other_read_bit_set") is not True or
+                type(value.get("inherited_production_nic_count")) is not int or
+                value["inherited_production_nic_count"]!=2):
+                raise ValueError("Archive metadata must not authorize unsafe boot")
+            result["inherited_production_nic_count"]=value["inherited_production_nic_count"]
+            result["requires_config_scrub"]=True
+            result["archive_other_read_bit_set"]=True
+            result["archive_custody_permission_review_required"]=True
         if field=="technical_wal_metadata_pass":
             if (value.get("whole_wal_stream_verified") is not False or
                 value.get("full_replay_verified") is not False or
@@ -81,6 +99,7 @@ def collect(host,bundle=None,keys=None,now=None,probes=None):
         raise ValueError("Timezone aware clock required")
     funcs=probes if probes is not None else {
         "precreation":lambda:precreation.capture(host),
+        "archive_metadata":lambda:archive.capture(host),
         "source_disk":lambda:disk.capture(host,"source"),
         "postgres_startup":lambda:startup.capture(host),
         "wal_checkpoint":lambda:wal.capture(host),
@@ -88,6 +107,7 @@ def collect(host,bundle=None,keys=None,now=None,probes=None):
         "clone_disk":lambda:disk.capture(host,"clone-qcow2"),
     }
     expected={"precreation":"technical_precreation_pass",
+              "archive_metadata":"technical_archive_metadata_pass",
               "source_disk":"technical_disk_shape_pass",
               "postgres_startup":"technical_diagnostic_complete",
               "wal_checkpoint":"technical_wal_metadata_pass",
