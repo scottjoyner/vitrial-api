@@ -33,7 +33,10 @@ def fake_report(field=True,override=None):
         x.update({"whole_wal_stream_verified":False,
                   "full_replay_verified":False,"tenant_data_verified":False,
                   "wal_archival_independently_proven":False,
-                  "checkpoint_record_sampled_only":True})
+                  "checkpoint_record_sampled_only":True,
+                  "wal_end_of_written_data_proven":False,
+                  "wal_readable_prefix_records":5,
+                  "wal_first_boundary":"zero_length_record_boundary"})
     if field=="technical_diagnostic_complete":
         x.update({"root_cause_proven":False,"postgresql_recovery_proven":False,
                   "service_restarted":False,
@@ -126,12 +129,31 @@ class RecoveryReviewTests(unittest.TestCase):
                                "tenant_data_verified":False,
                                "wal_archival_independently_proven":False,
                                "checkpoint_record_sampled_only":True,
+                               "wal_end_of_written_data_proven":False,
+                               "wal_readable_prefix_records":5,
+                               "wal_first_boundary":"zero_length_record_boundary",
                                field:True})
                 p["wal_checkpoint"]=lambda s=sample:s
                 r=m.collect("root@test",probes=p,now=NOW)
                 self.assertFalse(r["checks"]["wal_checkpoint"]["pass"])
                 self.assertTrue(r["checks"]["wal_checkpoint"]["unavailable"])
                 self.assertFalse(r["restore_authorized"])
+
+    def test_wal_zero_length_boundary_is_not_end_of_wal_proof(self):
+        r=m.collect("root@test",probes=probes(),now=NOW)
+        w=r["checks"]["wal_checkpoint"]
+        self.assertTrue(w["pass"])
+        self.assertEqual(w["wal_readable_prefix_records"],5)
+        self.assertEqual(w["wal_first_boundary"],"zero_length_record_boundary")
+        self.assertFalse(r["restore_authorized"])
+        for invalid in (("wal_end_of_written_data_proven",True),
+                        ("wal_readable_prefix_records",True),
+                        ("wal_first_boundary","confirmed_clean_end")):
+            with self.subTest(invalid=invalid):
+                p=probes(("wal_checkpoint",invalid[0],invalid[1]))
+                result=m.collect("root@test",probes=p,now=NOW)
+                self.assertFalse(result["checks"]["wal_checkpoint"]["pass"])
+                self.assertTrue(result["checks"]["wal_checkpoint"]["unavailable"])
 
     def test_missing_pair_of_approval_files_denied(self):
         p=probes()
