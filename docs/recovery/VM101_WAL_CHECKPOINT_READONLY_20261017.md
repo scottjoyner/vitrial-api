@@ -28,6 +28,14 @@ writes/repairs data files.
 - PostgreSQL 17 `pg_waldump` decoded **one WAL record starting from each of
   the two checkpoint-related locations** with exit code 0 and no stderr.
   Its output was discarded inside the guest, not copied out.
+- **Extended bounded WAL-prefix probe (October 17, ~20:55 UTC):**
+  `pg_waldump --quiet` from REDO `0/1A000060` decoded **five records**;
+  requesting the sixth returned `invalid record length` with `got 0`
+  at `0/1B000060`. WAL content and raw errors were discarded or
+  classified inside the guest. This **can be normal zero-filled end-of-
+  written-WAL padding** inside a preallocated segment. It does not prove
+  a clean end, full WAL validity, or a recoverable transaction stream.
+  Five 16 MiB allocated WAL files do NOT imply 80 MiB of valid records.
 - `Data page checksum version: 0`: page checksums disabled. Detecting
   storage-level page corruption therefore requires other validation methods.
 
@@ -56,7 +64,8 @@ records can be recovered and verified.
 6. Validate API DB/S3 endpoints, object recovery, public ingress and user
    authorization separately before removing the production deployment HOLD.
 
-The script always reports `gate=HOLD` and exits 2, even when the limited
-WAL metadata and checkpoint records pass. `full_replay_verified`,
+The script always reports `gate=HOLD` and exits 2, even when the bounded
+WAL prefix, metadata and checkpoint records pass. `wal_first_boundary`
+is descriptive only: `wal_end_of_written_data_proven` remains false. `full_replay_verified`,
 `whole_wal_stream_verified`, `tenant_data_verified` and both production
 and restore authorization remain false. No automation executes a restore.
