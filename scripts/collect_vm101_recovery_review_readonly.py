@@ -12,6 +12,7 @@ import stat
 import audit_vm101_clone_quarantine_readonly as quarantine
 import audit_vm101_disk_chain_readonly as disk
 import audit_vm101_restore_precreation_readonly as precreation
+import diagnose_vm101_postgres_startup_readonly as startup
 import verify_vm101_approval_receipts as approval
 
 
@@ -33,12 +34,22 @@ def component(worker,field,authorize="restore_authorized"):
             value.get("executable_commands")!=[] or
             type(value.get(field)) is not bool):
             raise ValueError("Untrusted or incomplete component")
-        holds=value.get("technical_holds",value.get("hold_reasons"))
+        holds=value.get("technical_holds",value.get("hold_reasons",
+                         value.get("sanitized_hold_categories")))
         if not isinstance(holds,list) or not all(isinstance(x,str) for x in holds):
             raise ValueError("Missing normalized reasons")
-        if value[field] and holds:
+        if value[field] and holds and field!="technical_diagnostic_complete":
             raise ValueError("Passing component conflicts with reported hold reasons")
-        return {"pass":value[field],"unavailable":False,"finding_count":len(holds)}
+        result={"pass":value[field],"unavailable":False,"finding_count":len(holds)}
+        if field=="technical_diagnostic_complete":
+            if (value.get("root_cause_proven") is not False or
+                value.get("postgresql_recovery_proven") is not False or
+                value.get("service_restarted") is not False or
+                value.get("failure_hypothesis") not in
+                ("unverified","legacy_address_bind_failure_supported")):
+                raise ValueError("Diagnostic asserted unauthorized state/proof")
+            result["failure_hypothesis"]=value["failure_hypothesis"]
+        return result
     except (ValueError,TypeError,RuntimeError,OSError,KeyError,AttributeError):
         return {"pass":False,"unavailable":True,"finding_count":None}
 
@@ -55,11 +66,13 @@ def collect(host,bundle=None,keys=None,now=None,probes=None):
     funcs=probes if probes is not None else {
         "precreation":lambda:precreation.capture(host),
         "source_disk":lambda:disk.capture(host,"source"),
+        "postgres_startup":lambda:startup.capture(host),
         "clone_quarantine":lambda:inspect_quarantine(host),
         "clone_disk":lambda:disk.capture(host,"clone-qcow2"),
     }
     expected={"precreation":"technical_precreation_pass",
               "source_disk":"technical_disk_shape_pass",
+              "postgres_startup":"technical_diagnostic_complete",
               "clone_quarantine":"technical_isolation_shape_pass",
               "clone_disk":"technical_disk_shape_pass"}
     if set(funcs)!=set(expected):
