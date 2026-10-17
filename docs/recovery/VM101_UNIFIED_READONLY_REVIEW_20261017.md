@@ -37,6 +37,12 @@ Expected October 17 observed state:
 
 - precreation PASS: source identity, candidate VMID available, private local
   image storage and space budget as of the read-only snapshot.
+- archive_metadata PASS: pinned October 17 VMA header and one 160 GiB disk
+  are readable, but its saved production configuration includes two NICs,
+  autostart, bootstrap, and hardware identity; see
+  `VM101_PINNED_VMA_HEADER_GATE_20261017.md`. The archive's mode 0644 sets
+  the other-read bit, so NFS access/custody permissions require review.
+  No current full archive SHA or PostgreSQL consistency validation occurred.
 - source_disk PASS: VM101 QCOW2 metadata has matching format, capacity and
   no reported external backing/data file; no whole-file content validation.
 - postgres_startup diagnostic INSPECTION PASS: bounded October 6 journal
