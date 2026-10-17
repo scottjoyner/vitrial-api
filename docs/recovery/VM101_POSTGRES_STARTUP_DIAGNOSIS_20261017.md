@@ -54,3 +54,13 @@ sets `root_cause_proven=false`, `postgresql_recovery_proven=false`,
 No repair commands are generated or executed by the diagnostic. A failed
 PostgreSQL service while the QEMU VM is running does not make the archived
 VM101 backup recoverable or production-ready.
+
+## October 17 WAL checkpoint follow-up
+
+A separate read-only metadata audit found five consecutive on-disk WAL
+segments and decoded one record at each latest checkpoint/REDO starting
+location with the current PostgreSQL 17 pg_waldump binary. Page checksums
+are disabled. See VM101_WAL_CHECKPOINT_READONLY_20261017.md for the precise
+limitations: **only LIVE VM101's WAL metadata and sample records** were
+read, not the October 17 VMA archive or a restored PostgreSQL instance.
+Neither this nor the listener hypothesis proves database recoverability.
