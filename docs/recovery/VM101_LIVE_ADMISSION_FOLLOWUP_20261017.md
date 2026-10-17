@@ -31,3 +31,11 @@ Expected result today: VM9101 does not exist; the audit returns `HOLD`, exit **2
 5. Never reroute public `.139` without checking VM150 K3s address ownership; never treat synthetic quotation checks as manufacturer/pricebook authority.
 
 **Explicitly forbidden in this phase:** `qmrestore`, `qm create/start/set`, production `pg_ctl` or `pg_resetwal`, Alembic upgrade, public NAT/TLS changes, secret rotation, TestFlight publication. Code/test review on a draft PR is permitted; production authorization remains false.
+
+## Follow-up diagnostic (read-only)
+
+October 17 later direct VM101 guest-agent examination classified historical
+October 6 systemd journal evidence as an address binding/startup-protocol
+failure, consistent with obsolete PostgreSQL listen address 10.77.0.10. See
+`VM101_POSTGRES_STARTUP_DIAGNOSIS_20261017.md`. This is a cause hypothesis,
+not a WAL/data restore, a clean shutdown or permission to restart production.
