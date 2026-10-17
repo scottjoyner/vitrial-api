@@ -10,7 +10,7 @@ From an authorized Fleet Commander/OpenCode shell with the designated Proxmox SS
 python3 scripts/audit_vm101_restore_precreation_readonly.py --proxmox-host root@<designated-proxmox-host>
 ```
 
-The script reads only Proxmox cluster guest identities, VM101's QEMU configuration, local storage metadata and candidate volume listing, and a host-local directory presence/symlink predicate. It **does not** traverse the NFS backup mount, read the selected archive's bytes, inspect guest database records, change VM configuration, allocate disks, or grant authorization.
+The script reads only Proxmox cluster guest identities, VM101's QEMU configuration, local storage metadata and candidate volume listing, and a host-local directory presence/symlink predicate. Run the additional read-only source image-chain check in `VM101_DISK_CHAIN_READONLY_GATE_20261017.md` before independently approved restoration. It **does not** traverse the NFS backup mount, read the selected archive's bytes, inspect guest database records, change VM configuration, allocate disks, or grant authorization.
 
 A correct healthy technical result has `technical_precreation_pass=true` **and** `gate=HOLD`, `restore_authorized=false`, with CLI exit **2**. The script's evidence is valid for no more than five minutes; repeat it immediately before a separately authorized change. A missing source, occupied VMID, drifting cluster inventory, wrong hypervisor, local storage below 384 GiB or ambiguous/symlinked candidate directory yields a technical hold as well.
 
