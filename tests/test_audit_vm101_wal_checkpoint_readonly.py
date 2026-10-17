@@ -20,6 +20,9 @@ BASE={
  'redo_segment_present':True,'wal_timeline_consistent':True,
  'unexpected_partial_segment':False,'redo_record_readable':True,
  'checkpoint_record_readable':True,'data_page_checksums_disabled':True,
+ 'wal_readable_prefix_records':5,
+ 'wal_prefix_boundary':'zero_length_record_boundary',
+ 'wal_prefix_boundary_lsn':'0/1B000060',
 }
 
 class WalAuditTests(unittest.TestCase):
@@ -28,6 +31,9 @@ class WalAuditTests(unittest.TestCase):
         self.assertTrue(r['technical_wal_metadata_pass'])
         self.assertEqual(r['data_page_checksums'],'disabled')
         self.assertEqual(r['wal_segment_count'],5)
+        self.assertEqual(r['wal_readable_prefix_records'],5)
+        self.assertEqual(r['wal_first_boundary'],'zero_length_record_boundary')
+        self.assertFalse(r['wal_end_of_written_data_proven'])
         for key in ('whole_wal_stream_verified','full_replay_verified',
                     'tenant_data_verified','wal_archival_independently_proven',
                     'restore_authorized','production_authorized'):
@@ -60,6 +66,36 @@ class WalAuditTests(unittest.TestCase):
                 r=wal.assess(d,'one',CFG)
                 self.assertFalse(r['technical_wal_metadata_pass'])
                 self.assertNotIn('fake-private',str(r))
+
+    def test_unclassified_prefix_and_broken_boundary_fail_closed(self):
+        variants=(
+            ('wal_readable_prefix_records',0),
+            ('wal_readable_prefix_records',True),
+            ('wal_readable_prefix_records',-1),
+            ('wal_readable_prefix_records',17),
+            ('wal_readable_prefix_records','5'),
+            ('wal_prefix_boundary','unclassified_failure'),
+            ('wal_prefix_boundary','assumed_clean_shutdown'),
+            ('wal_prefix_boundary_lsn','0/ZZZZZZ'),
+            ('wal_prefix_boundary_lsn',None),
+        )
+        for key,val in variants:
+            with self.subTest(key=key,value=val):
+                res=wal.assess({**BASE,key:val},'one',CFG)
+                self.assertFalse(res['technical_wal_metadata_pass'])
+                self.assertEqual(res['gate'],'HOLD')
+                self.assertFalse(res['wal_end_of_written_data_proven'])
+        inconsistent={**BASE,'wal_prefix_boundary':'not_observed_within_16',
+                      'wal_prefix_boundary_lsn':None}
+        self.assertFalse(wal.assess(inconsistent,'one',CFG)['technical_wal_metadata_pass'])
+        no_boundary={**BASE,'wal_prefix_boundary':'not_observed_within_16',
+                     'wal_prefix_boundary_lsn':None,
+                     'wal_readable_prefix_records':16}
+        r=wal.assess(no_boundary,'one',CFG)
+        self.assertTrue(r['technical_wal_metadata_pass'])
+        self.assertFalse(r['full_replay_verified'])
+        self.assertFalse(r['wal_end_of_written_data_proven'])
+        self.assertEqual(r['wal_first_boundary'],'not_observed_within_16')
 
     def test_unexpected_machine_or_vm_does_not_pass(self):
         self.assertFalse(wal.assess(BASE,'other',CFG)['technical_wal_metadata_pass'])
