@@ -18,6 +18,7 @@ spec.loader.exec_module(m)
 NOW=datetime(2026,10,17,19,45,0,tzinfo=timezone.utc)
 FIELDS={"precreation":"technical_precreation_pass",
         "source_disk":"technical_disk_shape_pass",
+        "postgres_startup":"technical_diagnostic_complete",
         "clone_quarantine":"technical_isolation_shape_pass",
         "clone_disk":"technical_disk_shape_pass"}
 
@@ -27,6 +28,10 @@ def fake_report(field=True,override=None):
        "production_authorized":False,"executable_commands":[],
        "technical_holds":[]}
     x.update({field:True} if isinstance(field,str) else {})
+    if field=="technical_diagnostic_complete":
+        x.update({"root_cause_proven":False,"postgresql_recovery_proven":False,
+                  "service_restarted":False,
+                  "failure_hypothesis":"legacy_address_bind_failure_supported"})
     if override:x.update(override)
     return x
 
@@ -89,6 +94,20 @@ class RecoveryReviewTests(unittest.TestCase):
         self.assertFalse(result["checks"]["precreation"]["pass"])
         self.assertTrue(result["checks"]["precreation"]["unavailable"])
         self.assertEqual(result["gate"],"HOLD")
+
+    def test_startup_diagnostic_cannot_assert_recovery_proof(self):
+        p=probes()
+        def forged():
+            return {**fake_report("technical_diagnostic_complete"),
+                    "root_cause_proven":True,
+                    "postgresql_recovery_proven":True,
+                    "service_restarted":True,
+                    "failure_hypothesis":"legacy_address_bind_failure_supported"}
+        p["postgres_startup"]=forged
+        r=m.collect("root@test",probes=p,now=NOW)
+        self.assertFalse(r["checks"]["postgres_startup"]["pass"])
+        self.assertTrue(r["checks"]["postgres_startup"]["unavailable"])
+        self.assertFalse(r["production_authorized"])
 
     def test_missing_pair_of_approval_files_denied(self):
         p=probes()
