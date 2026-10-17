@@ -17,6 +17,7 @@ m=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 NOW=datetime(2026,10,17,19,45,0,tzinfo=timezone.utc)
 FIELDS={"precreation":"technical_precreation_pass",
+        "archive_metadata":"technical_archive_metadata_pass",
         "source_disk":"technical_disk_shape_pass",
         "postgres_startup":"technical_diagnostic_complete",
         "wal_checkpoint":"technical_wal_metadata_pass",
@@ -29,6 +30,17 @@ def fake_report(field=True,override=None):
        "production_authorized":False,"executable_commands":[],
        "technical_holds":[]}
     x.update({field:True} if isinstance(field,str) else {})
+    if field=="technical_archive_metadata_pass":
+        x.update({"archived_config_safe_to_boot":False,
+                  "clone_config_scrubbing_required":True,
+                  "archive_full_sha256_rechecked_now":False,
+                  "archive_compressed_payload_verified_now":False,
+                  "archive_postgres_consistency_verified":False,
+                  "disk_blocks_extracted":False,
+                  "inherited_production_nic_count":2,
+                  "archive_other_read_bit_set":True,
+                  "nfs_access_controls_independently_verified":False,
+                  "archive_permissions_custodian_approved":False})
     if field=="technical_wal_metadata_pass":
         x.update({"whole_wal_stream_verified":False,
                   "full_replay_verified":False,"tenant_data_verified":False,
@@ -154,6 +166,23 @@ class RecoveryReviewTests(unittest.TestCase):
                 result=m.collect("root@test",probes=p,now=NOW)
                 self.assertFalse(result["checks"]["wal_checkpoint"]["pass"])
                 self.assertTrue(result["checks"]["wal_checkpoint"]["unavailable"])
+
+    def test_original_archive_config_never_boots_as_production(self):
+        result=m.collect("root@test",probes=probes(),now=NOW)
+        a=result["checks"]["archive_metadata"]
+        self.assertTrue(a["pass"])
+        self.assertEqual(a["inherited_production_nic_count"],2)
+        self.assertTrue(a["requires_config_scrub"])
+        self.assertFalse(result["restore_authorized"])
+        for field,value in (("archived_config_safe_to_boot",True),
+                            ("clone_config_scrubbing_required",False),
+                            ("archive_compressed_payload_verified_now",True),
+                            ("inherited_production_nic_count",True)):
+            with self.subTest(field=field):
+                p=probes(("archive_metadata",field,value))
+                x=m.collect("root@test",probes=p,now=NOW)
+                self.assertFalse(x["checks"]["archive_metadata"]["pass"])
+                self.assertTrue(x["checks"]["archive_metadata"]["unavailable"])
 
     def test_missing_pair_of_approval_files_denied(self):
         p=probes()
