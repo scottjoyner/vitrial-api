@@ -13,6 +13,7 @@ import audit_vm101_clone_quarantine_readonly as quarantine
 import audit_vm101_disk_chain_readonly as disk
 import audit_vm101_restore_precreation_readonly as precreation
 import diagnose_vm101_postgres_startup_readonly as startup
+import audit_vm101_wal_checkpoint_readonly as wal
 import verify_vm101_approval_receipts as approval
 
 
@@ -41,6 +42,13 @@ def component(worker,field,authorize="restore_authorized"):
         if value[field] and holds and field!="technical_diagnostic_complete":
             raise ValueError("Passing component conflicts with reported hold reasons")
         result={"pass":value[field],"unavailable":False,"finding_count":len(holds)}
+        if field=="technical_wal_metadata_pass":
+            if (value.get("whole_wal_stream_verified") is not False or
+                value.get("full_replay_verified") is not False or
+                value.get("tenant_data_verified") is not False or
+                value.get("wal_archival_independently_proven") is not False or
+                value.get("checkpoint_record_sampled_only") is not True):
+                raise ValueError("WAL sample must not be mislabeled as full recovery")
         if field=="technical_diagnostic_complete":
             if (value.get("root_cause_proven") is not False or
                 value.get("postgresql_recovery_proven") is not False or
@@ -67,12 +75,14 @@ def collect(host,bundle=None,keys=None,now=None,probes=None):
         "precreation":lambda:precreation.capture(host),
         "source_disk":lambda:disk.capture(host,"source"),
         "postgres_startup":lambda:startup.capture(host),
+        "wal_checkpoint":lambda:wal.capture(host),
         "clone_quarantine":lambda:inspect_quarantine(host),
         "clone_disk":lambda:disk.capture(host,"clone-qcow2"),
     }
     expected={"precreation":"technical_precreation_pass",
               "source_disk":"technical_disk_shape_pass",
               "postgres_startup":"technical_diagnostic_complete",
+              "wal_checkpoint":"technical_wal_metadata_pass",
               "clone_quarantine":"technical_isolation_shape_pass",
               "clone_disk":"technical_disk_shape_pass"}
     if set(funcs)!=set(expected):
