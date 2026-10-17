@@ -19,6 +19,7 @@ NOW=datetime(2026,10,17,19,45,0,tzinfo=timezone.utc)
 FIELDS={"precreation":"technical_precreation_pass",
         "source_disk":"technical_disk_shape_pass",
         "postgres_startup":"technical_diagnostic_complete",
+        "wal_checkpoint":"technical_wal_metadata_pass",
         "clone_quarantine":"technical_isolation_shape_pass",
         "clone_disk":"technical_disk_shape_pass"}
 
@@ -28,6 +29,11 @@ def fake_report(field=True,override=None):
        "production_authorized":False,"executable_commands":[],
        "technical_holds":[]}
     x.update({field:True} if isinstance(field,str) else {})
+    if field=="technical_wal_metadata_pass":
+        x.update({"whole_wal_stream_verified":False,
+                  "full_replay_verified":False,"tenant_data_verified":False,
+                  "wal_archival_independently_proven":False,
+                  "checkpoint_record_sampled_only":True})
     if field=="technical_diagnostic_complete":
         x.update({"root_cause_proven":False,"postgresql_recovery_proven":False,
                   "service_restarted":False,
@@ -108,6 +114,24 @@ class RecoveryReviewTests(unittest.TestCase):
         self.assertFalse(r["checks"]["postgres_startup"]["pass"])
         self.assertTrue(r["checks"]["postgres_startup"]["unavailable"])
         self.assertFalse(r["production_authorized"])
+
+    def test_full_wal_replay_or_customer_records_never_laundered(self):
+        for field in ("whole_wal_stream_verified","full_replay_verified",
+                      "tenant_data_verified","wal_archival_independently_proven"):
+            with self.subTest(field=field):
+                p=probes()
+                sample=fake_report("technical_wal_metadata_pass")
+                sample.update({"whole_wal_stream_verified":False,
+                               "full_replay_verified":False,
+                               "tenant_data_verified":False,
+                               "wal_archival_independently_proven":False,
+                               "checkpoint_record_sampled_only":True,
+                               field:True})
+                p["wal_checkpoint"]=lambda s=sample:s
+                r=m.collect("root@test",probes=p,now=NOW)
+                self.assertFalse(r["checks"]["wal_checkpoint"]["pass"])
+                self.assertTrue(r["checks"]["wal_checkpoint"]["unavailable"])
+                self.assertFalse(r["restore_authorized"])
 
     def test_missing_pair_of_approval_files_denied(self):
         p=probes()
