@@ -81,8 +81,11 @@ def assess(hostname: str, first: str, final: str, config: str,
             holds.append("VM101 source not on approved Proxmox node")
         if not re.search(r"(?m)^name:\s*vitrial-prod-db\s*$", source_config):
             holds.append("Production source name mismatch")
-        if not re.search(r"(?m)^scsi0:\s*\S+.*(?:^|,)size=160G(?:,|$)", source_config):
-            holds.append("Production source disk shape mismatch")
+        source_disks = re.findall(r"(?m)^scsi0:\s*(\S+)$", source_config)
+        if (len(source_disks) != 1 or
+                not source_disks[0].startswith("local:101/vm-101-disk-0.qcow2,") or
+                source_disks[0].split(",").count("size=160G") != 1):
+            holds.append("Production source disk identity/shape mismatch")
         if (cfg.get("storage") != "local" or cfg.get("type") != "dir"
                 or cfg.get("path") != LOCAL_STORAGE or
                 "images" not in str(cfg.get("content", "")).split(",")):
