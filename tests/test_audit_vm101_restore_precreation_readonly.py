@@ -62,6 +62,10 @@ class RestoreAdmissionTests(unittest.TestCase):
         self.assertFalse(audit(host="wrongnode\n")["technical_precreation_pass"])
         self.assertFalse(audit(source=SOURCE.replace("vitrial-prod-db", "other"))["technical_precreation_pass"])
         self.assertFalse(audit(source=SOURCE.replace("size=160G", "size=80G"))["technical_precreation_pass"])
+        self.assertFalse(audit(source=SOURCE.replace("local:101/vm-101-disk-0.qcow2",
+                                                    "local:999/vm-999-disk-0.qcow2"))["technical_precreation_pass"])
+        self.assertFalse(audit(source=SOURCE.replace("vm-101-disk-0.qcow2",
+                                                    "vm-101-disk-1.qcow2"))["technical_precreation_pass"])
 
     def test_storage_mismatch_and_capacity(self):
         for cfg in ({**CFG, "path": "/mnt/nfs"}, {**CFG, "content": "backup"},
