@@ -43,6 +43,12 @@ Expected October 17 observed state:
   markers support an obsolete listener-address binding failure hypothesis;
   See `VM101_POSTGRES_STARTUP_DIAGNOSIS_20261017.md`. This does not mean
   the PostgreSQL service is healthy or that root cause is independently proven.
+- wal_checkpoint sample PASS: current VM101 WAL directory includes five
+  consecutive local 16 MiB segments and pg_waldump decodes one record at
+  each checkpoint/REDO starting location; see
+  `VM101_WAL_CHECKPOINT_READONLY_20261017.md`. This observes LIVE source
+  WAL, NOT necessarily WAL inside the backup and not end-to-end WAL replay.
+  PostgreSQL data-page checksums are disabled on this cluster.
 - clone_quarantine UNKNOWN/FAIL: VM9101 does not exist.
 - clone_disk UNKNOWN/FAIL: independent VM9101 disk does not exist.
 - signed_approvals UNKNOWN/FAIL: no authentic four-role human approval bundle
