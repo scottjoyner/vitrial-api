@@ -2,11 +2,12 @@
 """Fail-closed metadata-only PostgreSQL 17 WAL checkpoint-readability witness.
 
 Never starts PostgreSQL, writes WAL, opens NFS, streams WAL content, or
-asserts recoverability. pg_waldump decodes at most one record per location.
+asserts recoverability. pg_waldump performs bounded metadata-only record probes.
 """
 from __future__ import annotations
 import argparse
 import json
+import re
 from audit_vm101_clone_quarantine_readonly import config_fields,remote
 
 EXPECTED="00000001000000000000001A"
@@ -42,6 +43,31 @@ for key,point in [('redo',a["Latest checkpoint's REDO location"]),('checkpoint',
   p=subprocess.run(['/usr/lib/postgresql/17/bin/pg_waldump','-p',wal,'-s',point,'-n','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5)
   locations[key]=p.returncode==0
  except subprocess.TimeoutExpired:locations[key]=False
+# Probe at most 16 prefixes. A zero-length record can be the normal boundary
+# of written WAL inside preallocated files, NOT proof of a valid complete replay.
+# Parsing errors are classified in-guest. stderr and WAL records never leave it.
+prefix_count=0;boundary="not_observed_within_16";boundary_lsn=None
+for n in range(1,17):
+ try:
+  proc=subprocess.run(['/usr/lib/postgresql/17/bin/pg_waldump','-q','-p',wal,
+                       '-s',a["Latest checkpoint's REDO location"],'-n',str(n)],
+                      stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,
+                      text=True,timeout=5)
+ except subprocess.TimeoutExpired:
+  boundary='unclassified_failure';break
+ if proc.returncode==0 and not proc.stderr:
+  prefix_count=n
+  continue
+ if proc.returncode != 1 or len(proc.stderr)>2048:
+  boundary='unclassified_failure';break
+ msg=proc.stderr.lower()
+ lsn=re.findall(r'[0-9a-f]{1,8}/[0-9a-f]{1,8}',msg)
+ if 'invalid record length' in msg and re.search(r'got\s+0\b',msg) and lsn:
+  boundary='zero_length_record_boundary'
+  boundary_lsn=lsn[-1].upper()
+ else:
+  boundary='unclassified_failure'
+ break
 b=ctl()
 print(json.dumps({
  'control_stable': all(a[k]==b[k] for k in keys),
@@ -60,6 +86,9 @@ print(json.dumps({
  'unexpected_partial_segment':bool(unexpected),
  'redo_record_readable':locations['redo'],
  'checkpoint_record_readable':locations['checkpoint'],
+ 'wal_readable_prefix_records':prefix_count,
+ 'wal_prefix_boundary':boundary,
+ 'wal_prefix_boundary_lsn':boundary_lsn,
  'data_page_checksums_disabled':a['Data page checksum version']=='0',
 },sort_keys=True))
 '''
@@ -68,8 +97,10 @@ FIELDS={"control_stable","postgres_stopped","control_state","redo_lsn_exact",
  "checkpoint_lsn_exact","redo_wal_file_exact","timeline_one","wal_segment_bytes",
  "wal_segment_count","wal_sequence_contiguous","wal_segments_regular_16mib",
  "redo_segment_present","wal_timeline_consistent","unexpected_partial_segment",
- "redo_record_readable","checkpoint_record_readable","data_page_checksums_disabled"}
-BOOL_FIELDS=FIELDS-{"control_state","wal_segment_bytes","wal_segment_count"}
+ "redo_record_readable","checkpoint_record_readable","data_page_checksums_disabled",
+ "wal_readable_prefix_records","wal_prefix_boundary","wal_prefix_boundary_lsn"}
+BOOL_FIELDS=FIELDS-{"control_state","wal_segment_bytes","wal_segment_count",
+                    "wal_readable_prefix_records","wal_prefix_boundary","wal_prefix_boundary_lsn"}
 REQUIRED_TRUE=BOOL_FIELDS-{"unexpected_partial_segment","data_page_checksums_disabled"}
 
 
@@ -92,6 +123,25 @@ def assess(data:dict,hostname:str,vm_config:str)->dict:
             holds.append("Checkpoint decode or WAL segment continuity unproven")
         if data["unexpected_partial_segment"]:
             holds.append("Partial WAL segment requires independent review")
+        prefix=data["wal_readable_prefix_records"]
+        if type(prefix) is not int or not 0<=prefix<=16:
+            holds.append("WAL prefix probe count invalid")
+        boundary=data["wal_prefix_boundary"]
+        if boundary not in {"zero_length_record_boundary","not_observed_within_16",
+                            "unclassified_failure"}:
+            holds.append("Unrecognized WAL record boundary")
+        boundary_lsn=data["wal_prefix_boundary_lsn"]
+        if (boundary_lsn is not None and
+            (not isinstance(boundary_lsn,str) or
+             not re.fullmatch(r"[0-9A-F]{1,8}/[0-9A-F]{1,8}",boundary_lsn))):
+            holds.append("Invalid WAL boundary location")
+        if (boundary=="zero_length_record_boundary" and boundary_lsn is None
+                or boundary!="zero_length_record_boundary" and boundary_lsn is not None):
+            holds.append("Inconsistent WAL boundary witness")
+        if (not prefix or boundary=="unclassified_failure" or
+            (boundary=="not_observed_within_16" and prefix!=16) or
+            (boundary=="zero_length_record_boundary" and prefix>=16)):
+            holds.append("WAL prefix did not provide a consistent bounded result")
         checksum_status="disabled" if data["data_page_checksums_disabled"] else "enabled_unverified"
         technical=not holds
     except (ValueError,KeyError,TypeError,AttributeError):
@@ -102,6 +152,9 @@ def assess(data:dict,hostname:str,vm_config:str)->dict:
         "wal_segment_count":data.get("wal_segment_count") if isinstance(data,dict) and type(data.get("wal_segment_count")) is int else None,
         "data_page_checksums":checksum_status,
         "checkpoint_record_sampled_only":True,
+        "wal_readable_prefix_records":data.get("wal_readable_prefix_records") if isinstance(data,dict) and type(data.get("wal_readable_prefix_records")) is int else None,
+        "wal_first_boundary":data.get("wal_prefix_boundary") if isinstance(data,dict) and data.get("wal_prefix_boundary") in {"zero_length_record_boundary","not_observed_within_16","unclassified_failure"} else "unverified",
+        "wal_end_of_written_data_proven":False,
         "whole_wal_stream_verified":False,"full_replay_verified":False,
         "tenant_data_verified":False,"wal_archival_independently_proven":False,
         "restore_authorized":False,"production_authorized":False,
