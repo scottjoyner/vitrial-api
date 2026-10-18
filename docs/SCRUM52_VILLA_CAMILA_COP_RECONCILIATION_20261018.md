@@ -99,3 +99,10 @@ floating-point arithmetic or locale-dependent OS libraries.
 5. **SCRUM-49/57/65/69:** signed iOS TestFlight exact-build physical
    two/three-user acceptance, offline drafts, sync conflicts and customer
    walkthrough. No production or TestFlight rollout before these gates.
+
+## Exact-commit disposable HTTP deployment checkpoint
+
+- Implementation commit `677b75a0210cff2d5a9af860995287c8e47278b6` was verified clean and tested against disposable PG17/Alembic 0008: **507 passed, 1 skipped**. The opt-in private source test was enabled, with the pinned fixture SHA verified; private customer line values were not emitted into repository or CI.
+- Fleet Commander ran the exact implementation using temporary Uvicorn bound only to `127.0.0.1` on x1-370. Live TCP: `/health=200`, `/ready=200`, anonymous V1 push=401 and anonymous V2 push=401. The temporary API was stopped and checked after smoke.
+- End-to-end money acceptance was tested in the real migrated-PostgreSQL ASGI test (20 synthetic canonical Items, one priced 20-row quotation, rejected mismatched totals, durable sync pull). Loopback TCP smoke only proves deployment/bootstrap/readiness/authentication, not a real customer iPhone workflow.
+- The external historical source fixture has **not** been published as company catalog or price book. Independent source PDF/customer approval, company authorizations, canonical upstream exact-head CI, physical iOS UI acceptance and VM101 recoverability remain open gates.
