@@ -26,6 +26,7 @@ from app.models import (
 from app.reference_models import ReferencePublication
 from app.tenant_claims import tenant_claims_match
 from app.quotation_estimate import EstimateRejected, reconcile_quotation_cop
+from app.job_item_draft import validate_job_item_draft
 
 
 class AuthorizationRejected(Exception):
@@ -563,6 +564,13 @@ async def authorize_record(
                 or project_sector.project_id != project_id
             ):
                 raise AuthorizationRejected("Item ProjectSector is not canonical for its Project")
+            try:
+                validate_job_item_draft(
+                    payload, item_id=entity_id, project_id=project_id,
+                    project_sector_id=project_sector_id,
+                )
+            except ValueError as exc:
+                raise AuthorizationRejected("Item draft contract is invalid") from exc
             return OwnershipPlan(
                 "item", entity_id, True, deleted_at,
                 customer_id=project.customer_id,
@@ -593,6 +601,14 @@ async def authorize_record(
             raise AuthorizationRejected("Item ProjectSector ownership is immutable")
         if deleting:
             await _ensure_item_delete_safe(db, principal, canonical.item_id)
+        else:
+            try:
+                validate_job_item_draft(
+                    payload, item_id=entity_id, project_id=canonical.project_id,
+                    project_sector_id=canonical.project_sector_id,
+                )
+            except ValueError as exc:
+                raise AuthorizationRejected("Item draft contract is invalid") from exc
         return OwnershipPlan(
             "item", entity_id, False, deleted_at,
             customer_id=project.customer_id,
