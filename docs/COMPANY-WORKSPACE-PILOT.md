@@ -19,6 +19,20 @@ or request body. The no-store response reports organization identity, active
 team members, effective seat allowance and remaining seats. It does not expose
 email addresses, issued access tokens, membership capabilities or admin keys.
 
+**SCRUM-48 tenant/role refinement:** `memberDirectoryScope` is explicit.
+A server-authenticated shared-company member (`sync` and both company-wide
+customer/project scopes) or a member/role manager may list the full active
+company directory. A restricted supplier/scoped-only seat gets only its **own**
+membership's name and roles, while `occupiedSeats` remains the company's
+actual active membership count. Supplying a forged `organizationID` query
+parameter cannot change the authenticated tenant, and the response remains
+`Cache-Control: no-store`. If a restricted token's own membership cannot
+be found in the company, the request fails with 401 instead of leaking members.
+
+This is a scoped security slice, not proof of tenant isolation for every
+customer/job/quotation, reference-data or sync endpoint; the full SCRUM-64
+adversarial route matrix is still required.
+
 The existing `POST /internal/admin/v1/bootstrap` retains its separate admin-key
 guard and is **not** a self-service signup or invitation endpoint. An operator
 may explicitly request `sharedCompanyAccess: true`, granting both

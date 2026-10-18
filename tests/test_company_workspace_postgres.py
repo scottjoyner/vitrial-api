@@ -58,6 +58,11 @@ async def test_two_seats_organizational_boundary_revocation(monkeypatch):
             third_company=await provision(c,b,"b1",limit=4)
             assert third_company.status_code==200,third_company.text
             token_b=third_company.json()["accessToken"]
+            # A scoped-only partner is a valid same-company member, but should
+            # not obtain everyone else's names/role assignments from workspace.
+            restricted=await provision(c,b,"b2",shared=False)
+            assert restricted.status_code==200,restricted.text
+            token_restricted=restricted.json()["accessToken"]
             async def workspace(token,extra=""):
                 return await c.get("/api/v1/company/workspace"+extra,
                     headers={"Authorization":"Bearer "+token})
@@ -71,13 +76,43 @@ async def test_two_seats_organizational_boundary_revocation(monkeypatch):
                 assert d["currentMemberHasCompanyCustomerAccess"] is True
                 assert d["currentMemberHasCompanyProjectAccess"] is True
                 assert len(d["members"])==2
+                assert d["memberDirectoryScope"]=="team"
                 assert all(x["userID"].startswith("user-"+run+"-a") for x in d["members"])
             forged=await workspace(token1,"?organizationID="+b)
             assert forged.json()["organizationID"]==a
             outside=await workspace(token_b)
             assert outside.status_code==200
             assert outside.json()["organizationID"]==b
-            assert outside.json()["occupiedSeats"]==1
+            assert outside.json()["occupiedSeats"]==2
+            assert outside.json()["memberDirectoryScope"]=="team"
+            assert len(outside.json()["members"])==2
+            limited=await workspace(token_restricted,"?organizationID="+a)
+            assert limited.status_code==200,limited.text
+            scoped=limited.json()
+            assert scoped["organizationID"]==b
+            assert scoped["memberDirectoryScope"]=="self"
+            assert scoped["occupiedSeats"]==2
+            assert len(scoped["members"])==1
+            assert scoped["members"][0]["userID"]=="user-"+run+"-b2"
+            assert not any(m["userID"].endswith("-a1") or m["userID"].endswith("-b1")
+                           for m in scoped["members"])
+            # Company member-manager can inspect occupied seats without needing
+            # customer/job-wide authority. The scoped member remains self-only.
+            manager_payload=request(b,run+"-b3",shared=False)
+            manager_payload["capabilities"]=["organization.members.manage"]
+            manager=await c.post("/internal/admin/v1/bootstrap",
+                headers=h,json=manager_payload)
+            assert manager.status_code==200,manager.text
+            managed=await workspace(manager.json()["accessToken"])
+            assert managed.status_code==200,managed.text
+            assert managed.json()["memberDirectoryScope"]=="team"
+            assert managed.json()["occupiedSeats"]==3
+            assert len(managed.json()["members"])==3
+            after=await workspace(token_restricted)
+            assert after.status_code==200
+            assert after.json()["occupiedSeats"]==3
+            assert after.json()["memberDirectoryScope"]=="self"
+            assert len(after.json()["members"])==1
             assert (await provision(c,a,"a1",limit=1)).status_code==409
             deactivate=await provision(c,a,"a2",active=False)
             assert deactivate.status_code==200,deactivate.text

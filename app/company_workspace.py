@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import Field
+from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, current_principal
+from app.company_policy import may_view_team_directory
 from app.db import session_scope
 from app.models import Membership, Organization, User
 from app.schemas import AuthorizationRole, StrictModel
@@ -26,6 +28,7 @@ class CompanyWorkspaceView(StrictModel):
     occupiedSeats: int = Field(ge=0)
     seatsRemaining: int = Field(ge=0)
     members: list[CompanyMemberView]
+    memberDirectoryScope: Literal["team", "self"]
     currentMemberHasCompanyCustomerAccess: bool
     currentMemberHasCompanyProjectAccess: bool
 
@@ -62,6 +65,17 @@ async def company_workspace(
         for membership, user in result.all()
     ]
     occupied = len(members)
+    can_view_team = may_view_team_directory(
+        capabilities=principal.capabilities,
+        all_customers=principal.all_customers,
+        all_projects=principal.all_projects,
+    )
+    if not can_view_team:
+        members = [m for m in members if m.membershipID == principal.membership_id]
+        if len(members) != 1:
+            # The principal's live membership is expected to be present, but
+            # fail closed on an identity mismatch instead of exposing the list.
+            raise HTTPException(401, "current company membership unavailable")
     return CompanyWorkspaceView(
         organizationID=organization.id,
         organizationName=organization.name,
@@ -69,6 +83,7 @@ async def company_workspace(
         occupiedSeats=occupied,
         seatsRemaining=max(0, organization.seat_limit - occupied),
         members=members,
+        memberDirectoryScope="team" if can_view_team else "self",
         currentMemberHasCompanyCustomerAccess=principal.all_customers,
         currentMemberHasCompanyProjectAccess=principal.all_projects,
     )

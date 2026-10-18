@@ -36,3 +36,20 @@ def ensure_seat_limit(*, requested_limit: int, active_members: int, additional_a
         raise ValueError("active membership count invalid")
     if active_members + int(additional_active) > requested_limit:
         raise ValueError("organization seat capacity exceeded")
+
+def may_view_team_directory(
+    *,
+    capabilities: frozenset[str],
+    all_customers: bool,
+    all_projects: bool,
+) -> bool:
+    """Do not leak coworker identities/roles to supplier or scoped-only seats.
+
+    Administrative capability grants team visibility directly. Other internal
+    shared-company seats need BOTH organization-wide record scopes and sync
+    authorization; a single scoped grant is insufficient.
+    """
+    return bool(
+        {"organization.members.manage", "organization.roles.manage"} & capabilities
+        or (all_customers and all_projects and "sync" in capabilities)
+    )

@@ -66,3 +66,20 @@ def test_shared_member_bootstrap_requires_sync_capability():
         AdminBootstrapRequest.model_validate(values)
     values["capabilities"].append("sync")
     assert AdminBootstrapRequest.model_validate(values).sharedCompanyAccess is True
+
+@pytest.mark.parametrize("capabilities,all_customers,all_projects,allowed", [
+    (frozenset({"sync"}),True,True,True),
+    (frozenset({"organization.members.manage"}),False,False,True),
+    (frozenset({"organization.roles.manage"}),False,False,True),
+    (frozenset({"sync"}),True,False,False),
+    (frozenset({"sync"}),False,True,False),
+    (frozenset({"sync"}),False,False,False),
+    (frozenset({"customer.create"}),True,True,False),
+    (frozenset(),False,False,False),
+])
+def test_company_directory_requires_shared_authority_or_management(
+    capabilities,all_customers,all_projects,allowed
+):
+    from app.company_policy import may_view_team_directory
+    assert may_view_team_directory(capabilities=capabilities,
+        all_customers=all_customers,all_projects=all_projects) is allowed

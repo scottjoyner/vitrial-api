@@ -24,3 +24,11 @@ def test_company_seat_migration_follows_current_history():
     assert 'down_revision = "0007"' in text
     assert 'sa.Column("seat_limit", sa.Integer()' in text
     assert "ck_organizations_seat_limit" in text
+
+
+def test_restricted_member_directory_is_explicitly_scoped_to_self():
+    source=(ROOT / "app/company_workspace.py").read_text(encoding="utf-8")
+    assert "memberDirectoryScope" in source
+    assert "may_view_team_directory" in source
+    assert "m.membershipID == principal.membership_id" in source
+    assert "raise HTTPException(401" in source
