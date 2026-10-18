@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.reference_models import ReferencePublication
 from app.tenant_claims import tenant_claims_match
+from app.quotation_estimate import EstimateRejected, reconcile_quotation_cop
 
 
 class AuthorizationRejected(Exception):
@@ -777,6 +778,13 @@ async def authorize_record(
             lines = payload.get("lines", [])
             if not isinstance(lines, list) or not lines:
                 raise AuthorizationRejected("Quotation must contain canonical Item lines")
+            # Optional typed COP snapshot. Source prices are entered by a human,
+            # never inferred from materials or a globally shared price book.
+            # Validate before any canonical Item lookups or mutation plan.
+            try:
+                reconcile_quotation_cop(payload)
+            except EstimateRejected as exc:
+                raise AuthorizationRejected(f"Quotation COP reconciliation rejected: {exc}") from exc
             for line in lines:
                 if not isinstance(line, dict):
                     raise AuthorizationRejected("Quotation line is malformed")
