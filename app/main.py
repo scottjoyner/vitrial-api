@@ -256,6 +256,14 @@ async def _authorized_blob(
     return model
 
 
+# Evidence bytes and digest headers are company/private user data. Prevent
+# browser/proxy caching and disable MIME guessing on both metadata and downloads.
+_EVIDENCE_PRIVATE_HEADERS = {
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
 @app.head(
     "/api/v1/sync/evidence-blobs/{documentID}",
     operation_id="evidencePresence",
@@ -272,7 +280,9 @@ async def evidence_head(
         raise HTTPException(503, "evidence object storage unavailable") from exc
     if not present:
         raise HTTPException(404)
-    return Response(status_code=200, headers={"X-Content-SHA256": model.sha256})
+    return Response(status_code=200, headers={
+        **_EVIDENCE_PRIVATE_HEADERS, "X-Content-SHA256": model.sha256,
+    })
 
 
 @app.put(
@@ -318,7 +328,9 @@ async def evidence_put(
         x_content_sha256,
         request.stream(),
     )
-    return Response(status_code=201, headers={"X-Content-SHA256": model.sha256})
+    return Response(status_code=201, headers={
+        **_EVIDENCE_PRIVATE_HEADERS, "X-Content-SHA256": model.sha256,
+    })
 
 
 @app.get(
@@ -355,7 +367,12 @@ async def evidence_get(
     return StreamingResponse(
         store.stream(model.object_key),
         media_type=model.mime_type or "application/octet-stream",
-        headers={"X-Content-SHA256": model.sha256},
+        headers={
+            **_EVIDENCE_PRIVATE_HEADERS,
+            "Content-Disposition": "attachment",
+            "Content-Security-Policy": "sandbox",
+            "X-Content-SHA256": model.sha256,
+        },
     )
 
 
