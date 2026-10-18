@@ -197,6 +197,22 @@ def _normalized(value) -> str | None:
     return value or None
 
 
+def _require_matching_tenant_claim(principal: Principal, payload: dict) -> None:
+    """Reject contradictory optional tenant markers on every sync mutation.
+
+    Database ownership always comes from the verified principal. A client may
+    omit its legacy tenant hint, but must never persist a different company ID
+    inside an otherwise tenant-scoped Customer/Job/Item/Quotation payload.
+    Exact, case-sensitive equality avoids invisible normalization aliases.
+    """
+    for key in ("organizationID", "organizationId", "organization_id"):
+        if key in payload and (
+            not isinstance(payload[key], str)
+            or payload[key] != principal.organization_id
+        ):
+            raise AuthorizationRejected("payload organization does not match authenticated tenant")
+
+
 def _require_current_provenance(principal: Principal, payload: dict) -> None:
     expected = {
         "actorID": principal.user_id,
@@ -433,6 +449,7 @@ async def authorize_record(
     generic_entity_exists: bool,
 ) -> OwnershipPlan:
     deleting = deleted_at is not None
+    _require_matching_tenant_claim(principal, payload)
 
     if entity_type == "customer":
         canonical = await db.get(CanonicalCustomer, (principal.organization_id, entity_id))
