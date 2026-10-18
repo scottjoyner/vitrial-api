@@ -1,5 +1,7 @@
 """Real synthetic PostgreSQL V2 sync tests for job-specific Item draft CRUD."""
+import base64
 import copy
+import json
 import hashlib
 import os
 from datetime import datetime, timezone
@@ -128,6 +130,20 @@ async def test_item_draft_create_edit_and_company_separation(monkeypatch):
             denied = await push(actor_a, bad, "bad")
             assert denied.status_code == 200
             assert denied.json()["rejectedRecordIDs"] == ["record-bad" + nonce]
+            # Legacy V1 base64 wire reaches the SAME fail-closed Item draft
+            # validator. An invalid supplier SKU cannot bypass it.
+            v1_record = {
+                "id": "v1-invalid-" + nonce,
+                "entityType": "item", "entityID": item_id,
+                "clientMutationID": "v1-invalid-" + nonce,
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "payload": base64.b64encode(json.dumps(bad).encode()).decode(),
+            }
+            v1_invalid = await client.post("/api/v1/sync/push",
+                headers=actor_a,
+                json={"deviceID": "synthetic-old-device", "records": [v1_record]})
+            assert v1_invalid.status_code == 200
+            assert v1_invalid.json()["rejectedRecordIDs"] == ["v1-invalid-" + nonce]
             accepted = await push(actor_a, good_a, "a")
             assert accepted.status_code == 200, accepted.text
             assert accepted.json()["acceptedRecordIDs"] == ["record-a" + nonce]

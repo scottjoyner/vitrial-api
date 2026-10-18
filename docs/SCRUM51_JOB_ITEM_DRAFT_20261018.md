@@ -86,3 +86,10 @@ inaccessible via connected GitHub and Fleet HTTPS authentication at the
 last checkpoint. A locally committed branch, isolated staging deploy or
 verified private Git bundle must not be described as an upstream PR/merge,
 customer acceptance, or production deployment.
+
+## Exact-commit disposable deployment checkpoint
+
+- The implementation commit `039132f4606b39a393a70110a277619c213cb978` was verified against a clean worktree and the complete disposable PostgreSQL 17/Alembic 0008 suite: **535 passed / 1 skipped** with the SHA-pinned private fixture enabled. The sole skip is not a passing test.
+- The same implementation was run through a temporary Uvicorn instance bound only to **127.0.0.1** on x1-370: actual `/health=200`, `/ready=200`, unauthenticated V1/V2 sync push `401`. The process was stopped immediately after testing.
+- The focused real-PostgreSQL test also covers **legacy V1 base64 wire rejection** of forbidden vendor SKU fields in the new optional Item draft. It independently proves successful V2 creation, revisioned update, stale revision denial, different-company same-Item-ID isolation and per-revision sync delivery.
+- This is **a narrowly staged server contract**, not full product CRUD approval. There is no iOS editor, offline/relaunch physical acceptance, globally published catalog, canonical upstream PR, customer approval, production database deployment or inventory manufacturing system in this slice.
