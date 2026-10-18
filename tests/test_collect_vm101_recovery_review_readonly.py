@@ -193,6 +193,50 @@ class RecoveryReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.collect("root@test",probes={"source_disk":lambda:None},now=NOW)
 
+    def test_five_minute_deadline_is_measured_from_before_first_probe(self):
+        # The previous collector minted a fresh timestamp AFTER remote probes.
+        # A slow first probe can no longer promote its own stale evidence.
+        calls=[]
+        p=probes()
+        for name,worker in p.items():
+            p[name]=(lambda name=name,worker=worker:
+                     (calls.append(name),worker())[1])
+        tick=iter([0.0, 0.5, 301.0, 301.0, 301.0])
+        report=m.collect("root@test",probes=p,now=NOW,
+                         monotonic=lambda:next(tick))
+        self.assertEqual(calls,["precreation"])
+        self.assertTrue(report["evidence_window_exceeded"])
+        self.assertTrue(report["validity_begins_at_first_probe"])
+        self.assertEqual(report["collection_duration_ms"],301000)
+        self.assertEqual(report["collected_at_utc"],"2026-10-17T19:45:00+00:00")
+        self.assertEqual(report["expires_at_utc"],"2026-10-17T19:50:00+00:00")
+        self.assertTrue(all(not r["pass"] and r["unavailable"]
+                            for r in report["checks"].values()))
+        self.assertFalse(report["restore_authorized"])
+        self.assertEqual(report["gate"],"HOLD")
+
+    def test_valid_collection_uses_start_clock_and_records_duration(self):
+        tick=[0.0]
+        def clock():
+            now=tick[0]
+            tick[0]+=10.0
+            return now
+        report=m.collect("root@test",probes=probes(),now=NOW,monotonic=clock)
+        self.assertFalse(report["evidence_window_exceeded"])
+        self.assertLess(report["collection_duration_ms"],300000)
+        self.assertEqual(report["expires_at_utc"],"2026-10-17T19:50:00+00:00")
+        self.assertTrue(report["checks"]["precreation"]["pass"])
+        self.assertEqual(report["gate"],"HOLD")
+
+    def test_invalid_monotonic_clock_fail_closed(self):
+        for readings in ([float("nan")],[-5, -6],
+                         [0, float("inf")], [0, -0.01]):
+            with self.subTest(readings=readings):
+                values=iter(readings)
+                with self.assertRaises(ValueError):
+                    m.collect("root@test",probes=probes(),now=NOW,
+                              monotonic=lambda:next(values))
+
     def test_private_evidence_output_is_exclusive(self):
         r=m.collect("root@test",probes=probes(),now=NOW)
         with tempfile.TemporaryDirectory() as temp:
