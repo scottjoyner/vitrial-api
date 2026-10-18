@@ -70,3 +70,19 @@ from the connected Fleet Commander session during the previous checkpoint.
 Do not equate a local branch and test evidence with an approved upstream PR or
 hosted exact-head CI. A reviewed integration/merge and independent operator
 production signoff are still required.
+
+## Exact-code staging smoke observed on x1-370
+
+- Applied implementation commit: `cfbef527da2ea0acec65253d1234e3bfaf7b0267`.
+- A temporary Uvicorn API was **bound to 127.0.0.1 only** and connected only
+  to disposable PostgreSQL 17 running migration 0008 (loopback TCP).
+- `/health` and `/ready` both answered **200**; two synthetic companies with
+  the same Customer ID retrieved their own separate payloads.
+- A V2 Customer mutation bearing the other company's `organizationID` was
+  rejected; unauthenticated V2 pull returned **401**.
+- The staging Uvicorn process was stopped immediately after acceptance. No
+  Proxmox production API, PostgreSQL, object store, external ingress or
+  TestFlight build was started/redeployed by this stage.
+- The more thorough automated migrated-Postgres regression also proves V1
+  wire-format and V2 forged mutation rejection, the no-claim legacy path,
+  overlapping-ID V1/V2 pulls and denial of a forged organization query.
