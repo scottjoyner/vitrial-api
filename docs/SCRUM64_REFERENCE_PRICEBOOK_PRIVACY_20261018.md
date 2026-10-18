@@ -75,3 +75,10 @@ Release order remains:
 **Non-goals:** public ingress, production API/DB/container rollout, PostgreSQL
 restart, Proxmox VM9101 creation, customer-data archive copy or TestFlight
 promotion. These remain **HOLD**.
+
+## Exact implementation staging checkpoint
+
+- Implementation commit `2f31c8c57c65c4335a10246c0bfc2b6ac13092cd` was tested in the disposable PostgreSQL 17 environment, migration `0008`, with **481 passed / 1 skipped** on the full suite.
+- A temporary Uvicorn service from that exact, clean commit was deployed only on x1-370 **127.0.0.1**. Actual TCP endpoints returned `/health=200`, `/ready=200`, anonymous `/reference-data/manifest=401`.
+- An isolated synthetic authenticated company GET of manifest, current and publications returned `200` with `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff` on all three routes.
+- The staging Uvicorn process was stopped immediately after smoke testing; PostgreSQL is disposable and should be removed after final validation. No production database, backup, ingress, price book or TestFlight resources were modified.
