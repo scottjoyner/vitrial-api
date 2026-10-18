@@ -77,6 +77,8 @@ def test_no_development_only_package_is_a_production_dependency():
         "flake8",
         "ipython",
         "notebook",
+        # Ed25519 receipt-verification is an offline audit task, not the API runtime.
+        "cryptography",
     }
     declared = {requirement_name(r) for r in declared_dependencies()}
     assert declared & development_only == set(), (
@@ -139,3 +141,17 @@ def test_service_requirements_are_unchanged(requirement: str):
     this list; this pins the rest so a well-meaning bump is deliberate.
     """
     assert requirement in declared_dependencies()
+
+
+def test_crypto_approval_verification_dep_is_dev_only_and_locked():
+    import tomllib
+    conf = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    runtime = {requirement_name(r) for r in conf["project"]["dependencies"]}
+    dev = {requirement_name(r) for r in conf["project"]["optional-dependencies"]["dev"]}
+    lock = dict(line.split("==", 1) for line in
+                (ROOT / "requirements-lock.txt").read_text().splitlines()
+                if "==" in line)
+    assert "cryptography" not in runtime
+    assert "cryptography" in dev
+    assert {"cryptography": "50.0.2", "cffi": "2.1.1",
+            "pycparser": "3.11"}.items() <= lock.items()
