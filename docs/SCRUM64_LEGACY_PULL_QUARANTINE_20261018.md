@@ -85,3 +85,23 @@ guarantee trustworthy tenant identity **inside** the payload.
 **No production release authority** is inferred from a successful synthetic
 PostgreSQL run, staged Uvicorn process, draft PR, Git bundle, or generic user
 request to continue. Keep production NO-GO/HOLD until independent approvals.
+
+## Exact implementation smoke — observed October 18
+
+- Initial implementation commit: `d85fada523934c002009055279c64cf422c42a39`.
+- A temporary Uvicorn instance ran that exact clean commit **only on the x1-370
+  loopback interface** against the disposable PostgreSQL 17 database (Alembic
+  `0008`), and was stopped after the one-shot smoke test.
+- Actual TCP results: `/health=200`, `/ready=200`, anonymous V1 sync=401,
+  anonymous V2 sync=401. The staging API was confirmed stopped.
+- The combined real-PostgreSQL authorization/sync suite finished with
+  **81 passed / 0 skipped**, including historical-data quarantine, tenant
+  mutation denial, company seats and scoped sync cursor pagination.
+- During combination testing, legacy cursor tests were found to delete
+  *all* tenants' data and to hardcode globally unique change-log sequences.
+  Both test-only defects were corrected and the combined suite rerun green.
+- A full local no-integration run yielded **395 passed / 85 skipped**.
+- Canonical upstream access is **unavailable**: SSH-less Git HTTPS remote
+  cannot authenticate and the connected GitHub integration returns HTTP 404
+  for `astrix-group-accounts/server-api` as of this checkpoint. No upstream PR,
+  canonical hosted CI or production API deploy is claimed.
