@@ -22,7 +22,8 @@ import os
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import delete, select
+from uuid import uuid4
 
 from app.auth import Principal
 from app.db import SessionFactory
@@ -42,12 +43,16 @@ pytestmark = pytest.mark.skipif(
 # (`all_customers or customer_id in customer_ids`), so a customer outside this
 # set is correctly filtered out and the page comes back empty.
 CUSTOMER_IDS = frozenset(f"customer-{i:04d}" for i in range(600))
+# This suite must never purge another organization's rows. Unique IDs also
+# prevent collision with other test workstreams on a shared disposable DB.
+CURSOR_ORG = "org-test-sync-cursor-pagination"
+CURSOR_USER = "user-test-sync-cursor-pagination"
 
 
 def actor() -> Principal:
     return Principal(
-        user_id="user-1",
-        organization_id="org-1",
+        user_id=CURSOR_USER,
+        organization_id=CURSOR_ORG,
         membership_id="membership-1",
         session_id="session-1",
         authorization_revision=1,
@@ -62,17 +67,17 @@ def actor() -> Principal:
 async def clear(db) -> None:
     from sqlalchemy import delete
 
-    await db.execute(delete(SyncChangeLog))
-    await db.execute(delete(SyncEntity))
-    await db.execute(delete(CanonicalCustomer))
-    await db.execute(delete(User))
-    await db.execute(delete(Organization))
+    await db.execute(delete(SyncChangeLog).where(SyncChangeLog.organization_id == CURSOR_ORG))
+    await db.execute(delete(SyncEntity).where(SyncEntity.organization_id == CURSOR_ORG))
+    await db.execute(delete(CanonicalCustomer).where(CanonicalCustomer.organization_id == CURSOR_ORG))
+    await db.execute(delete(User).where(User.id == CURSOR_USER))
+    await db.execute(delete(Organization).where(Organization.id == CURSOR_ORG))
     await db.commit()
 
 
 async def seed_org(db) -> None:
-    db.add(Organization(id="org-1", name="Vitrial", authorization_revision=1))
-    db.add(User(id="user-1", display_name="Operator", email="operator@example.invalid"))
+    db.add(Organization(id=CURSOR_ORG, name="Vitrial", authorization_revision=1))
+    db.add(User(id=CURSOR_USER, display_name="Operator", email="operator@example.invalid"))
     await db.commit()
 
 
@@ -87,10 +92,10 @@ async def seed_deliverable_customers(db, count: int, *, payload_bytes: int = 8) 
     """
     for i in range(count):
         customer_id = f"customer-{i:04d}"
-        db.add(CanonicalCustomer(organization_id="org-1", customer_id=customer_id))
-        db.flush()
+        db.add(CanonicalCustomer(organization_id=CURSOR_ORG, customer_id=customer_id))
+        await db.flush()
         db.add(SyncEntity(
-            organization_id="org-1",
+            organization_id=CURSOR_ORG,
             entity_type="customer",
             entity_id=customer_id,
             server_revision=1,
@@ -100,7 +105,7 @@ async def seed_deliverable_customers(db, count: int, *, payload_bytes: int = 8) 
             deleted_at=None,
         ))
         db.add(SyncChangeLog(
-            organization_id="org-1",
+            organization_id=CURSOR_ORG,
             entity_type="customer",
             entity_id=customer_id,
             server_revision=1,
@@ -129,7 +134,7 @@ async def seed_orphan_change(db, *, index: int) -> None:
     traffic and gets muted -- which is why truncation is tracked as a flag at the break.
     """
     db.add(SyncChangeLog(
-        organization_id="org-1",
+        organization_id=CURSOR_ORG,
         entity_type="customer",
         entity_id=f"vanished-{index:04d}",
         server_revision=1,
@@ -253,27 +258,29 @@ async def test_cursor_advances_past_an_undeliverable_change():
         await seed_org(db)
 
         # A change row whose entity does not exist: undeliverable, always.
-        db.add(SyncChangeLog(
-            organization_id="org-1",
-            sequence=1,
+        vanished = SyncChangeLog(
+            organization_id=CURSOR_ORG,
             entity_type="customer",
             entity_id="customer-vanished",
             server_revision=1,
             operation="upsert",
             client_mutation_id="mutation-vanished",
             created_at=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc),
-        ))
+        )
+        db.add(vanished)
+        await db.flush()
+        vanished_sequence = vanished.sequence
         await db.commit()
 
         pulled = await pull_since(db, actor(), "seq:0")
         assert pulled.records == []
         # Consumed: the cursor moved past it despite delivering nothing.
-        assert cursor_of(pulled) == 1
+        assert cursor_of(pulled) == vanished_sequence
 
         # A later pull from that cursor does not rescan it.
         again = await pull_since(db, actor(), pulled.cursor)
         assert again.records == []
-        assert cursor_of(again) == 1
+        assert cursor_of(again) == vanished_sequence
 
 
 @pytest.mark.asyncio
@@ -289,34 +296,30 @@ async def test_scan_ceiling_bounds_the_query():
         # Inserted directly, and deliberately with NO CanonicalCustomer rows:
         # every change is therefore undeliverable but still consumable, which is
         # what proves the scan ceiling bounds the query rather than the page.
+        rows = []
         for i in range(MAX_SYNC_PULL_SCAN_CHANGES + 25):
-            db.add(SyncChangeLog(
-                organization_id="org-1",
-                sequence=i + 1,
+            row = SyncChangeLog(
+                organization_id=CURSOR_ORG,
                 entity_type="customer",
                 entity_id=f"customer-missing-{i:04d}",
                 server_revision=1,
                 operation="upsert",
                 client_mutation_id=f"mutation-{i:04d}",
                 created_at=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc),
-            ))
-        await db.commit()
-        # Explicit sequence values on a BIGSERIAL primary key leave the
-        # sequence counter behind, so a later apply_push in this database would
-        # collide. Advance it past everything inserted.
-        await db.execute(
-            text("SELECT setval(pg_get_serial_sequence('sync_change_log', 'sequence'), "
-                 ":last, true)"),
-            {"last": MAX_SYNC_PULL_SCAN_CHANGES + 25},
-        )
+            )
+            db.add(row)
+            rows.append(row)
+        await db.flush()
+        first_sequence = rows[0].sequence
+        last_sequence = rows[-1].sequence
         await db.commit()
 
         pulled = await pull_since(db, actor(), "seq:0")
         # Every change is undeliverable, so all are consumed, but only up to the
         # scan ceiling.
-        assert cursor_of(pulled) == MAX_SYNC_PULL_SCAN_CHANGES
+        assert cursor_of(pulled) == first_sequence + MAX_SYNC_PULL_SCAN_CHANGES - 1
         assert pulled.records == []
 
         # The remainder comes on the next pull.
         rest = await pull_since(db, actor(), pulled.cursor)
-        assert cursor_of(rest) == MAX_SYNC_PULL_SCAN_CHANGES + 25
+        assert cursor_of(rest) == last_sequence

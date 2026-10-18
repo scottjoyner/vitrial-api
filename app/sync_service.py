@@ -28,6 +28,7 @@ from app.pull_prefetch import (
 from app.metrics import sync_mutations_total
 from app.metrics import sync_pull_page_size
 from app.metrics import sync_pull_truncated_total
+from app.tenant_claims import tenant_claims_match
 from app.rejection_codes import rejection_code
 from app.ownership import (
     AuthorizationRejected,
@@ -544,6 +545,24 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
         # test was not, and the point of this change is to preserve behaviour.
         entity = page.entities.get((change.entity_type, change.entity_id))
         if not entity:
+            max_seq = max(max_seq, change.sequence)
+            continue
+        # Rows written before inbound tenant-claim enforcement may contain a
+        # contradictory top-level tenant hint. Do not re-deliver such payloads
+        # through either V1 or V2. Consume the log position like any other
+        # undeliverable record so a poisoned legacy row cannot stall every
+        # later sync page. Preserve source data for independently reviewed
+        # remediation; never mutate/drop the canonical row here.
+        if not tenant_claims_match(
+            principal.organization_id,
+            entity.payload_json if entity.payload_json is not None else {},
+        ):
+            log_event(
+                "sync.pull_tenant_claim_quarantined",
+                organizationRef=correlation_ref(principal.organization_id),
+                entityRef=correlation_ref(change.entity_id),
+                entityType=change.entity_type,
+            )
             max_seq = max(max_seq, change.sequence)
             continue
         payload = json.dumps(entity.payload_json or {}, separators=(",", ":"), sort_keys=True).encode()

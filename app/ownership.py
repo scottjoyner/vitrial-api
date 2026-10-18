@@ -24,6 +24,7 @@ from app.models import (
     SyncEntity,
 )
 from app.reference_models import ReferencePublication
+from app.tenant_claims import tenant_claims_match
 
 
 class AuthorizationRejected(Exception):
@@ -205,12 +206,8 @@ def _require_matching_tenant_claim(principal: Principal, payload: dict) -> None:
     inside an otherwise tenant-scoped Customer/Job/Item/Quotation payload.
     Exact, case-sensitive equality avoids invisible normalization aliases.
     """
-    for key in ("organizationID", "organizationId", "organization_id"):
-        if key in payload and (
-            not isinstance(payload[key], str)
-            or payload[key] != principal.organization_id
-        ):
-            raise AuthorizationRejected("payload organization does not match authenticated tenant")
+    if not tenant_claims_match(principal.organization_id, payload):
+        raise AuthorizationRejected("payload organization does not match authenticated tenant")
 
 
 def _require_current_provenance(principal: Principal, payload: dict) -> None:
