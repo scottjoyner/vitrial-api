@@ -5,7 +5,9 @@ import argparse
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import math
 import os
+import time
 from pathlib import Path
 import stat
 
@@ -91,12 +93,18 @@ def component(worker,field,authorize="restore_authorized"):
 def read_approval(bundle,keys):
     return approval.assess(approval.safe_json_file(bundle),approval.safe_json_file(keys))
 
-def collect(host,bundle=None,keys=None,now=None,probes=None):
+def collect(host,bundle=None,keys=None,now=None,probes=None,monotonic=None):
     if (bundle is None)!=(keys is None):
         raise ValueError("Both private approval inputs required")
-    now=now or datetime.now(timezone.utc)
-    if now.tzinfo is None:
+    now=now if now is not None else datetime.now(timezone.utc)
+    if not isinstance(now,datetime) or now.tzinfo is None:
         raise ValueError("Timezone aware clock required")
+    # The five-minute validity begins BEFORE the first remote query. Each
+    # subsequent sample is bounded against this same monotonic deadline.
+    monotonic=monotonic or time.monotonic
+    start_tick=monotonic()
+    if type(start_tick) not in (int,float) or not math.isfinite(start_tick):
+        raise ValueError("Invalid monotonic clock")
     funcs=probes if probes is not None else {
         "precreation":lambda:precreation.capture(host),
         "archive_metadata":lambda:archive.capture(host),
@@ -115,17 +123,56 @@ def collect(host,bundle=None,keys=None,now=None,probes=None):
               "clone_disk":"technical_disk_shape_pass"}
     if set(funcs)!=set(expected):
         raise ValueError("Incomplete probe set")
-    checks={name:component(funcs[name],field) for name,field in expected.items()}
-    checks["signed_approvals"]=(
-        component(lambda:read_approval(bundle,keys),"crypto_approval_reviewable",
-                  "restoration_authorized") if bundle is not None else
-        {"pass":False,"unavailable":True,"finding_count":None})
+    def elapsed_seconds():
+        tick=monotonic()
+        if type(tick) not in (int,float) or not math.isfinite(tick):
+            raise ValueError("Monotonic clock became invalid")
+        delta=tick-start_tick
+        if delta<0:
+            raise ValueError("Monotonic clock moved backwards")
+        return delta
+
+    def unavailable():
+        return {"pass":False,"unavailable":True,"finding_count":None}
+
+    checks={}
+    expired=False
+    for name,field in expected.items():
+        if expired or elapsed_seconds()>=300:
+            expired=True
+            checks[name]=unavailable()
+            continue
+        checks[name]=component(funcs[name],field)
+        if elapsed_seconds()>=300:
+            expired=True
+            checks[name]=unavailable()
+
+    if expired or elapsed_seconds()>=300:
+        expired=True
+        checks["signed_approvals"]=unavailable()
+    else:
+        checks["signed_approvals"]=(
+            component(lambda:read_approval(bundle,keys),"crypto_approval_reviewable",
+                      "restoration_authorized") if bundle is not None else unavailable())
+        if elapsed_seconds()>=300:
+            expired=True
+            checks["signed_approvals"]=unavailable()
+    duration=elapsed_seconds()
+    if duration>=300:
+        expired=True
+    if expired:
+        # Earlier samples have also aged out; never emit old PASS results in
+        # what appears to be a fresh single-snapshot report.
+        checks={name:unavailable() for name in (*expected,"signed_approvals")}
     timestamp=now.astimezone(timezone.utc)
     result={
         "schema":"vitrial.vm101.recovery-review/v1",
         "node":"one", "source_vmid":101, "candidate_vmid":9101,
         "collected_at_utc":timestamp.isoformat(timespec="seconds"),
         "expires_at_utc":(timestamp+timedelta(minutes=5)).isoformat(timespec="seconds"),
+        "collection_duration_ms":int(duration*1000),
+        "evidence_window_exceeded":expired,
+        "validity_begins_at_first_probe":True,
         "checks":checks,
         "all_technical_checks_pass":all(x["pass"] for x in checks.values()),
         "unverified_production_recovery":True,
