@@ -109,4 +109,37 @@ def validate_job_item_draft(
         item_id, project_id, project_sector_id,
     ):
         raise ValueError("jobItemDraft ownership does not match canonical Item")
+
+    # The flat Item representation is an older sync contract. When a draft
+    # is present it must not contradict the manually entered source geometry.
+    # Otherwise V1 or V2 API clients could bypass iOS request validation.
+    if "name" in payload and payload["name"] != result.nameEsCO:
+        raise ValueError("Item name disagrees with its draft name")
+    if "quantity" in payload and (
+        type(payload["quantity"]) is not int or payload["quantity"] != result.quantity
+    ):
+        raise ValueError("Item quantity disagrees with its draft quantity")
+    if result.opening is not None:
+        def _matches_flat_cm(value: object, expected: float) -> bool:
+            if not isinstance(value, dict) or set(value) != {"value", "unit"}:
+                return False
+            amount = value["value"]
+            return (
+                type(amount) in (int, float)
+                and math.isfinite(amount)
+                and value["unit"] == "cm"
+                and float(amount) == expected
+            )
+
+        if payload.get("height") is not None and not _matches_flat_cm(
+            payload["height"], result.opening.heightCm
+        ):
+            raise ValueError("Item height disagrees with manually entered opening")
+        if result.opening.kind == "rectangular":
+            if payload.get("width") is not None and not _matches_flat_cm(
+                payload["width"], result.opening.widthCm
+            ):
+                raise ValueError("Item width disagrees with rectangular opening")
+        elif payload.get("width") is not None:
+            raise ValueError("corner/L Item must not carry a rectangular width")
     return result

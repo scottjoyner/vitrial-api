@@ -110,6 +110,57 @@ def test_nonrectangular_draft_requires_two_manual_legs(kind):
             validate(doc)
 
 
+def complete_rectangular_item() -> dict:
+    payload = draft()
+    payload.update(
+        name="Ventana mixta", quantity=3,
+        width={"value": 124.5, "unit": "cm"},
+        height={"value": 150, "unit": "cm"},
+    )
+    return payload
+
+
+def test_correct_flat_item_and_draft_measurements_remain_compatible():
+    assert validate(complete_rectangular_item()).opening.widthCm == 124.5
+    payload = complete_rectangular_item()
+    payload["jobItemDraft"]["opening"] = {
+        "kind": "l_shape", "heightCm": 160, "legsCm": [156, 126.5]
+    }
+    payload.pop("width")
+    payload["height"] = {"value": 160, "unit": "cm"}
+    assert validate(payload).opening.legsCm == [156, 126.5]
+
+
+@pytest.mark.parametrize("change", [
+    lambda p: p.update(name="Different supplied name"),
+    lambda p: p.update(quantity=2),
+    lambda p: p.update(quantity=True),
+    lambda p: p.update(width={"value": 124.6, "unit": "cm"}),
+    lambda p: p.update(width={"value": 1245, "unit": "mm"}),
+    lambda p: p.update(width={"value": True, "unit": "cm"}),
+    lambda p: p.update(height={"value": 1500, "unit": "mm"}),
+    lambda p: p.update(height={"value": float("nan"), "unit": "cm"}),
+    lambda p: p.update(height={"value": 150, "unit": "cm", "claimed": "external"}),
+])
+def test_disagreeing_legacy_item_contract_cannot_bypass_draft(change):
+    payload = complete_rectangular_item()
+    change(payload)
+    with pytest.raises(ValueError):
+        validate(payload)
+
+
+@pytest.mark.parametrize("kind", ["corner", "l_shape"])
+def test_two_leg_draft_rejects_any_supplied_flat_width(kind):
+    payload = complete_rectangular_item()
+    payload["jobItemDraft"]["opening"] = {
+        "kind": kind, "heightCm": 150, "legsCm": [156, 126.5]
+    }
+    with pytest.raises(ValueError):
+        validate(payload)
+    payload.pop("width")
+    assert validate(payload).opening.legsCm == [156, 126.5]
+
+
 @pytest.mark.skipif(not os.getenv("VITRIAL_PRIVATE_VILLA_CAMILA_FIXTURE"),
                     reason="explicit private source fixture required")
 def test_villa_camila_sixteen_template_crosswalk_is_unapproved():
