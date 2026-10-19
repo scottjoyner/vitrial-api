@@ -10,7 +10,12 @@ import re
 import subprocess
 import sys
 
-VM_IDS = {100: "vitrial-prod-api", 101: "vitrial-prod-db", 102: "vitrial-prod-obj"}
+VM_IDS = {
+    100: "vitrial-prod-api",
+    101: "vitrial-prod-db",
+    102: "vitrial-prod-obj",
+    111: "opnsense",
+}
 CONTAINER = "vitrial-api-production-api-1"
 
 
@@ -68,6 +73,7 @@ def snapshot(target, node, runner=ssh_readonly):
     checks = {
         "node_identity": False,
         "vm_inventory": False,
+        "ingress_gateway_vm_running": False,
         "api_container_healthy": False,
         "postgresql_active": False,
         "object_store_authenticated": False,
@@ -78,6 +84,7 @@ def snapshot(target, node, runner=ssh_readonly):
     checks["node_identity"] = remote_node is not None and remote_node.strip() == node
     if checks["node_identity"]:
         checks["vm_inventory"] = inventory_valid(runner(target, "qm", "list"))
+        checks["ingress_gateway_vm_running"] = checks["vm_inventory"]
     if checks["vm_inventory"]:
         api = runner(target, "qm", "guest", "exec", "100", "--",
                      "/usr/bin/env", "docker", "inspect", "--format={{.State.Health.Status}}",
@@ -91,6 +98,7 @@ def snapshot(target, node, runner=ssh_readonly):
         "checks": checks,
         "service_health_observed": (
             checks["node_identity"] and checks["vm_inventory"]
+            and checks["ingress_gateway_vm_running"]
             and checks["api_container_healthy"] and checks["postgresql_active"]
         ),
         "release_authorized": False,
