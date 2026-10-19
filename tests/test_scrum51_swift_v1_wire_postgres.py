@@ -264,6 +264,34 @@ async def test_audited_swift_batch_roundtrip(monkeypatch):
             assert decoded_audit["after"] == item
             assert decoded_audit["organizationID"] == org
             assert decoded_audit["sessionID"] == "synthetic-audit-session"
+            # An unrelated membership must not append a second Item audit,
+            # even if it carries a structurally valid Swift event snapshot.
+            forged = json.loads(json.dumps(wire))
+            forged_record = forged["records"][1]
+            forged_audit = json.loads(base64.b64decode(
+                forged_record["payload"], validate=True
+            ))
+            forged_audit["id"] = "synthetic-audit-unauthorized"
+            forged_audit["membershipID"] = "different-membership"
+            forged_record["entityID"] = forged_audit["id"]
+            forged_record["id"] = "synthetic-unauthorized-audit-mutation"
+            forged_record["clientMutationID"] = forged_record["id"]
+            forged_record["payload"] = base64.b64encode(
+                json.dumps(forged_audit).encode("utf-8")
+            ).decode("ascii")
+            denied = await client.post(
+                "/api/v1/sync/push", headers=token,
+                json={"deviceID": "synthetic-offline-complete",
+                      "records": [forged_record]},
+            )
+            assert denied.status_code == 200
+            assert denied.json()["rejectedRecordIDs"] == [forged_record["id"]]
+            async with SessionFactory() as db:
+                assert await db.get(
+                    CanonicalItemChild,
+                    (org, "item_audit_event", forged_audit["id"])
+                ) is None
+
             path = os.getenv("VITRIAL_SYNTHETIC_AUDITED_API_V1_PULL_WIRE_FILE")
             if path:
                 target = Path(path)
