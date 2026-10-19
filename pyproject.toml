@@ -7,7 +7,7 @@ name = "vitrial-connected-operations-api"
 version = "0.3.0"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi>=0.115,<1",
+  "fastapi>=0.143.2,<1",
   # Plain uvicorn, not [standard].
   #
   # The `standard` extra pulls httptools, python-dotenv, pyyaml, uvloop,
@@ -24,12 +24,12 @@ dependencies = [
   # tests/test_production_dependencies.py keeps it from coming back.
   "uvicorn>=0.32,<1",
   "uvloop>=0.15.1",
-  "httptools>=0.8.0",
+  "httptools>=0.9.0",
   "python-dotenv>=0.13",
   "sqlalchemy[asyncio]>=2.0.36,<3",
-  "asyncpg>=0.30,<1",
+  "asyncpg>=0.32.0,<1",
   "alembic>=1.14,<2",
-  "pydantic-settings>=2.7,<3",
+  "pydantic-settings>=2.16.0,<3",
   "python-multipart>=0.0.20,<1",
   "boto3>=1.35,<2",
 ]
