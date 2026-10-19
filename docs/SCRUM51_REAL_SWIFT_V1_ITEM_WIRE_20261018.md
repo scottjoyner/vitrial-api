@@ -71,3 +71,21 @@ authenticated iPhone V1 push, device/offline persistence, replay/conflict,
 two scoped companies and TestFlight build identity. This does **not**
 authorize canonical merge, VM101 recovery, TestFlight, source approval
 or production deployment. **Release remains HOLD.**
+
+## Pinned-implementation loopback TCP stage
+
+Fleet Commander started the **clean code commit**
+`410fb353a73f72f472f27fe513f2594af3ca3421` with Uvicorn bound only
+to `127.0.0.1`. It used PostgreSQL 17 at a **temporary loopback Docker
+binding**, Alembic 0008, and a new synthetic member session and company.
+An actual TCP request to the temporary API returned:
+`/health=200`, `/ready=200`, Swift V1 push `200`, revisioned V1
+pull `200`, exact two-leg preservation, and refusal of a synthetic
+L-shaped mutation with an injected old-style `width`. The Uvicorn
+process stopped and the synthetic tenant and all its created rows were
+deleted afterward. Disposable PostgreSQL itself was retained only for
+the final exact-head test and must then be stopped/removed.
+
+This confirms HTTP-level staging, **not** Apple runtime's authenticated
+network route from an actual iPhone or a canonical upstream production
+deployment. VM101, customer records, supplier data and TestFlight remain HOLD.
