@@ -68,6 +68,8 @@ done
   --base-url "$API_ORIGIN" --handoff "$SCRATCH/handoff.json"
 "$PYTHON" "$SCRIPT_DIR/verify_disposable_company_scope.py" \
   --base-url "$API_ORIGIN" --handoff "$SCRATCH/handoff.json"
+"$PYTHON" "$SCRIPT_DIR/verify_disposable_item_lifecycle.py" \
+  --base-url "$API_ORIGIN" --handoff "$SCRATCH/handoff.json"
 printf 'HTTP_CANARY_PASS source_sha=%s postgres_image=%s\n' \
   "$(git rev-parse HEAD)" "$IMAGE_ID"
 printf 'ready=200 two_distinct_users=PASS shared_customer_project_sync=PASS production_changed=false\n'
