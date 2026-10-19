@@ -547,6 +547,19 @@ async def pull_since(db: AsyncSession, principal: Principal, cursor: str | None)
         if not entity:
             max_seq = max(max_seq, change.sequence)
             continue
+        # V1 pull is a CURRENT-STATE projection, not a historical event feed.
+        # Loading SyncEntity gives the most recent payload, even when this
+        # SyncChangeLog row refers to a superseded revision. Emitting that
+        # new payload with the old row's clientMutationID/sequence can falsely
+        # acknowledge the wrong offline mutation. Consume superseded log rows
+        # without projecting a state that did not exist at that sequence.
+        # A page containing only superseded changes may return zero records
+        # with an advanced cursor. Both portable iOS pull loops explicitly
+        # handle progress through empty pages. Audit events remain distinct
+        # entities and still flow at their own current revision.
+        if change.server_revision != entity.server_revision:
+            max_seq = max(max_seq, change.sequence)
+            continue
         # Rows written before inbound tenant-claim enforcement may contain a
         # contradictory top-level tenant hint. Do not re-deliver such payloads
         # through either V1 or V2. Consume the log position like any other

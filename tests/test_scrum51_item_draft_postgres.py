@@ -175,15 +175,21 @@ async def test_item_draft_create_edit_and_company_separation(monkeypatch):
                 assert r.status_code == 200
                 rows = [x for x in r.json()["records"]
                         if x["entityType"] == "item" and x["entityID"] == item_id]
-                # The sync protocol may deliver multiple retained change-log
-                # revisions for the same Item, not one collapsed snapshot.
-                assert len(rows) == (2 if expected == "Synthetic A" else 1)
-                assert all(row["payload"]["jobItemDraft"]["nameEsCO"] == expected
-                           for row in rows)
+                # Pull is a current-state projection. Superseded change
+                # entries are consumed but MUST NOT impersonate the current
+                # payload under old mutation IDs (V1 and V2).
+                assert len(rows) == 1
+                latest = rows[0]
+                assert latest["payload"]["jobItemDraft"]["nameEsCO"] == expected
+                assert latest["serverRevision"] > 0
                 if expected == "Synthetic A":
-                    assert any(any(part["id"] == "new-hinge"
-                                   for part in row["payload"]["jobItemDraft"]["components"])
-                               for row in rows)
+                    assert latest["clientMutationID"] == "mutation-edit" + nonce
+                    assert any(part["id"] == "new-hinge"
+                               for part in latest["payload"]["jobItemDraft"]["components"])
+                else:
+                    assert latest["clientMutationID"] == "mutation-b" + nonce
+                    assert not any(part["id"] == "new-hinge"
+                                   for part in latest["payload"]["jobItemDraft"]["components"])
             assert (await client.get("/api/v2/sync/pull")).status_code == 401
     finally:
         await cleanup(orgs)

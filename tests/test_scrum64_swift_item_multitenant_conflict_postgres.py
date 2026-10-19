@@ -216,6 +216,15 @@ async def test_two_company_swift_item_conflict_replay_and_session_revocation(mon
                 "owner-new-" + nonce], owner_result.text
             now = await client.get("/api/v1/sync/pull?cursor=seq:0",
                                    headers=owner)
+            # This endpoint is a current-state projection, not an immutable
+            # event-history feed. Older sequence positions must NOT re-label
+            # today's Item with the old client mutation ID.
+            current_item_records = [
+                r for r in now.json()["records"]
+                if r["entityType"] == "item" and r["entityID"] == "synthetic-item"
+            ]
+            assert len(current_item_records) == 1
+            assert current_item_records[0]["clientMutationID"] == "owner-new-" + nonce
             online_item, fresh_revision = pulled_item(now.json())
             assert online_item["location"] == "Owner newer online edit"
             assert fresh_revision > old_revision

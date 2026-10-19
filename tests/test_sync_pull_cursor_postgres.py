@@ -323,3 +323,68 @@ async def test_scan_ceiling_bounds_the_query():
         # The remainder comes on the next pull.
         rest = await pull_since(db, actor(), pulled.cursor)
         assert cursor_of(rest) == last_sequence
+
+
+
+@pytest.mark.asyncio
+async def test_superseded_entity_change_is_not_replayed_as_latest_payload():
+    """Old mutation IDs must never acknowledge a later state projection."""
+    async with SessionFactory() as db:
+        await clear(db)
+        await seed_org(db)
+        await seed_deliverable_customers(db, 1)
+        live = await db.get(SyncEntity, (CURSOR_ORG, "customer", "customer-0000"))
+        live.server_revision = 4
+        live.payload_json = {"id": "customer-0000", "name": "current only"}
+        for revision in (2, 3, 4):
+            db.add(SyncChangeLog(
+                organization_id=CURSOR_ORG, entity_type="customer",
+                entity_id="customer-0000", server_revision=revision,
+                client_mutation_id=f"synthetic-mutation-{revision}",
+                operation="upsert",
+            ))
+            await db.flush()
+        await db.commit()
+        result = await pull_since(db, actor(), "seq:0")
+        assert len(result.records) == 1
+        delivered = result.records[0]
+        assert delivered.serverRevision == 4
+        assert delivered.clientMutationID == "synthetic-mutation-4"
+        assert delivered.id == f"server:{int(result.cursor[4:])}"
+        import base64, json
+        body = json.loads(base64.b64decode(delivered.payload, validate=True))
+        assert body["name"] == "current only"
+        assert (await pull_since(db, actor(), result.cursor)).records == []
+        await clear(db)
+
+
+@pytest.mark.asyncio
+async def test_empty_superseded_scan_page_advances_to_newest_change():
+    """A page with 500 superseded revisions still makes forward progress."""
+    async with SessionFactory() as db:
+        await clear(db)
+        await seed_org(db)
+        await seed_deliverable_customers(db, 1)
+        live = await db.get(SyncEntity, (CURSOR_ORG, "customer", "customer-0000"))
+        latest_revision = MAX_SYNC_PULL_SCAN_CHANGES + 1
+        live.server_revision = latest_revision
+        live.payload_json = {"id": "customer-0000", "name": "newest only"}
+        for revision in range(2, latest_revision + 1):
+            db.add(SyncChangeLog(
+                organization_id=CURSOR_ORG, entity_type="customer",
+                entity_id="customer-0000", server_revision=revision,
+                client_mutation_id=f"synthetic-scan-{revision}",
+                operation="upsert",
+            ))
+        await db.commit()
+        first = await pull_since(db, actor(), "seq:0")
+        assert first.records == []
+        assert cursor_of(first) > 0
+        next_page = await pull_since(db, actor(), first.cursor)
+        assert len(next_page.records) == 1
+        assert next_page.records[0].serverRevision == latest_revision
+        assert next_page.records[0].clientMutationID == (
+            f"synthetic-scan-{latest_revision}"
+        )
+        assert cursor_of(next_page) > cursor_of(first)
+        await clear(db)
