@@ -66,6 +66,8 @@ done
 "$PYTHON" -c 'import json,os,sys; p=sys.argv[1]; d=json.load(open(p)); assert len(d["users"])==2; assert os.stat(p).st_mode & 0o777 == 0o600' "$SCRATCH/handoff.json"
 "$PYTHON" "$SCRIPT_DIR/verify_disposable_third_tenant.py" \
   --base-url "$API_ORIGIN" --handoff "$SCRATCH/handoff.json"
+"$PYTHON" "$SCRIPT_DIR/verify_disposable_company_scope.py" \
+  --base-url "$API_ORIGIN" --handoff "$SCRATCH/handoff.json"
 printf 'HTTP_CANARY_PASS source_sha=%s postgres_image=%s\n' \
   "$(git rev-parse HEAD)" "$IMAGE_ID"
 printf 'ready=200 two_distinct_users=PASS shared_customer_project_sync=PASS production_changed=false\n'
