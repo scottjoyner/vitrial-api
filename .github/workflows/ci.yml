@@ -28,14 +28,41 @@ jobs:
       - run: python scripts/validate_backend_contract.py
       - name: Guard-prefix lint (no declared guard maps to a dead route)
         run: python scripts/check_guard_prefixes.py
-      # The image installs requirements-runtime-lock.txt, so that file -- not
-      # requirements-lock.txt -- is what governs the shipped artifact. It is GENERATED
-      # by scripts/generate_runtime_lock.py and must stay current. --check re-resolves
-      # (needs network, ~2 min) which is why it is here and not in the unit suite; the
-      # suite has the offline guarantee instead, that every dependency declared in
-      # pyproject.toml is pinned in it.
-      - name: Runtime lockfile is current (the image installs this file)
+      # The image installs requirements-runtime-lock.txt, so that file governs the
+      # shipped artifact, and every version in it must be the version CI tests above.
+      #
+      # VITR-V017: this step used to re-resolve against LIVE PyPI and compare, so it went
+      # red whenever any transitive dependency published -- no code change, both agents
+      # blocked, and the tempting "fix" (regenerate) would silently upgrade the DB driver.
+      # It is now two deterministic checks:
+      #   1. --check is OFFLINE: each runtime pin equals the combined-lock pin, every
+      #      declared runtime dependency is pinned, and no dev tooling ships.
+      #   2. Closure: install the runtime lock exactly as the Dockerfile does
+      #      (--no-deps, then the project --no-deps) in a clean venv and `pip check`.
+      #      Pinned versions, so downloads are needed but no resolution happens.
+      # Alert rules: promtool validates PromQL syntax; tests/test_alert_rules.py (in the
+      # suite) validates that every metric, label and closed label value the rules name is
+      # one the service actually exports. Each half catches what the other cannot -- valid
+      # PromQL against a misspelled metric matches nothing and never fires.
+      # Pinned exactly, like gitleaks: a validator that changes between runs makes two runs
+      # incomparable. v3.5.0 is the version the rules were first validated against.
+      - name: Alert rules are valid PromQL (promtool)
+        run: |
+          set -euo pipefail
+          PROM_VERSION=3.5.0
+          curl -sSfL \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz" \
+            -o /tmp/prometheus.tgz
+          tar -xzf /tmp/prometheus.tgz -C /tmp "prometheus-${PROM_VERSION}.linux-amd64/promtool"
+          "/tmp/prometheus-${PROM_VERSION}.linux-amd64/promtool" check rules deploy/prometheus/alerts.yml
+      - name: Runtime lock agrees with the combined lock (offline, deterministic)
         run: python scripts/generate_runtime_lock.py --check
+      - name: Runtime lock is a complete closure (installs as the Dockerfile does)
+        run: |
+          python -m venv /tmp/runtime-closure
+          /tmp/runtime-closure/bin/python -m pip install --quiet --no-deps -r requirements-runtime-lock.txt
+          /tmp/runtime-closure/bin/python -m pip install --quiet --no-deps .
+          /tmp/runtime-closure/bin/python -m pip check
       # Structural guards on the BEAM umbrella. Both are pure-stdlib Python and
       # read only source, so they belong in this job rather than the BEAM one:
       # no toolchain needed, about a second to run, and a scaffold or a dead
@@ -466,14 +493,39 @@ jobs:
       - name: Build image for scan
         run: docker build -t vitrial-api:security .
       - name: Container image scan (trivy)
+        # exit-code was '0', with no comment saying why: a fixable HIGH/CRITICAL CVE in the
+        # image we SHIP was printed to the log and the job still passed. The filesystem
+        # scan above already fails on the same severities, so the shipped artifact was the
+        # one thing reported on and never enforced. ignore-unfixed keeps the base image's
+        # unfixable Debian backlog from making this a permanent red; what remains is
+        # actionable by definition. Flipped when the image measured 0 such findings across
+        # all 36 targets (CI run 37574980293), so enforcing it did not redden main.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: vitrial-api:security
           format: table
-          exit-code: '0'
+          exit-code: '1'
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+      - name: Image SBOM (CycloneDX)
+        # A bill of materials for the exact image that was scanned, so "is CVE-X in what we
+        # shipped?" is answerable from an artifact after the fact rather than by rebuilding
+        # an image that may no longer reproduce. Generated from the image, not the source
+        # tree, because the image is what runs.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: vitrial-api:security
+          format: cyclonedx
+          output: sbom.cdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          retention-days: 90
+          if-no-files-found: error
 
   deployment:
     name: Acceptance deployment topology

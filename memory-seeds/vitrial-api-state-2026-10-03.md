@@ -297,6 +297,19 @@ including SCRAM-SHA-256. The coupling that made the swap cheap was measured firs
 three functions, one module. `vitrial_web` carries the umbrella's only package
 (cowboy), which is the recorded wave-6 decision.
 
+**`VitrialSync.Db.Reads` exists (2026-10-04, `88b6112`).** There was **no read
+query anywhere in the estate** before it — `Writes` had seven insert/update
+functions and `Rows` has always been a pure decoder over `(fields, cells)` with
+nothing feeding it. That is why 21 of 23 routes answer 501: every engine is a pure
+function over already-loaded rows, and nothing loaded them. 684 passing live.
+
+**Both BEAM gates now run the parity oracle.** `ci.yml`'s job builds
+`beam/Dockerfile.gate` (pinned hexpm + python3 + pydantic); `beam.yml` runs on the
+self-hosted HOST and used only to PROBE for pydantic, so its ability to check the
+oracle depended on someone having previously pip-installed it on that machine. It
+now provisions it. Confirmed live: `differential oracle available (python3
+3.12.12, pydantic 2.13.5)`.
+
 **The live-PostgreSQL suite runs in CI.** It used to skip and report green: no
 `postgres:` service, then a skip guard matching `SKIPPED` when the suite says
 `NOT RUN`, then a probe reporting `{:error, :function_clause}`. All three are
@@ -354,3 +367,94 @@ open-ended: `Writes` exports `effects/0`, `entity_upsert/3`, `mutation_insert/4`
 sequences them — one function, and it is the seam `Db`'s own moduledoc was written
 to describe ("everything above this module talks to PostgreSQL through the four
 names here").
+
+## The push ROUTE is wired (2026-10-05, `f5e8f61`)
+
+`POST /api/v2/sync/push` is the FIRST of the 21 answering-501 routes to answer
+from an engine. `VitrialSync.Auth` (resolve the token) -> `VitrialSync.PushService`
+(load, decide, write, answer) -> `Batch.finish/2` (the wire response), and the
+route is out of the `:not_wired` table.
+
+**797 passing** (696 vitrial_sync + 67 vitrial_web + 34 vitrial_auth) with
+PostgreSQL 17 and the real migrations, 0 skipped; gate green with no database.
+
+Four reference behaviours that are easy to lose, each found by the tests:
+
+* **Auth before body.** FastAPI resolves every `Depends` before the handler body
+  (`app/main.py:212-217`), so an anonymous caller learns nothing about whether
+  its request was well-formed. Reading the body first answered 400 instead.
+* **401 for all four auth refusals** (`app/auth.py:42,49,54,59`). The first
+  mapping sent everything non-capability to 400, so an unauthenticated push said
+  "400 invalid mutation" — blaming the client's batch for a request that never
+  got that far. 403 is capability/organization; 500 is a failed load, which is
+  OURS.
+* **`ctx.body` is a raw binary.** `RequestSize.admit/1` bounds it and nothing
+  decodes it. Elixir 1.19+ ships `JSON` in the standard library, so the correct
+  decoder costs no dependency — an intermediate hand-rolled regex was the wrong
+  answer and is gone.
+* **Internal reasons must not leak.** `:econnrefused` reached the wire as
+  `{"detail":"econnrefused"}` before it was wrapped as `{:load, reason}`.
+
+**Both sibling dependencies now exist**: `vitrial_sync -> vitrial_auth` (the seam
+resolves a token) and `vitrial_web -> vitrial_sync` (the boundary reaches the
+engine). Both `in_umbrella`, neither versioned, because a path inside one
+deployment unit is not a published package. The estate was 0-of-8 independent,
+which worked right up until two built components had to compose.
+
+**`VitrialSync.PullService` landed 2026-10-05 (`886382d`).** The pull path reads
+the page's changes, resolves visibility, assembles. **802 passing** (701 sync +
+67 web + 34 auth) with a live PostgreSQL, 0 skipped. It needed ONE new read --
+`sync_change_log`, the page query at `sync_service.py:498-506` with its
+`MAX_SYNC_PULL_SCAN_CHANGES = 500` SCAN bound (not a page size: `Page` stops on
+the byte ceiling, so a change past the 500th may still be visible to a client
+that has not reached it).
+
+The cursor rule is the whole subtlety and is SILENT when wrong
+(`sync_service.py:560-566`): an INVISIBLE change IS consumed (else the cursor
+stalls forever) and a visible change that does not fit is NOT (else it is
+skipped). `truncated` is read from `Page`'s `stopped_at`, never inferred from a
+length comparison -- `sync_service.py:509-513` says why.
+
+Two findings worth keeping:
+
+* **`Canonical.World.entity/3` is written `def` and is NOT reachable** --
+  `__info__(:functions)` returns only `[{:__struct__, 0}]`, so calling it raises
+  UndefinedFunctionError. Read the struct FIELD instead, which is what
+  `Prefetch.load_page_context/3` does (`prefetch.ex:171`). Verified at runtime,
+  not assumed from reading.
+* **`deviceID` is not a parameter.** The reference hardcodes `"server"` at both
+  sites (`sync_service.py:80, 572`); a defaulted argument invites a caller to
+  attribute a server-assembled page to itself.
+
+**`/api/v2/sync/pull` is NOT yet routed.** `PullService` is built and tested;
+wiring it behind the route is the next step, and it needs a `cursor` query
+parameter decoded from the wire -- which is how a client says where to resume.
+
+## Why the push ROUTE was 501 for a while, having built the push SERVICE
+
+`PushService` works end to end (688 passing live). Wiring
+`POST /api/v2/sync/push` to it was attempted and **reverted**, for a reason worth
+keeping:
+
+The route cannot complete without authentication, and `authenticate/5` needs three
+rows — auth_session, membership, organization — for which **`Reads` has no read at
+all**. Writing the handler anyway produced a route that answers 401 for every
+request, and the compiler said so plainly:
+
+    warning: the following pattern will never match:
+        {:ok, principal} <- authenticate(ctx)
+    because the right-hand side has type: dynamic({:error, :authentication_required})
+
+A 501 that says "not implemented" is honest. A route that looks wired and refuses
+everything is not, and it also would not have been honest about WHY.
+
+Two things the attempt established and that are committed nowhere else:
+
+1. **`vitrial_web` needs a sibling dependency** to reach the engine. `in_umbrella:
+   true` on `{:vitrial_sync, in_umbrella: true}` is the standard Elixir shape and
+   is the only way two built apps compose. The estate was 0-of-8 independent, which
+   worked right up until two components had to compose.
+2. **The order is auth-first, not push-first.** The next three pieces, in order:
+   `Reads` gains `auth_sessions` / `memberships` / `organizations` (one table group
+   over, same module); `Handlers.authenticate/1` uses them; then the route.
+   Doing the route before the reads produces a handler that cannot succeed.

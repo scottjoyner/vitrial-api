@@ -9,6 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import session_scope
+# Reasons are the closed vocabulary of current_principal's four refusal branches (plus
+# the two admin-key reasons in app/admin.py), so the label is bounded by construction.
+from app.metrics import auth_failures_total
 from app.models import AuthSession, Membership, Organization, User
 from app.observability import bind_principal, log_event
 from app.schemas import AuthorizationProfile, AuthorizationRole
@@ -39,6 +42,7 @@ async def current_principal(
     db: AsyncSession = Depends(session_scope),
 ) -> Principal:
     if not credentials or credentials.scheme.lower() != "bearer":
+        auth_failures_total.inc(reason="authentication_required")
         raise HTTPException(401, "authentication required")
 
     now = datetime.now(timezone.utc)
@@ -46,16 +50,19 @@ async def current_principal(
         select(AuthSession).where(AuthSession.access_token_hash == token_hash(credentials.credentials))
     )
     if not auth_session or auth_session.revoked_at is not None or auth_session.expires_at <= now:
+        auth_failures_total.inc(reason="session_expired_or_revoked")
         raise HTTPException(401, "session expired or revoked")
 
     membership = await db.get(Membership, auth_session.membership_id)
     organization = await db.get(Organization, auth_session.organization_id)
     if not membership or not organization or not membership.active:
+        auth_failures_total.inc(reason="membership_inactive")
         raise HTTPException(401, "membership inactive")
     if (
         membership.organization_id != auth_session.organization_id
         or membership.user_id != auth_session.user_id
     ):
+        auth_failures_total.inc(reason="session_membership_mismatch")
         raise HTTPException(401, "session membership mismatch")
 
     principal = Principal(

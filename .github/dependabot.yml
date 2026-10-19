@@ -29,7 +29,31 @@ updates:
     # change is legible.
     commit-message:
       prefix: "deps(python)"
+    # VITR-V018 (1): the default `increase` strategy rewrites pyproject.toml floors as well
+    # as the lock -- PR #20 turned `sqlalchemy[asyncio]>=2.0.36,<3` into `>=2.1.2,<3` for a
+    # patch bump, which test_service_requirements_are_unchanged exists to refuse. A range
+    # is a compatibility statement, not a record of the latest version. This strategy
+    # touches a range only when the new version genuinely falls outside it.
+    versioning-strategy: increase-if-necessary
     groups:
+      # VITR-V018 (2): packages that pin each other must move in ONE PR, and these groups
+      # are listed FIRST because Dependabot assigns a dependency to the first group it
+      # matches. Dependabot does not re-resolve transitive pins in a requirements file --
+      # it rewrites the lines it is bumping -- so bumping one half of a coupled pair is
+      # ResolutionImpossible by construction. PR #21 moved pydantic-core alone while
+      # pydantic 2.13.5 pins it exactly, and failed install, image build and security.
+      pydantic:
+        patterns:
+          - "pydantic"
+          - "pydantic-core"
+          - "pydantic_core"
+      # boto3 constrains botocore to a narrow window and botocore constrains s3transfer;
+      # they release in lockstep and must land together for the same reason.
+      aws-sdk:
+        patterns:
+          - "boto3"
+          - "botocore"
+          - "s3transfer"
       # Security patches for one package are usually several CVEs, and splitting
       # them across five PRs buries the one that matters. Patch and minor bumps
       # group; a major stays alone because it is the one that can break the suite.

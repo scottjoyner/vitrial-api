@@ -46,7 +46,7 @@ defmodule VitrialWeb.Router.Table do
       ),
       route("POST", "/api/v1/reference-data/publications", :not_wired),
       route("GET", "/api/v2/version", :not_wired),
-      route("POST", "/api/v2/sync/push", :not_wired),
+      route("POST", "/api/v2/sync/push", {:serve, :sync_push}),
       route("GET", "/api/v2/sync/pull", :not_wired)
     ]
   end

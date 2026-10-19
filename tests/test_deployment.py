@@ -97,6 +97,35 @@ def test_acceptance_validator_requires_private_postgres_and_bootstrap_authority(
     assert "ADMIN_API_KEY_HASH is required" in rejected.stdout
 
 
+def test_acceptance_refuses_latest_for_postgres_and_s3_but_accepts_a_tag(tmp_path: Path):
+    """The only image rule the acceptance-only block actually enforces.
+
+    That block used to also carry an `if args.mode == "production"` digest check nested
+    INSIDE `if args.mode == "acceptance":` -- unreachable, reading as enforcement that never
+    ran. With it gone, this is the whole of what the block does, and it had no test.
+    """
+    path = tmp_path / "acceptance.env"
+    values = production_values()
+    values.update({
+        "API_HOST": "localhost",
+        "DATABASE_URL": "postgresql+asyncpg://vitrial:acceptance-db-secret@postgres:5432/vitrial",
+        "POSTGRES_IMAGE": "postgres:17",
+        "POSTGRES_PASSWORD": "acceptance-db-secret-12345",
+        "S3_IMAGE": "rustfs/rustfs:1.0.0",
+        "S3_ROOT_USER": "acceptance-access-12345",
+        "S3_ROOT_PASSWORD": "acceptance-secret-12345",
+    })
+    write_env(path, values)
+    assert run_validator(path, "--mode", "acceptance", "--allow-localhost").returncode == 0
+
+    for key, mutable in (("POSTGRES_IMAGE", "postgres:latest"), ("S3_IMAGE", "rustfs/rustfs:latest")):
+        bad = dict(values, **{key: mutable})
+        write_env(path, bad)
+        result = run_validator(path, "--mode", "acceptance", "--allow-localhost")
+        assert result.returncode == 1, f"{key}={mutable} must be refused"
+        assert f"{key} must not use :latest" in result.stdout
+
+
 def test_validator_rejects_group_readable_secret_file(tmp_path: Path):
     if os.name == "nt":
         return

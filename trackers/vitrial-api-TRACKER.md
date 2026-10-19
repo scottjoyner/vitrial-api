@@ -103,23 +103,18 @@ No open PRs. No Jira, no in-repo board, no beads records.
 
 ### P0 — bound the data plane
 
-- [~] Define a hard **aggregate** sync request ceiling enforced while reading the body.
-  V1 has it (`MAX_SYNC_V1_BATCH_PAYLOAD_BYTES` + `RequestSizeLimitMiddleware`).
-  **V2 does not** — see `VITR-V001`. Chunked path is buffered by the middleware.
+- [x] Define a hard **aggregate** sync request ceiling enforced while reading the body. V1 and V2 both: `MAX_SYNC_V1_BATCH_PAYLOAD_BYTES` and the `SyncBatchV2` aggregate validator, plus a 4 MiB `RequestSizeLimitMiddleware` guard on BOTH push paths (`/api/v2/sync/push` added by W1 `18a4198`; the old "V2 does not — see VITR-V001" note was stale). Every value is listed in `docs/contract/LIMITS.md` and checked.
 - [x] Hard sync response/page byte budget, deterministic by record count **and** encoded bytes
   (`pull_page_accepts`, `MAX_SYNC_PULL_RESPONSE_BYTES`; `sync_service.py`).
 - [x] Evidence uploads on a separate streaming ceiling (`evidence_max_bytes`).
-- [~] Content-Length **and** chunked over-limit tests exist for V1
-  (`test_request_size.py`); near-limit-record and compressed-transport tests do not.
-- [~] Edge/application rate limits. Auth surface only, and only on one route.
+- [x] Content-Length **and** chunked over-limit tests exist for V1 (`test_request_size.py`). Now also: **near-limit** — a record exactly at `MAX_SYNC_V1_WIRE_PAYLOAD_BYTES` is accepted and one byte over is refused (off-by-one control confirmed red) — and **compressed transport** — a gzip body that would inflate to 64 MiB is refused at parse time (400) in milliseconds, i.e. never inflated, so no decompression bomb past the wire-byte guard (`tests/test_contract_limits_postgres.py`).
+- [~] Edge/application rate limits. Pairing **and the admin control plane** (`/internal/admin/v1/*`, incl. the nested `pairing-grants`) are throttled, one budget per (surface, client), refused before the handler (commit "Rate-limit the admin control plane, with a separate budget per surface"). Still application-level and in-process; no edge (Caddy) limit, and per-instance only.
   Sync/evidence/admin are unthrottled; pairing limiter is XFF-evadable (`VITR-V003`).
-- [ ] Load-test rejection paths so abusive traffic fails cheaply.
+- [x] Load-test rejection paths so abusive traffic fails cheaply — measured, not load-tested: `tests/test_rejection_cost_postgres.py` counts engine connection checkouts per abusive request shape. No/non-bearer auth, oversized body, throttled pairing/admin: **0** connections. Unknown token: **exactly 1** (the irreducible lookup), pinned so it cannot grow. Two controls confirmed red.
 
 ### P0/P1 — production auth/session model
 
-- [~] Separate admin control plane from public listener. Admin is
-  `include_in_schema=False` and disabled unless `ADMIN_API_KEY_HASH` is set, but it still
-  shares the one listener with public routes.
+- [~] Separate admin control plane from public listener. Admin is `include_in_schema=False`, disabled unless `ADMIN_API_KEY_HASH` is set, and now **rate-limited** (own budget; so is `/metrics`, which checks the same key). It still shares the public listener, and that is a **deployment decision, not a code fix**: operators reach it through the public HTTPS edge today (README: "send the original key at provisioning time … over HTTPS"; the acceptance bootstrap script does too), so blocking `/internal/*` at Caddy would break provisioning. Options for the owner: a Caddy source-IP allow-list on `/internal/*`, or a second internal-only listener with provisioning via `docker compose exec`.
 - [x] Pairing/auth attempt throttling. Implemented on `/api/v1/auth/pair` — but weakened by `VITR-V003`.
 - [ ] Production session renewal; today a fixed bearer TTL + revoke-only.
 - [ ] Device-bound sessions (copied bearer stays useful without proof-of-possession).
@@ -130,26 +125,25 @@ No open PRs. No Jira, no in-repo board, no beads records.
 ### P1 — sync scalability & concurrency
 
 - [x] Benchmark org-wide `FOR UPDATE` serialization (`#59`) — measured, cost noted.
-- [ ] Replace repeated `max(server_revision)+1` with a safe revision allocator — not replaced; still correct under the org row lock.
+- [x] Revision allocator — **decided: kept.** `max(server_revision)+1` is correct because every push holds the organization row lock, which serializes allocation; the concurrency suite (`test_sync_concurrency.py`) and the serialization-retry tests pin it. A sequence would only be needed if allocation ever moved outside that lock.
 - [x] Remove/contain pull N+1 — `pull_prefetch.py` batched it; measured `#61` (604 → 4).
 - [x] Configure DB pool explicitly (`#42`).
 - [x] Deadlock/serialization retry policy (`#46/#49/#56`).
-- [~] Concurrency tests for duplicate mutation IDs (`test_sync_concurrency.py`),
-  tombstone resurrection (`#50`), cross-device lifecycle; evidence-replace contention not directly covered.
+- [x] Concurrency tests for duplicate mutation IDs (`test_sync_concurrency.py`), tombstone resurrection (`#50`), cross-device lifecycle, and now **evidence-replace contention**: two real concurrent `put_blob` replaces on separate sessions leave the canonical pointer naming an object that exists, no orphan (every written object canonical or queued), and the live object never queued (`tests/test_evidence_replace_contention_postgres.py`; control — dropping the replace GC queueing — names the orphans; 5/5 stable).
 
 ### P1 — reproducible deploy & supply chain
 
-- [ ] Reproducible Python lock. Runtime deps are version ranges in `pyproject.toml`, no lock file.
-- [~] Pin runtime images by digest. `API_IMAGE` is digest-pinned in production; Caddy, Postgres, S3 images are floating (`#63` warns on the S3 fallback).
-- [ ] Image/package vulnerability scanning and SBOM in candidate CI.
+- [x] Reproducible Python lock. `requirements-lock.txt` (what CI tests) is the version source of truth; `requirements-runtime-lock.txt` (what the image installs) is generated from it as a pip constraint, so they cannot disagree (`VITR-V017`, `4ec9341`). Offline `--check`, a `--no-deps` + `pip check` closure step in CI, and Dependabot configured to propose only mergeable bumps (`VITR-V018`).
+- [x] Pin runtime images by digest. Production runs only `API_IMAGE` and `CADDY_IMAGE`, and `validate_deployment.py` refuses either without `@sha256:` (tested). Postgres/S3 images exist only in the ACCEPTANCE topology, which pins by tag deliberately and refuses `:latest` (now tested). The old "Caddy, Postgres, S3 floating" note was stale; it also hid an unreachable `mode == "production"` check nested inside the acceptance-only branch, removed in the same pass. `alpine:3.20` (acceptance-only chown helper) is the one literal tag left.
+- [x] Image/package vulnerability scanning and SBOM in candidate CI. The image scan ran with `exit-code: '0'` — a fixable HIGH/CRITICAL in the shipped image was printed and passed. Now enforced (`exit-code: '1'`, `ignore-unfixed`), flipped after measuring 0 such findings across all 36 image targets. A CycloneDX SBOM of the image is generated and uploaded (90 days). Verified green in CI on `f6440fe`.
 - [x] Validate production settings on startup/preflight (`validate_deployment.py`, `probe_production_preflight.py`, `deploy/README.md`).
 - [~] Migration compatibility + rollback rehearsal. CI proves `upgrade → downgrade base → upgrade`; production rollback intentionally does **not** auto-downgrade DB (documented).
 
 ### P1 — resilience & operations
 
 - [x] Metrics for request rate/latency/status, auth failures, sync outcome, DB pool, S3 latency, GC backlog, page sizes — `app/metrics.py`, `GET /metrics` (admin-gated, out of the pinned schema). Labels on the matched route template with a series cap; sync outcomes on the stable `VITR-V006` vocabulary; pull page size plus a truncation counter.
-- [~] Trace/correlation propagation. `X-Request-ID` accepted/preserved and one-way `sha256:` refs for org/actor/membership/session/entity/device. It is not a W3C `traceparent`; nothing crosses the iOS→API→DB→S3 boundary as one trace.
-- [ ] SLOs/alerts for availability, p95, sync failure rate, dependency readiness.
+- [x] Trace/correlation propagation. A valid W3C `traceparent` joins the caller's trace: `traceID`/`parentSpanID` from the header, a fresh `spanID` per request, all on every JSON log line. Strictly parsed (version 00, lowercase hex, non-zero ids) — anything else starts a new trace and is never reflected, matching `X-Request-ID`. Not echoed as a response header, because the V1 response shape is pinned. Outbound propagation to S3/PostgreSQL is not done: neither consumes trace context today.
+- [x] SLOs/alerts for availability, p95, sync failure rate, dependency readiness. `deploy/prometheus/alerts.yml`, 12 rules (<1% 5xx, p95 <1 s per route excl. evidence uploads, sync internal errors / rejection share / pull truncation, auth spikes, admin-key guessing, pool saturation, slow object store, stuck drain, overdue GC). Checked by `promtool` in CI **and** by `tests/test_alert_rules.py` against the live registry (metric, label, and closed-value existence). Readiness is a probe, not a metric, so it is consumed by the edge rather than alerted on.
 - [x] Graceful shutdown/drain test with in-flight sync and evidence streams — `app/drain.py`, `/ready` 503 on SIGTERM while `/health` stays 200, 45s uvicorn budget inside a 60s `stop_grace_period`, `deploy.sh` awaits the replaced container and fails on non-zero exit.
 - [ ] PostgreSQL backup/PITR and restore drill.
 - [~] S3 versioning/retention/restore policy and orphan/GC reconciliation runbook — GC exists and is scheduled (`deploy/gc-evidence.timer`), but no documented restore policy.
@@ -157,7 +151,7 @@ No open PRs. No Jira, no in-repo board, no beads records.
 ### P1 — contract discipline
 
 - [ ] Make V2 the production sync contract target with an explicit V1 deprecation window. Both are served; no window defined.
-- [~] Aggregate-size, schema-version, pagination semantics in the OpenAPI/contract docs. `entitySchemaVersion` exists; aggregate byte budgets are enforced but not fully described in the pinned contract.
+- [x] Aggregate-size, schema-version, pagination semantics in the contract docs. `docs/contract/LIMITS.md` lists every enforced ceiling, its value, its source constant and what exceeding it returns, including pull paging (which ends pages, never errors). Values are checked against the constants (`tests/test_contract_limits_doc.py`, incl. that every size-limited path is documented and every source-citing row is parsed); responses are **measured** against the real app (`tests/test_contract_limits_postgres.py`). Deliberately a reference beside the pinned contract, not an edit to `contracts/backend/v1/`.
 - [x] Federation fixtures consumed by both Python and Swift tests (`contracts/`).
 - [~] Old-client-against-new-server and vice-versa acceptance tests. V1 is pinned to a client SHA, but no cross-version acceptance matrix exists.
 - [x] Server authority never depends on iOS-only validation — ownership/lifecycle re-derived server-side in `ownership.py`, `lifecycle.py`, `delivery_execution.py`.
@@ -171,7 +165,7 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V001` | HIGH | V2 request size / aggregate ceiling missing; dead guard prefixes on three routes | **Fixed** in W1 (prefixes corrected, `SyncBatchV2` aggregate ceiling, guard lint in CI) |
 | `VITR-V002` | MED | Evidence header params unbounded while destination columns are bounded → 500 not 4xx | **Fixed** (`5f6178f`) |
 | `VITR-V003` | HIGH | Auth rate limiter evadable via spoofed left-most `X-Forwarded-For` | **Fixed** (`d0e1d93`) |
-| `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | **Reduced, not fixed** (`03e10d9`) — `bootstrap_identity` now seeds the baselines at organization creation, so for every NEW organization the first writer is the write path and the GET seed inserts nothing. The lazy seed is **kept on purpose**: removing it would change what a GET returns for an organization that exists but was never bootstrapped through this path, which is client-visible on a pinned contract. All four GET helpers still call `ensure_baseline_publications` and can still write for such an organization. Closing it properly needs a backfill migration for existing organizations first. |
+| `VITR-V004` | LOW | Reference-data GET endpoints write + commit (`ensure_baseline_publications`) | **Reduced, not fixed** (`03e10d9`) — `bootstrap_identity` now seeds the baselines at organization creation, so for every NEW organization the first writer is the write path and the GET seed inserts nothing. The lazy seed is **kept on purpose**: removing it would change what a GET returns for an organization that exists but was never bootstrapped through this path, which is client-visible on a pinned contract. All four GET helpers still call `ensure_baseline_publications` and can still write for such an organization. Closing it properly needs a backfill migration for existing organizations first. **Backfill tool now exists**: `scripts/backfill_baseline_publications.py` (dry run by default, idempotent, re-measures after `--execute`, exits 1 while anything is incomplete; operator steps in `deploy/README.md`). Remaining to close: run it against production, record `incomplete=0`, then delete the lazy seed from the four GET helpers. |
 | `VITR-V005` | MED | Evidence reference safety scan is O(all measurements + requirements) per delete | **Fixed** (`30b29ab`) |
 | `VITR-V006` | MED | Rejection outcome is `reason=<exception class name>`, not a code | **Fixed** (`257e725`) |
 | `VITR-V007` | **HIGH** | Evidence GC can delete the object an in-flight upload is publishing — silent data loss | **Fixed** (`76e11e5`) |
@@ -183,6 +177,10 @@ No open PRs. No Jira, no in-repo board, no beads records.
 | `VITR-V014` | **HIGH** | `evidence_gc`'s `StorageError` handler reads `row.id` after `db.rollback()`, raising `MissingGreenlet` — a failing object store aborts the whole collection run | **Fixed** (`0fab6f8`) |
 | `VITR-V013` | LOW | `put_verified` can leak a published object and report 503 if the staging cleanup delete fails | **Fixed** — the post-publish staging delete is now best-effort and logs `storage.staging_delete_failed` instead of escalating to `StorageError` (the `try`/`except` is `app/storage.py:234-246`, the log at `:240`, and the comment explaining why is `:219-233` — all three re-measured this run; earlier revisions of this row cited `:219-246`, which conflated the comment with the code). Pinned by three S3-store tests in `tests/test_object_storage.py` that need no S3. Commit-worthy on its own: it moves a production-only code path (S3 is what both compose files ship) from untested to covered in the default suite. **The pinning was itself broken until `55876bd`** — the client stub could not accept the positional service name, so all three raised `TypeError` at construction and never reached an assertion; they now run (unit job 350+3failed → 353 passed). |
 | `VITR-V015` | MED | `validate_assembly_contract_mutation` (`app/assembly_contract.py`, 399 lines; validator at `:294-330`) has no BEAM port, so the BEAM push accepts payloads the reference rejects with `invalid_mutation` | **Not fixed — named, tracked, and fenced.** The reference runs the validator immediately after payload decode and inside the same `try` (`app/sync_service.py:319-323`), so a decode-valid but assembly-contract-invalid `configuration`/`quotation` payload is rejected with mutation + fingerprint rows written; the BEAM `VitrialSync.Batch` walk (wave 4c) has no step there, and nothing else on the BEAM establishes the precondition — `ownership.ex`'s design-snapshot binding assumed it, and its comment now says so. The validator is a pydantic-model vertical and is its own task, not a step of wave 4c; inventing a rejection the reference does not make would be a worse violation. Fenced on both sides: the gap is named in `VitrialSync.Batch`'s step table, and `drift_test.exs` asserts the reference's decode → validate order in code, so the gap cannot silently close in either estate unnoticed. |
+
+| `VITR-V016` | MED | BEAM `VitrialSync.Auth` answers differently from `app/auth.py::current_principal` on three refusals (all still 401) | **Open — BEAM-side, recorded not fixed.** (1) **Unknown token**: Python `auth.py:48` is `if not auth_session or …` → `"session expired or revoked"`; BEAM `auth.ex:182` (`fetch/2`, `{:ok, nil}`) → `:authentication_required`. Python deliberately makes "no such token" indistinguishable from expired/revoked (pinned by `test_session_lifecycle_postgres.py::test_an_unknown_token_is_rejected_without_touching_membership`); the BEAM split is a token-existence oracle, and `auth_test.exs:244` **pins the divergent answer** as intended. (2) **Missing organization**: Python `auth.py:53` → `"membership inactive"`; BEAM `auth.ex:108` uses `fetch/2` → `:authentication_required`. (3) **Wire text**: `handlers.ex:198` renders any other atom verbatim, so the body is `{"detail":"session_expired_or_revoked"}` / `"membership_inactive"` / `"session_membership_mismatch"` (underscores) where Python sends spaces. No endpoint test asserts auth refusal text, so (3) is unpinned on both sides. Also stale: `auth.ex:192-194` says the missing-membership refusal is "403"; `push_service.ex:300-303` correctly maps all four to 401. Found 2026-10-07 by read-only review of `e88b5e2`/`f5e8f61`. |
+| `VITR-V017` | **HIGH** | The image and CI installed **different** library versions, and the runtime-lock CI gate was non-deterministic | **Fixed** (`4ec9341`). The runtime closure is now resolved with `requirements-lock.txt` as a pip **constraints** file, so resolution decides membership and the combined lock decides versions; regenerated, the image went back to the tested `sqlalchemy 2.1.1`, `boto3`/`botocore 1.43.107`, `markupsafe 3.0.3`. `--check` is **offline**: each runtime pin equals the combined pin, every declared runtime dependency is pinned, no dev tooling ships. A separate CI step proves closure the way the Dockerfile installs (`--no-deps` + `pip check`). The unit suite runs `check()` too, and an AST test pins that `check()` never calls the resolver. Controls: a drifted pin and a resolver call each turn a test red. `main` CI back to 6/6 green on `4ec9341`. Then `9d7d6d7` landed the sqlalchemy 2.1.2 patch through the fixed path — and the offline gate caught the half-done state first (`image ships 2.1.1 but CI tests 2.1.2`). |
+| `VITR-V018` | MED | Dependabot pip config produced PRs that could not merge | **Fixed** (`e248d9c`). `versioning-strategy: increase-if-necessary` stops patch bumps rewriting `pyproject.toml` floors; `pydantic`/`pydantic-core` and `boto3`/`botocore`/`s3transfer` share groups listed **before** the catch-all `patch`/`minor` groups (Dependabot assigns to the first match, so order is the property). Pinned by `tests/test_dependabot_config.py`. PRs #20 and #21 closed with explanations. |
 
 `VITR-V007` is the serious one: a client received **201** for an upload whose object the
 collector had already deleted, and every later `GET`/`HEAD` on that document 404'd. Root
@@ -303,7 +301,7 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - **Done when:** ✅ with Caddy overwriting XFF, `client_key_for`'s left-most entry is the
       real client IP, so 40 spoofed values can no longer bypass the limiter behind the
       documented deployment shape.
-- [ ] Add an acceptance assertion so a mis-set trust proxy fails fast.
+- [x] Add an acceptance assertion so a mis-set trust proxy fails fast. — `94eaef8`: both Caddyfiles assert the XFF overwrite, the client-header placeable is rejected, and `client_key_for`'s preference order is pinned; three planted defects confirmed red.
 
 ### W4 — `VITR-V004` reference GETs writing
 - [x] `ensure_baseline_publications` now runs once per manifest (was: twice, via the two
@@ -331,8 +329,8 @@ Pick top-down. Each task has: goal, files, tests to run, done-when. Run the suit
 - **Done when:** ✅ the sync outcome stream now carries aggregatable, refactor-stable codes.
 
 ### Smaller / hygiene
-- [ ] Close issue #30's checkbox (MinIO→RustFS already landed); reconcile #2/#28 in GitHub.
-- [ ] The four guard-prefix entries are a Rule-5 violation — after W1, add a lint rule so a
+- [x] Close issue #30 / reconcile #2/#28 — **not applicable on this repo.** Those issues live on the retired `scottjoyner/vitrial-api` (push denied to this account); `astrix-group-accounts/server-api` has no GitHub issues, and this tracker is the source of truth.
+- [x] The four guard-prefix entries are a Rule-5 violation (closed by W1 `18a4198`; `scripts/check_guard_prefixes.py` runs in CI) — after W1, add a lint rule so a
       matching-by-class failure fails, per `AGENTS.md` "measure, don't assert". (Done: W1 + guard lint)
 
 ## BEAM waves — the umbrella

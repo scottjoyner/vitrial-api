@@ -24,13 +24,15 @@ from app.drain import lifespan as drain_lifespan
 from app.evidence import put_blob
 from app.models import EvidenceBlob
 from app.metrics import refresh_dependency_gauges
+from app.metrics import refresh_gc_backlog
 from app.metrics import registry
 from app.metrics_middleware import MetricsMiddleware
 from app.request_size import RequestSizeLimitMiddleware
 from app.rate_limit import (
     client_key_for,
     limiter_for,
-    path_is_throttled,
+    limiter_key_for,
+    throttled_surface_for,
 )
 from app.observability import (
     begin_request,
@@ -38,6 +40,7 @@ from app.observability import (
     end_request,
     log_event,
     request_id_for_header,
+    trace_context_for_header,
 )
 from app.ownership import AuthorizationRejected, require_item_access
 from app.readiness import collect_dependency_readiness
@@ -59,6 +62,12 @@ app.include_router(sync_v2_router)
 
 DocumentID = Annotated[str, Path(min_length=1)]
 
+# Evidence PUT header ceilings (W2). Named so docs/contract/LIMITS.md can cite them and
+# tests/test_contract_limits_doc.py can check the doc against them; the values are pinned
+# by contracts/backend/v1/openapi.yaml (maxLength 256 / 512) and must not change silently.
+EVIDENCE_ITEM_ID_MAX_LENGTH = 256
+EVIDENCE_FILENAME_MAX_LENGTH = 512
+
 
 def _route_template(request: Request) -> str | None:
     route = request.scope.get("route")
@@ -68,7 +77,12 @@ def _route_template(request: Request) -> str | None:
 @app.middleware("http")
 async def request_correlation(request: Request, call_next):
     request_id = request_id_for_header(request.headers.get("x-request-id"))
-    tokens = begin_request(request_id)
+    # W3C Trace Context: a valid caller `traceparent` joins this request to the caller's
+    # trace; anything else starts a new one. Logged on every line as traceID/spanID/
+    # parentSpanID. Not echoed in a response header -- the response shape is pinned to the
+    # V1 client contract, and logs are where cross-system correlation is consumed today.
+    trace = trace_context_for_header(request.headers.get("traceparent"))
+    tokens = begin_request(request_id, trace)
     bind_request_metadata(
         device_id=request.headers.get("x-vitrial-device-id"),
         app_version=request.headers.get("x-vitrial-app-version"),
@@ -106,7 +120,7 @@ async def request_correlation(request: Request, call_next):
 
 @app.middleware("http")
 async def auth_surface_rate_limit(request: Request, call_next):
-    """Bound request rate on the unauthenticated auth surface.
+    """Bound request rate on the unauthenticated auth surface and the admin plane.
 
     Registered after `request_correlation` so a throttled request still gets a request
     id and a completed-event log line, and so it is refused *before* the route handler:
@@ -120,10 +134,13 @@ async def auth_surface_rate_limit(request: Request, call_next):
     A limiter fault fails open: an internal error in the limiter must not become an
     outage on the sign-in path.
     """
-    if not path_is_throttled(request.url.path):
+    surface = throttled_surface_for(request.url.path)
+    if surface is None:
         return await call_next(request)
     try:
-        allowed, retry_after = limiter_for().allow(client_key_for(request))
+        allowed, retry_after = limiter_for().allow(
+            limiter_key_for(surface, client_key_for(request))
+        )
     except Exception as exc:  # pragma: no cover - defensive
         log_event(
             "auth.rate_limit_bypassed",
@@ -140,7 +157,11 @@ async def auth_surface_rate_limit(request: Request, call_next):
         routeTemplate=_route_template(request),
         retryAfterSeconds=retry_after_seconds,
     )
-    return JSONResponse(
+    # Validated false positive, suppressed on the statement below for this ONE rule. The
+    # only header value derived from the request path is Retry-After, and it is int() of a
+    # limiter timestamp difference: the path selects WHICH bucket (throttled_surface_for),
+    # it never contributes bytes to the header. The rest of main.py stays fully scanned.
+    return JSONResponse(  # ubs:ignore[py.security.header-injection]
         status_code=429,
         content={"detail": "too many requests"},
         headers={
@@ -185,6 +206,7 @@ async def ready(response: Response) -> ReadinessResponse:
 @app.get("/metrics", include_in_schema=False)
 async def metrics(
     _: None = Depends(require_admin_key),
+    db: AsyncSession = Depends(session_scope),
 ) -> Response:
     """Prometheus exposition of the counters that back the runbook.
 
@@ -195,6 +217,10 @@ async def metrics(
     configured, so a default deployment exposes nothing.
     """
     refresh_dependency_gauges()
+    # One cheap count per scrape (two indexed-or-small aggregates over the GC queue),
+    # behind the admin key, at Prometheus's scrape interval -- not per request. Fails soft:
+    # a database error leaves the backlog gauge unset for this scrape and the rest renders.
+    await refresh_gc_backlog(db)
     return Response(content=registry.render(), media_type="text/plain; version=0.0.4")
 
 
@@ -293,8 +319,8 @@ async def evidence_head(
 async def evidence_put(
     documentID: DocumentID,
     request: Request,
-    x_vitrial_item_id: Annotated[str, Header(alias="X-Vitrial-Item-ID", min_length=1, max_length=256)],
-    x_vitrial_filename: Annotated[str, Header(alias="X-Vitrial-Filename", min_length=1, max_length=512)],
+    x_vitrial_item_id: Annotated[str, Header(alias="X-Vitrial-Item-ID", min_length=1, max_length=EVIDENCE_ITEM_ID_MAX_LENGTH)],
+    x_vitrial_filename: Annotated[str, Header(alias="X-Vitrial-Filename", min_length=1, max_length=EVIDENCE_FILENAME_MAX_LENGTH)],
     x_content_sha256: Annotated[
         str,
         Header(alias="X-Content-SHA256", pattern=r"^[0-9a-fA-F]{64}$"),

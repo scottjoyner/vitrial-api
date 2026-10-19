@@ -180,3 +180,111 @@ def test_internal_admin_routes_are_not_part_of_pinned_public_openapi():
     paths = app.openapi()["paths"]
     assert "/internal/admin/v1/bootstrap" not in paths
     assert "/internal/admin/v1/sessions/{sessionID}/revoke" not in paths
+
+
+# ── W3C Trace Context ─────────────────────────────────────────────────────────
+
+from app.observability import trace_context_for_header  # noqa: E402
+
+_VALID_TRACE = "4bf92f3577b34da6a3ce929d0e0e4736"
+_VALID_PARENT = "00f067aa0ba902b7"
+
+
+def _render() -> dict:
+    record = logging.LogRecord(
+        name="vitrial", level=logging.INFO, pathname=__file__, lineno=1,
+        msg="t", args=(), exc_info=None,
+    )
+    record.event_name = "t"
+    record.event_fields = {}
+    return json.loads(JsonFormatter().format(record))
+
+
+def test_a_valid_traceparent_joins_the_callers_trace():
+    trace = trace_context_for_header(f"00-{_VALID_TRACE}-{_VALID_PARENT}-01")
+    assert trace.trace_id == _VALID_TRACE, "the caller's trace id must be kept"
+    assert trace.parent_span_id == _VALID_PARENT
+    assert trace.sampled is True
+    assert len(trace.span_id) == 16 and trace.span_id != _VALID_PARENT, (
+        "this request gets its own span, distinct from the caller's"
+    )
+
+
+def test_unsampled_flag_is_preserved():
+    assert trace_context_for_header(f"00-{_VALID_TRACE}-{_VALID_PARENT}-00").sampled is False
+
+
+def test_invalid_traceparents_start_a_new_trace_and_are_never_reflected():
+    """Strict, like request_id_for_header: a header is caller-controlled text, and the log
+    line is where a credential pasted into the wrong header would otherwise land."""
+    hostile = [
+        None,
+        "",
+        "garbage",
+        f"01-{_VALID_TRACE}-{_VALID_PARENT}-01",          # unknown version
+        f"ff-{_VALID_TRACE}-{_VALID_PARENT}-01",          # version ff is invalid per spec
+        f"00-{_VALID_TRACE.upper()}-{_VALID_PARENT}-01",  # uppercase hex
+        f"00-{'0' * 32}-{_VALID_PARENT}-01",              # all-zero trace id
+        f"00-{_VALID_TRACE}-{'0' * 16}-01",               # all-zero parent id
+        f"00-{_VALID_TRACE}-{_VALID_PARENT}-01-extra",    # trailing fields
+        "Bearer eyJhbGciOiJIUzI1NiJ9.secret-token-pasted-into-the-wrong-header",
+    ]
+    for value in hostile:
+        trace = trace_context_for_header(value)
+        assert trace.parent_span_id is None, value
+        assert len(trace.trace_id) == 32 and trace.trace_id != _VALID_TRACE, value
+        if value:
+            assert trace.trace_id not in value, "nothing from the header may be reflected"
+
+
+def test_trace_ids_reach_every_log_line_and_do_not_leak_past_the_request():
+    trace = trace_context_for_header(f"00-{_VALID_TRACE}-{_VALID_PARENT}-01")
+    tokens = begin_request("55555555-5555-4555-8555-555555555555", trace)
+    try:
+        payload = _render()
+        assert payload["traceID"] == _VALID_TRACE
+        assert payload["parentSpanID"] == _VALID_PARENT
+        assert payload["spanID"] == trace.span_id
+    finally:
+        end_request(tokens)
+    # The context vars are reset, so a later log line outside any request is not
+    # mis-attributed to this trace.
+    after = _render()
+    assert after["traceID"] is None and after["spanID"] is None
+
+
+def test_traceparent_flows_end_to_end_into_request_logs():
+    """Through the real middleware: the caller's trace id appears on the request's logs.
+
+    The handler formats AT EMIT TIME, deliberately. The trace ids live in context vars that
+    the middleware resets when the request ends, so a record captured and formatted
+    afterwards (e.g. by caplog) would read traceID=None and prove nothing. The `vitrial`
+    logger also does not propagate, so caplog would not see it at all.
+    """
+    from app.observability import logger as vitrial_logger
+
+    rendered: list[dict] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            rendered.append(json.loads(JsonFormatter().format(record)))
+
+    handler = _Capture()
+    vitrial_logger.addHandler(handler)
+    previous_level = vitrial_logger.level
+    vitrial_logger.setLevel(logging.INFO)
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/health", headers={"traceparent": f"00-{_VALID_TRACE}-{_VALID_PARENT}-01"}
+            )
+    finally:
+        vitrial_logger.removeHandler(handler)
+        vitrial_logger.setLevel(previous_level)
+
+    assert response.status_code == 200
+    completed = [p for p in rendered if p.get("event") == "request.completed"]
+    assert completed, "request.completed was not logged"
+    assert completed[-1]["traceID"] == _VALID_TRACE
+    assert completed[-1]["parentSpanID"] == _VALID_PARENT
+    assert completed[-1]["spanID"] and completed[-1]["spanID"] != _VALID_PARENT

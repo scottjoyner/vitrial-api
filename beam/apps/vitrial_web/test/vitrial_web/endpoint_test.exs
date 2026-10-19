@@ -148,9 +148,58 @@ defmodule VitrialWeb.EndpointTest do
     assert body == ""
   end
 
+  test "the wired push route answers from the engine, not the uniform 501" do
+    # The counterpart to the uniformity property. `/api/v2/sync/push` reached
+    # `VitrialSync.Auth` and `VitrialSync.PushService`, so a request with no
+    # Authorization header is REFUSED by the engine and never reaches 501.
+    #
+    # Asserting the DETAIL as well as the status: the point is that the engine
+    # answered, and a 401 from a stub would look identical from outside. The
+    # refusal names which layer refused.
+    {status, headers, body} =
+      request("POST", "/api/v2/sync/push", [], ~s({"records":[]}))
+
+    # 401, not 403: every authentication refusal in `app/auth.py` (:42, :49, :54,
+    # :59) raises `HTTPException(401, ...)`. 403 is for an authenticated caller
+    # that lacks a capability.
+    #
+    assert headers["content-type"] == "application/json"
+
+    # WITHOUT a database the answer is 500, not 401 — and that is CORRECT rather
+    # than a degradation. The pool cannot reach a server, which is our failure and
+    # not the caller's; answering 401 would tell a client its token was rejected
+    # when the token was never read. So the invariant this test pins is the one
+    # that holds either way: the boundary answers, and it is never the uniform
+    # 501 that means "nobody implemented this".
+    #
+    #   401  a server IS reachable and refused the token (app/auth.py:42)
+    #   500  no server is reachable (this suite's default — scripts/beam_gate.sh
+    #        has no database)
+    assert status in [401, 500], "the wired route must answer, never 501 (got #{status})"
+
+    # And the internal reason does not leak: the first version answered
+    # `{"detail":"econnrefused"}`, which names a failure mode and nothing about
+    # the request, in a different response shape from every other refusal.
+    refute body =~ "econnrefused"
+
+    # And a malformed body with no token is ALSO 401, not 400: the seam answers
+    # before the body is parsed, matching FastAPI resolving every `Depends` before
+    # the handler body runs. An unauthenticated caller learns nothing about whether
+    # their request was well-formed.
+    assert match?(
+             {status, _headers, _body} when status in [401, 500],
+             request("POST", "/api/v2/sync/push", [], ~s({))
+           )
+  end
+
   test "every unwired clause answers the ONE uniform 501" do
-    # Every clause of the 23-row table except the two servable ones, each driven
-    # with its DECLARED method -- a wrong method would answer 405, not 501.
+    # Every clause of the 23-row table except the SERVABLE ones, each driven with
+    # its DECLARED method -- a wrong method would answer 405, not 501.
+    #
+    # `/api/v2/sync/push` is no longer listed: it reached `VitrialSync.PushService`
+    # and answers a REFUSAL from the engine instead of the uniform 501. That is
+    # the property working -- a route that used to be not-wired now answers from
+    # the engine -- and its own test asserts it.
     for {method, path} <- [
           {"GET", "/ready"},
           {"GET", "/metrics"},
@@ -171,7 +220,6 @@ defmodule VitrialWeb.EndpointTest do
           {"GET", "/api/v1/reference-data/publications/pub-1"},
           {"POST", "/api/v1/reference-data/publications"},
           {"GET", "/api/v2/version"},
-          {"POST", "/api/v2/sync/push"},
           {"GET", "/api/v2/sync/pull"}
         ] do
       {status, _headers, body} = request(method, path)

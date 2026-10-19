@@ -130,6 +130,12 @@ def test_forwarded_header_is_used_and_peers_are_fallback():
 
 def test_only_the_unauthenticated_auth_surface_is_throttled():
     assert path_is_throttled("/api/v1/auth/pair")
+    # The admin control plane: its key mints sessions, so it is throttled too.
+    assert path_is_throttled("/internal/admin/v1/bootstrap")
+    assert path_is_throttled("/internal/admin/v1/pairing-grants")
+    assert path_is_throttled("/internal/admin/v1/sessions/s-1/revoke")
+    # /metrics checks the same admin key, so it must not be an unthrottled side door.
+    assert path_is_throttled("/metrics")
     # The only throttled route is the pairing exchange; /api/v1/auth/refresh has no live route.
     assert not path_is_throttled("/api/v1/auth/refresh")
     # Authenticated traffic is bounded by push serialization, not by client address.
@@ -287,3 +293,67 @@ def test_rate_limit_configuration_crosses_the_deployment_boundary():
         for env in (production_env, development_env):
             assert f"{key}={default}" in env
 
+
+
+# ------------------------------------------------------------- admin control plane
+
+
+@pytest.mark.asyncio
+async def test_admin_key_guessing_is_throttled(monkeypatch):
+    """The admin key mints sessions of up to 30 days, so guessing it must be bounded.
+
+    Before this, the 192-bit pairing code was rate-limited and the admin key next to it was
+    not. No admin key hash is configured here, so within budget the plane answers 404 --
+    and past budget the limiter answers 429 FIRST, before the handler runs. That ordering
+    is the property: a refused guess costs no hash computation and no database work.
+    """
+    monkeypatch.setenv("VITRIAL_AUTH_RATE_LIMIT", "4")
+    monkeypatch.setattr("app.admin.settings.admin_api_key_hash", None)
+    reset_limiter_for_tests()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        statuses = []
+        for _ in range(7):
+            response = await client.post(
+                "/internal/admin/v1/bootstrap",
+                json={},
+                headers={
+                    "x-forwarded-for": "203.0.113.50",
+                    "X-Vitrial-Admin-Key": "a-guess",
+                },
+            )
+            statuses.append(response.status_code)
+
+    assert statuses[:4] == [404] * 4, statuses
+    assert statuses[4:] == [429] * 3, statuses
+
+
+@pytest.mark.asyncio
+async def test_admin_and_pairing_budgets_are_separate(monkeypatch):
+    """One bucket per (surface, client), not one per client.
+
+    Exhausting the admin budget must not lock the same client out of pairing. With a single
+    shared bucket, an operator provisioning devices would throttle their own sign-ins, and
+    admin-key guessing would be indistinguishable from pairing traffic in the window.
+    """
+    monkeypatch.setenv("VITRIAL_AUTH_RATE_LIMIT", "2")
+    monkeypatch.setattr("app.admin.settings.admin_api_key_hash", None)
+    reset_limiter_for_tests()
+    client_ip = {"x-forwarded-for": "203.0.113.51"}
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        admin = [
+            (await client.post("/internal/admin/v1/bootstrap", json={}, headers=client_ip))
+            .status_code
+            for _ in range(3)
+        ]
+        pairing = await client.post(
+            "/api/v1/auth/pair", json={"pairingCode": "x" * 32}, headers=client_ip
+        )
+
+    assert admin[-1] == 429, f"admin budget should be exhausted: {admin}"
+    assert pairing.status_code == 200, (
+        "exhausting the admin budget must not throttle pairing for the same client"
+    )

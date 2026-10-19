@@ -428,3 +428,52 @@ def test_hash_of_nothing_is_stable_so_scrape_is_reproducible():
     assert hashlib.sha256("\n".join(counter.render()).encode()).hexdigest() == hashlib.sha256(
         "\n".join(counter.render()).encode()
     ).hexdigest()
+
+# ── Declared-but-never-written: the failure this file kept rediscovering ────────
+
+
+def test_every_registered_metric_is_written_somewhere_in_app():
+    """No metric may be declared without a call site that records it.
+
+    Twice in this codebase a metric was registered and never written. An unlabelled gauge
+    in that state renders `0` on every scrape (vitrial_evidence_gc_backlog read as "the GC
+    queue is empty" whether or not the collector ran); a labelled one renders nothing and
+    is silently absent. Either way an alert built on it can never fire, and nothing says so.
+
+    Structural on purpose: it reads app/ source for `<name>.inc(` / `.set(` / `.observe(`,
+    so a new metric fails CI the moment it is declared without being wired, rather than the
+    first time someone relies on it.
+    """
+    import pathlib
+    import re
+
+    import app.metrics as metrics_module
+
+    app_dir = pathlib.Path(metrics_module.__file__).parent
+    source = "\n".join(p.read_text(encoding="utf-8") for p in app_dir.glob("*.py"))
+
+    registered = {
+        name: metric
+        for name, metric in vars(metrics_module).items()
+        if isinstance(metric, (Counter, Gauge, Histogram))
+    }
+    assert registered, "no metrics found -- the introspection is wrong"
+
+    unwritten = sorted(
+        f"{name} ({metric.name})"
+        for name, metric in registered.items()
+        if not re.search(rf"\b{re.escape(name)}\.(inc|set|observe)\(", source)
+    )
+    assert unwritten == [], f"declared but never written: {unwritten}"
+
+
+def test_service_info_is_present_on_every_scrape():
+    """Was declared and never set, so absent from every scrape. Now set where it is read,
+    which also survives registry.reset()."""
+    from app.metrics import refresh_dependency_gauges, service_info
+    from app.settings import settings
+
+    registry.reset()
+    refresh_dependency_gauges()
+    assert service_info.value(service_version=settings.service_version) == 1
+    assert f'vitrial_service_info{{service_version="{settings.service_version}"}} 1' in registry.render()

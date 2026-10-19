@@ -114,13 +114,17 @@ def validate(args: argparse.Namespace) -> tuple[list[str], dict[str, object]]:
         errors.append("ADMIN_API_KEY_HASH must be a 64-character SHA-256 hex digest")
 
     if args.mode == "acceptance":
+        # POSTGRES_IMAGE and S3_IMAGE exist only in the ACCEPTANCE topology; production uses
+        # managed PostgreSQL and object storage and runs no such container, so its digest
+        # rule is the API_IMAGE/CADDY_IMAGE pair above. This block used to carry an
+        # `if args.mode == "production"` digest check nested inside this acceptance-only
+        # branch -- unreachable, and it read as enforcement that never ran. Acceptance pins
+        # by tag deliberately (CI passes e.g. a postgres major tag); the guard that applies
+        # here is the mutable-:latest one.
         for key in ("POSTGRES_IMAGE", "S3_IMAGE"):
             image = require(values, key, errors)
-            if image:
-                if args.mode == "production" and "@sha256:" not in image and not args.allow_mutable_images:
-                    errors.append(f"{key} must be pinned by sha256 digest")
-                elif image.endswith(":latest") and not args.allow_mutable_images:
-                    errors.append(f"{key} must not use :latest")
+            if image and image.endswith(":latest") and not args.allow_mutable_images:
+                errors.append(f"{key} must not use :latest")
         for key in ("POSTGRES_PASSWORD", "S3_ROOT_USER", "S3_ROOT_PASSWORD"):
             secret = require(values, key, errors)
             if secret and (len(secret) < 16 or looks_placeholder(secret)):

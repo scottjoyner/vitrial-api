@@ -41,7 +41,7 @@ re-deriving it:
   Exit 1 means real unmerged work. Current: 0 real.
 - `python scripts/check_guard_prefixes.py` — every guard prefix maps to a live route.
 
-`make check` runs contract validation + guard lint + tests. Baseline: **419 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
+`make check` runs contract validation + guard lint + tests. Baseline: **448 passed, 1 skipped** (includes other agents' BEAM, docs and assembly-contract work merged into main — that count is the whole tree, not just this agent's changes).
 
 ## HOME MOVED (2026-10-02)
 
@@ -269,6 +269,87 @@ chain reaches `organizations`. Cleanup is now scoped to the two org ids the file
 A test that clears global tables is asserting on the absence of other tests' state as much
 as on its own, and it will look fine right up until someone adds a test with an FK into
 your tables.
+
+## Session lifecycle was unpinned (commit ddae47b)
+
+`app/auth.py::current_principal` is the single gate every authenticated route passes
+through, with four rejection branches. **None was exercised by name, and two were never
+exercised at all.**
+
+Expiry was the serious one. Every session the suite created had `expires_at` in the
+*future*, so `expires_at <= now` never fired. Deleting the clause — or inverting it to
+`>=` — would have left the suite green while every expired bearer token kept working. A
+revocation test existed; an expiry test did not. That asymmetry is the lesson: covering
+*one* revocation lever is not covering the gate, and the covered one is the one that
+looked more important.
+
+**A behavioural test cannot pin the expiry boundary, and I only found out by planting.**
+My first boundary test set `expires_at = now` and expected rejection — which passes
+under `<=` *and* under `<`, because `current_principal` computes its own `now` a few
+microseconds later. Planted `<`, the test stayed green. It is now an AST assertion, with
+the commit saying why. When a distinction is not observable from outside, say so and pin
+the shape rather than shipping a test that flatters itself.
+
+## Remote review 2026-10-07 — two defects in my own earlier work, one BEAM parity gap
+
+Nothing new on `main` since `5ecfeaf`. Reviewed everything since `e4a0f9d`, the two open
+Dependabot PRs, and re-checked my own gates. Logged `VITR-V016`/`-017`/`-018`; none fixed yet.
+
+**`VITR-V017` (HIGH, mine, from `150c7ac`)** — two problems in the runtime lock:
+1. The image and CI run **different versions**: sqlalchemy 2.1.3 vs 2.1.1, boto3/botocore
+   .108 vs .107, markupsafe 3.0.4 vs 3.0.3. I claimed to fix "image resolves versions CI
+   never tested" and actually produced pinned-but-different. The generator resolves fresh
+   from `pyproject.toml` ranges instead of constraining to the combined lock's pins.
+2. `--check` re-resolves **live PyPI**, so it is non-deterministic. Red today with no code
+   change (asyncpg 0.32.0 and opentelemetry-api 1.45.1 were released after the commit). The
+   next push from either agent fails CI. Regenerating and committing would silently upgrade
+   the DB driver, so that is not the fix.
+**Lesson: a gate that checks against a moving external source is a timer, not a gate.**
+I had *seen* the drift when I built it (botocore .107→.108) and recorded it as "the point:
+it's now recorded." It wasn't the point. Drift visible at authoring time means the
+comparison is non-deterministic, and that should have been the finding.
+
+**`VITR-V016` (BEAM, read-only)** — `VitrialSync.Auth` diverges from `current_principal`
+on unknown token (`:authentication_required` vs Python's deliberate "session expired or
+revoked", which a BEAM test *pins*), missing organization, and wire text (underscores).
+All still 401. Not mine to change, so it is recorded for the BEAM agent.
+
+**`VITR-V018`** — Dependabot's default `increase` strategy rewrites `pyproject.toml`
+floors (PR #20), and grouping lets `pydantic-core` move without `pydantic` (PR #21). Both
+PRs are red and should be closed, not merged.
+
+## Long-session batch 2026-10-07 — main back to green, six items closed
+
+`main` CI was red on my own runtime-lock gate. Fixed and then worked down the list:
+
+- **`VITR-V017` fixed** (`4ec9341`) — runtime lock resolved with `-c requirements-lock.txt`,
+  so the image ships exactly what CI tests; `--check` is offline; CI proves closure with
+  `--no-deps` + `pip check`. `9d7d6d7` then landed sqlalchemy 2.1.2 through it, and the gate
+  caught the half-done state before regeneration. **To bump a Python dep now: edit
+  `requirements-lock.txt`, run `scripts/generate_runtime_lock.py`, install into the venv,
+  run the suite.** Never edit the runtime lock by hand.
+- **`VITR-V018` fixed** (`e248d9c`) — Dependabot `increase-if-necessary`, coupled-package
+  groups ordered before the catch-alls. PRs #20/#21 closed with reasons.
+- **Auth refusal wire pins** (`d20e767`) — exact status + body for every refusal; the
+  Python reference for `VITR-V016`. Both BEAM divergences, transplanted into Python, fail it.
+- **Admin control plane rate-limited**, one budget per (surface, client). UBS flagged the
+  429 `Retry-After` as header injection (path → bucket → retry_after). Validated FP,
+  suppressed with the **rule-scoped statement marker** `# ubs:ignore[rule]` — trailing on
+  the statement line; a marker five lines above is ignored. Prefer this over `.ubsignore`,
+  which is file-level and blinds the scanner to the whole file.
+- **Image scan now enforces** (was `exit-code: '0'`) + CycloneDX SBOM artifact (`f6440fe`).
+  Flipped only after measuring 0 fixable HIGH/CRITICAL across 36 targets.
+- **Rejection cost measured** in engine connection checkouts: 0 for every pre-auth refusal,
+  exactly 1 for an unknown token.
+- **Dead branch removed** from `validate_deployment.py`: a `mode == "production"` digest
+  check nested inside the acceptance-only branch. Never ran; read as enforcement.
+
+Two things that bit:
+- `make ubs` once returned **rc=5 (environment error)** and passed on rerun at the same tree.
+  Probably a concurrent UBS run by the other agent — both write `ubs-history.json`. The gate
+  correctly refused to call it a pass; just rerun, do not treat rc=5 as a finding.
+- A scratch venv on `/mnt/build-fast/tmp` came back half-populated with no `python`/`pip`
+  under a reused name. Use a unique name (`v017-$$`) and `python -m pip`.
 
 ## Burned lessons (each cost a pipeline cycle — do not repeat)
 

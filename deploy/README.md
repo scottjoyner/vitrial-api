@@ -193,6 +193,60 @@ silently under-deletes is visible in `systemctl status` rather than looking heal
 
 Add the unit's result to the release evidence list below once it is installed.
 
+## Monitoring and alerts
+
+`GET /metrics` exposes Prometheus metrics. It is admin-gated (send the admin key in
+`X-Vitrial-Admin-Key`), answers 404 when `ADMIN_API_KEY_HASH` is unset, and is rate-limited
+in its own bucket, so a 15 s scrape interval (4/min) is well inside the 30/min ceiling.
+
+```yaml
+scrape_configs:
+  - job_name: vitrial-api        # deploy/prometheus/alerts.yml matches on this job name
+    metrics_path: /metrics
+    scheme: https
+    static_configs: [{targets: ["<API_HOST>"]}]
+    http_headers:
+      X-Vitrial-Admin-Key: {files: [/etc/prometheus/vitrial-admin-key]}
+rule_files: [/etc/prometheus/vitrial-alerts.yml]   # copy of deploy/prometheus/alerts.yml
+```
+
+`deploy/prometheus/alerts.yml` encodes the SLOs: under 1% 5xx, p95 under 1 s per route
+(evidence uploads excluded), plus sync internal errors, sustained rejection and pull
+truncation, auth-failure spikes, admin-key guessing, pool saturation, slow object storage,
+a stuck drain, and overdue evidence GC. CI checks it two ways: `promtool` for syntax, and
+`tests/test_alert_rules.py` for whether every metric, label and closed label value it names
+is one the service actually exports.
+
+Two limits to know:
+- Counters are per-process and reset on every deploy; the rules use `rate()`/`increase()`.
+- Evidence GC runs in a one-shot container that Prometheus never scrapes, so
+  `vitrial_evidence_gc_total` is not observable in production and no rule uses it. GC
+  health is `vitrial_evidence_gc_backlog{state="due"}` (sampled by the scraped API from
+  the database) plus the `gc-evidence.service` exit status.
+
+## Baseline reference publications backfill (one-off)
+
+Four reference-data GET routes seed the bundled baseline publications on first read, so a
+read can write and commit (`VITR-V004`). New organizations no longer depend on that:
+`bootstrap_identity` seeds them at creation (`03e10d9`). Organizations created before that
+change still rely on the lazy GET seed, and it cannot be removed until they are complete.
+
+Run once, against the same pinned image and env as the live service:
+
+```bash
+python scripts/validate_deployment.py --env-file /etc/vitrial/vitrial.env --mode production
+docker compose --env-file /etc/vitrial/vitrial.env -f deploy/compose.production.yml run --rm api \
+  python scripts/backfill_baseline_publications.py              # reports only
+docker compose --env-file /etc/vitrial/vitrial.env -f deploy/compose.production.yml run --rm api \
+  python scripts/backfill_baseline_publications.py --execute    # seeds what is missing
+```
+
+It is a dry run by default, inserts only what is missing through the same race-tolerant
+path the write route uses (safe to re-run, safe alongside live traffic), and re-measures
+committed state after `--execute`. Exit status is the answer: `0` and `incomplete=0` mean
+every organization has its baselines. Record that line in the release evidence; it is the
+precondition for deleting the lazy GET seed and closing `VITR-V004`.
+
 
 ## Read-only production provider preflight
 

@@ -275,7 +275,21 @@ defmodule VitrialSync.Db.Pool do
     outcome =
       try do
         {:returned, fun.(conn)}
+      rescue
+        # `rescue`, not `catch`, for the error class: `reraise/2` REQUIRES the
+        # original exception struct, and `catch kind, thrown` throws the struct
+        # away and keeps only its value. The caller then reached
+        # `rekindle(:error, value, stack)` -> `reraise(value, stack)` and got
+        #
+        #     ** (ArgumentError) reraise/2 expects a module name, string or
+        #        exception as the first argument, got: {:function_clause, [...]}
+        #
+        # which replaces the real failure with a complaint about the complaint.
+        # The same shape was fixed in `Pgconn` for the same reason.
+        error -> {:caught, :error, error, __STACKTRACE__}
       catch
+        # `catch` is still needed for the other two kinds, where the value IS the
+        # message: a throw is a value, and an exit is `{:timeout, _}`.
         kind, thrown -> {:caught, kind, thrown, __STACKTRACE__}
       end
 
