@@ -40,7 +40,7 @@ sequence numbers. No cursor contract has been altered in application code.
 - `tests/test_scrum51_swift_v1_wire_postgres.py` now contains two real
   PostgreSQL/FastAPI acceptance cases: an Item-only V1 round trip (valid for
   API but intentionally insufficient for offline audited import), and
-  an authenticated **Item plus independently signed-off synthetic audit**
+  an authenticated **Item plus session-consistent synthetic audit**
   creation/return case. No customer data, signed customer documents or
   supplier prices are present.
 - The new test refuses incorrect session provenance, mismatched audit
