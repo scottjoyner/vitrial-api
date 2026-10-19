@@ -13,6 +13,7 @@ INVENTORY = """      VMID NAME                 STATUS     MEM(MB)  BOOTDISK(GB) 
        100 vitrial-prod-api     running    8192     80.00        1
        101 vitrial-prod-db      running    8192     160.00       2
        102 vitrial-prod-obj     running    8192     500.00       3
+       111 opnsense             running    8192     32.00        4
 """
 
 
@@ -43,6 +44,7 @@ class ProdVmHealthTests(unittest.TestCase):
         result = health.snapshot("root@pve.example", "one", runner)
         self.assertEqual(result["gate"], "HOLD")
         self.assertFalse(result["checks"]["api_container_healthy"])
+        self.assertTrue(result["checks"]["ingress_gateway_vm_running"])
         self.assertFalse(result["checks"]["postgresql_active"])
         self.assertFalse(result["release_authorized"])
         self.assertEqual(len(calls), 4)
@@ -62,7 +64,10 @@ class ProdVmHealthTests(unittest.TestCase):
     def test_incomplete_or_stopped_inventory_is_fail_closed(self):
         for content in (INVENTORY.replace("running", "stopped", 1),
                         INVENTORY.replace("102 vitrial-prod-obj", "102 wrong-obj"),
-                        INVENTORY + "101 vitrial-prod-db running\n", ""):
+                        INVENTORY + "101 vitrial-prod-db running\n",
+                        INVENTORY.replace("111 opnsense", "111 wrong-gateway"),
+                        INVENTORY.replace("111 opnsense             running", "111 opnsense             stopped"),
+                        ""):
             runner, calls = mocked_runner(inventory=content)
             self.assertFalse(health.snapshot("root@pve.example", "one", runner)["checks"]["vm_inventory"])
             self.assertEqual(len(calls), 2)
