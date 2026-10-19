@@ -18,7 +18,7 @@ from sqlalchemy import delete, select
 from app.db import SessionFactory
 from app.main import app
 from app.models import (
-    AuthSession, CanonicalCustomer, CanonicalItem, CanonicalProject,
+    AuthSession, CanonicalCustomer, CanonicalItem, CanonicalItemChild, CanonicalProject,
     CanonicalProjectSector, Membership, Organization, SyncChangeLog,
     SyncEntity, SyncMutation, User,
 )
@@ -40,7 +40,7 @@ async def cleanup(org: str):
         )).all()
         for model in (
             SyncChangeLog, SyncEntity, SyncMutation, SyncMutationFingerprint,
-            CanonicalItem, CanonicalProjectSector, CanonicalProject,
+            CanonicalItemChild, CanonicalItem, CanonicalProjectSector, CanonicalProject,
             CanonicalCustomer, AuthSession, Membership,
         ):
             await db.execute(delete(model).where(model.organization_id == org))
@@ -134,6 +134,26 @@ async def test_swift_v1_item_batch_http_push_and_pull_with_real_postgres(monkeyp
             assert pulled["jobItemDraft"] == payload["jobItemDraft"]
             assert pulled.get("width") is None
             assert items[0]["serverRevision"] > 0
+
+            # Opt-in capture of the REAL FastAPI V1 pull HTTP JSON (not a
+            # hand-composed Swift fixture). Export only in synthetic tests
+            # into a new owner-only file, never a customer-data destination.
+            pull_path = os.getenv("VITRIAL_SYNTHETIC_API_V1_PULL_WIRE_FILE")
+            if pull_path:
+                export = Path(pull_path)
+                parent = export.parent
+                assert parent.is_dir() and not parent.is_symlink()
+                assert parent.stat().st_mode & 0o077 == 0
+                assert not export.exists() and not export.is_symlink()
+                # No bearer/access tokens or real company rows in the
+                # synthetic pull body. Refuse unrecognized entity types.
+                assert all(row["entityType"] == "item"
+                           for row in response.json()["records"])
+                fd = os.open(export, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                             | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, "wb") as writer:
+                    writer.write(response.content)
+
             # Actual base64 Swift wire is retried with four malicious,
             # independently identified edits; no altered server-side draft
             # or further revision is allowed into the event log.
@@ -172,5 +192,87 @@ async def test_swift_v1_item_batch_http_push_and_pull_with_real_postgres(monkeyp
                 ]
                 assert saved.server_revision == items[0]["serverRevision"]
             assert (await client.get("/api/v1/sync/pull")).status_code == 401
+    finally:
+        await cleanup(org)
+@pytest.mark.asyncio
+async def test_audited_swift_batch_roundtrip(monkeypatch):
+    fixture = os.getenv("VITRIAL_SYNTHETIC_COMPLETE_ITEM_V1_BATCH_FILE")
+    if not fixture:
+        pytest.skip("complete synthetic Swift batch not supplied")
+    wire = json.loads(Path(fixture).read_bytes())
+    assert [r["entityType"] for r in wire["records"]] == ["item", "item_audit_event"]
+    item = json.loads(base64.b64decode(wire["records"][0]["payload"], validate=True))
+    audit = json.loads(base64.b64decode(wire["records"][1]["payload"], validate=True))
+    assert audit["after"] == item and audit["kind"] == "created"
+    assert audit["authorizationRevision"] == 1
+    org = "synthetic-audit-org"
+    monkeypatch.setattr(settings, "admin_api_key_hash",
+                        hashlib.sha256(ADMIN_KEY.encode()).hexdigest())
+    await cleanup(org)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app),
+                               base_url="http://test") as client:
+            identity = dict(
+                organizationID=org, organizationName="Synthetic Audit Company",
+                userID="synthetic-audit-user", displayName="Synthetic Estimator",
+                email="audited@example.invalid",
+                membershipID="synthetic-audit-member",
+                sessionID="synthetic-audit-session", sessionTTLSeconds=3600,
+                active=True, sharedCompanyAccess=True, allCustomers=True,
+                allProjects=True, customerIDs=[], projectIDs=[], roles=[],
+                capabilities=["sync", "item.create", "item.edit"],
+                pilotSeatLimit=2,
+            )
+            auth = await client.post("/internal/admin/v1/bootstrap",
+                headers={"X-Vitrial-Admin-Key": ADMIN_KEY}, json=identity)
+            assert auth.status_code == 200, auth.text
+            token = {"Authorization": "Bearer " + auth.json()["accessToken"]}
+            profile = await client.get("/api/v1/auth/me", headers=token)
+            assert profile.status_code == 200
+            assert profile.json()["authorizationRevision"] == 1
+            async with SessionFactory() as db:
+                db.add(CanonicalCustomer(organization_id=org,
+                                         customer_id="synthetic-customer"))
+                await db.flush()
+                db.add(CanonicalProject(organization_id=org,
+                         customer_id="synthetic-customer", project_id="synthetic-project"))
+                await db.flush()
+                db.add(CanonicalProjectSector(
+                    organization_id=org, project_id="synthetic-project",
+                    project_sector_id="synthetic-sector",
+                    sector_id="sector-aluminum-glass-steel"))
+                await db.commit()
+            pushed = await client.post("/api/v1/sync/push", headers=token, json=wire)
+            assert pushed.status_code == 200, pushed.text
+            assert pushed.json()["rejectedRecordIDs"] == [], pushed.text
+            assert len(pushed.json()["acceptedRecordIDs"]) == 2
+            pulled = await client.get("/api/v1/sync/pull?cursor=seq:0", headers=token)
+            assert pulled.status_code == 200
+            batch = pulled.json()
+            assert batch["deviceID"] == "server"
+            assert batch["cursor"].startswith("seq:")
+            assert int(batch["cursor"].split(":")[1]) > 0
+            assert [r["entityType"] for r in batch["records"]] == [
+                "item", "item_audit_event"]
+            assert all(r["id"].startswith("server:")
+                       and r["serverRevision"] > 0 for r in batch["records"])
+            assert all(r["entityID"] == expected for r, expected in zip(
+                batch["records"], ["synthetic-item", "synthetic-audit-created-1"]
+            ))
+            decoded_audit = json.loads(base64.b64decode(
+                batch["records"][1]["payload"], validate=True))
+            assert decoded_audit["after"] == item
+            assert decoded_audit["organizationID"] == org
+            assert decoded_audit["sessionID"] == "synthetic-audit-session"
+            path = os.getenv("VITRIAL_SYNTHETIC_AUDITED_API_V1_PULL_WIRE_FILE")
+            if path:
+                target = Path(path)
+                assert target.parent.is_dir()
+                assert target.parent.stat().st_mode & 0o077 == 0
+                assert not target.exists() and not target.is_symlink()
+                fd = os.open(target, os.O_WRONLY | os.O_CREAT
+                             | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, "wb") as dst:
+                    dst.write(pulled.content)
     finally:
         await cleanup(org)
