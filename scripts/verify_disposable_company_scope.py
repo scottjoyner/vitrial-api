@@ -103,8 +103,24 @@ def verify(base: str, file: Path, admin: str) -> dict:
 
     # The initial A/B identities have explicit per-record grants. These newly
     # enrolled company seats deliberately receive NO record-ID grants.
-    _, shared_records = one_member(base=base, admin=admin, payload=shared,
-                                   expected_scopes=True)
+    shared_token, shared_records = one_member(
+        base=base, admin=admin, payload=shared, expected_scopes=True,
+    )
+    team = exchange(
+        base, "/api/v1/company/workspace",
+        headers={"Authorization": "Bearer " + shared_token},
+    )
+    members = team.get("members")
+    if (team.get("organizationID") != company
+            or team.get("memberDirectoryScope") != "team"
+            or team.get("seatLimit") != 4
+            or team.get("occupiedSeats") != 3
+            or team.get("seatsRemaining") != 1
+            or type(members) is not list or len(members) != 3
+            or shared["membershipID"] not in {
+                m.get("membershipID") for m in members if type(m) is dict
+            }):
+        raise RuntimeError("shared company directory or seat count incorrect")
     shared_ids = {
         r["entityID"] for r in shared_records
         if type(r) is dict and isinstance(r.get("entityID"), str)
@@ -113,10 +129,23 @@ def verify(base: str, file: Path, admin: str) -> dict:
     if not expected.issubset(shared_ids):
         raise RuntimeError("new unscoped shared-company member cannot see existing records")
 
-    _, limited_records = one_member(base=base, admin=admin, payload=limited,
-                                    expected_scopes=False)
+    limited_token, limited_records = one_member(
+        base=base, admin=admin, payload=limited, expected_scopes=False,
+    )
     if limited_records:
         raise RuntimeError("ungranted same-company member saw protected records")
+    self_only = exchange(
+        base, "/api/v1/company/workspace",
+        headers={"Authorization": "Bearer " + limited_token},
+    )
+    self_members = self_only.get("members")
+    if (self_only.get("organizationID") != company
+            or self_only.get("memberDirectoryScope") != "self"
+            or self_only.get("occupiedSeats") != 4
+            or self_only.get("seatsRemaining") != 0
+            or type(self_members) is not list or len(self_members) != 1
+            or self_members[0].get("membershipID") != limited["membershipID"]):
+        raise RuntimeError("restricted member saw team or incorrect seat counts")
 
     fifth = new_member(company=company, nonce=nonce, label="fifth", shared=True)
     assert_fifth_seat_denied(base=base, admin=admin, payload=fifth)
@@ -126,6 +155,8 @@ def verify(base: str, file: Path, admin: str) -> dict:
         "new_shared_member_customer_visible": True,
         "new_shared_member_project_visible": True,
         "limited_member_visible_records": 0,
+        "shared_member_directory_count": 3,
+        "restricted_member_directory_count": 1,
         "fifth_active_seat_denied_http_409": True,
         "production_changed": False,
     }
