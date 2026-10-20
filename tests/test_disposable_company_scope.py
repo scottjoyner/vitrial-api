@@ -81,6 +81,32 @@ def fake_http(monkeypatch, mode="good"):
             return {"organizationID": payload["organizationID"],
                     "principalID": payload["userID"],
                     "allCustomers": scope, "allProjects": scope}
+        if path == "/api/v1/company/workspace":
+            payload = state["last"]
+            shared = payload["sharedCompanyAccess"]
+            members = [
+                {"membershipID": payload["membershipID"]},
+            ]
+            if shared:
+                members = [
+                    {"membershipID": "existing-member-a"},
+                    {"membershipID": "existing-member-b"},
+                    *members,
+                ]
+            elif mode == "leaky_directory":
+                members.append({"membershipID": "another-company-member"})
+            return {
+                "organizationID": payload["organizationID"],
+                "memberDirectoryScope": (
+                    "team" if shared or mode == "directory_wrong_scope" else "self"
+                ),
+                "seatLimit": 4,
+                "occupiedSeats": (3 if shared else 4) + (
+                    int(mode == "incorrect_occupancy")
+                ),
+                "seatsRemaining": 1 if shared else 0,
+                "members": members,
+            }
         if path == "/api/v1/sync/pull?cursor=seq:0":
             payload = state["last"]
             if payload["sharedCompanyAccess"]:
@@ -125,6 +151,9 @@ def test_new_shared_principal_uses_no_id_grants(tmp_path, monkeypatch):
     ("missing_project", "new unscoped shared-company"),
     ("scoped_leak", "ungranted same-company"),
     ("scope_mismatch", "server effective scope"),
+    ("leaky_directory", "restricted member saw team"),
+    ("directory_wrong_scope", "restricted member saw team"),
+    ("incorrect_occupancy", "shared company directory"),
     ("fifth_admitted", "fifth synthetic active seat"),
 ])
 def test_refuses_default_sharing_or_seat_failure(tmp_path, monkeypatch, mode, message):
