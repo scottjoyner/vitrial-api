@@ -64,13 +64,18 @@ def test_refuses_unverified_initial_two_user_source(tmp_path):
 
 
 def fake_http(monkeypatch, mode="good"):
-    state = {"last": None, "created": [], "fifth": None}
+    state = {"last": None, "created": [], "fifth": None, "members": {}}
 
     def exchange(base, path, **kw):
         if path == "/internal/admin/v1/bootstrap":
             payload = kw["payload"]
             state["last"] = payload
             state["created"].append(payload)
+            state["members"][payload["membershipID"]] = payload
+            if mode == "stale_team_visibility" and not payload["active"]:
+                state["members"][payload["membershipID"]] = dict(payload, active=True)
+            if mode == "reclaim_denied" and payload["userID"].find("fifth") >= 0:
+                raise RuntimeError("reclaimed active seat cannot see team Customer/Project")
             return {"accessToken": "synthetic-"+payload["userID"]+"-"+("z"*40)}
         if path == "/api/v1/auth/me":
             payload = state["last"]
@@ -82,29 +87,32 @@ def fake_http(monkeypatch, mode="good"):
                     "principalID": payload["userID"],
                     "allCustomers": scope, "allProjects": scope}
         if path == "/api/v1/company/workspace":
-            payload = state["last"]
+            bearer = kw["headers"]["Authorization"]
+            payload = next(
+                m for m in state["members"].values()
+                if bearer == "Bearer synthetic-"+m["userID"]+"-"+("z"*40)
+            )
             shared = payload["sharedCompanyAccess"]
-            members = [
-                {"membershipID": payload["membershipID"]},
+            active_members = [
+                {"membershipID": m["membershipID"]}
+                for m in state["members"].values() if m["active"]
             ]
-            if shared:
-                members = [
-                    {"membershipID": "existing-member-a"},
-                    {"membershipID": "existing-member-b"},
-                    *members,
-                ]
-            elif mode == "leaky_directory":
+            members = (
+                [{"membershipID": "existing-member-a"},
+                 {"membershipID": "existing-member-b"}, *active_members]
+                if shared else [{"membershipID": payload["membershipID"]}]
+            )
+            if not shared and mode == "leaky_directory":
                 members.append({"membershipID": "another-company-member"})
+            occupied = 2 + len(active_members) + int(mode == "incorrect_occupancy")
             return {
                 "organizationID": payload["organizationID"],
                 "memberDirectoryScope": (
                     "team" if shared or mode == "directory_wrong_scope" else "self"
                 ),
                 "seatLimit": 4,
-                "occupiedSeats": (3 if shared else 4) + (
-                    int(mode == "incorrect_occupancy")
-                ),
-                "seatsRemaining": 1 if shared else 0,
+                "occupiedSeats": occupied,
+                "seatsRemaining": max(0, 4 - occupied),
                 "members": members,
             }
         if path == "/api/v1/sync/pull?cursor=seq:0":
@@ -128,6 +136,11 @@ def fake_http(monkeypatch, mode="good"):
 
     monkeypatch.setattr(module, "exchange", exchange)
     monkeypatch.setattr(module, "assert_fifth_seat_denied", fifth)
+    def check_deactivated(*, base, token):
+        if mode == "inactive_token_still_live":
+            raise RuntimeError("deactivated member retained an active bearer")
+    monkeypatch.setattr(module, "assert_inactive_member_bearer_denied",
+                        check_deactivated)
     return state
 
 
@@ -139,8 +152,13 @@ def test_new_shared_principal_uses_no_id_grants(tmp_path, monkeypatch):
     assert result["new_shared_member_project_visible"] is True
     assert result["limited_member_visible_records"] == 0
     assert result["fifth_active_seat_denied_http_409"] is True
-    assert len(state["created"]) == 2
-    assert [p["sharedCompanyAccess"] for p in state["created"]] == [True, False]
+    assert result["deactivated_member_prior_bearer_http_401"] is True
+    assert result["seat_reclaimed_and_replaced"] is True
+    assert result["former_member_absent_after_replacement"] is True
+    assert len(state["created"]) == 4
+    assert [p["sharedCompanyAccess"] for p in state["created"]] == [True, False, False, True]
+    assert state["created"][2]["active"] is False
+    assert state["created"][3]["active"] is True
     assert all(p["customerIDs"] == [] and p["projectIDs"] == []
                and p["allCustomers"] is False and p["allProjects"] is False
                for p in state["created"])
@@ -154,6 +172,9 @@ def test_new_shared_principal_uses_no_id_grants(tmp_path, monkeypatch):
     ("leaky_directory", "restricted member saw team"),
     ("directory_wrong_scope", "restricted member saw team"),
     ("incorrect_occupancy", "shared company directory"),
+    ("inactive_token_still_live", "deactivated member retained"),
+    ("stale_team_visibility", "inactive member remains counted"),
+    ("reclaim_denied", "reclaimed active seat"),
     ("fifth_admitted", "fifth synthetic active seat"),
 ])
 def test_refuses_default_sharing_or_seat_failure(tmp_path, monkeypatch, mode, message):
