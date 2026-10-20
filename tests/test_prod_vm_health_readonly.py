@@ -1,0 +1,99 @@
+"""Synthetic, network-free regression tests for SCRUM-39 VM health probe."""
+import importlib.util
+import json
+from pathlib import Path
+import unittest
+
+MODULE = Path(__file__).resolve().parents[1] / "scripts" / "audit_prod_vm_health_readonly.py"
+spec = importlib.util.spec_from_file_location("prod_vm_health", MODULE)
+health = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(health)
+
+INVENTORY = """      VMID NAME                 STATUS     MEM(MB)  BOOTDISK(GB) PID
+       100 vitrial-prod-api     running    8192     80.00        1
+       101 vitrial-prod-db      running    8192     160.00       2
+       102 vitrial-prod-obj     running    8192     500.00       3
+       111 opnsense             running    8192     32.00        4
+"""
+
+
+def response(value, code=0):
+    return json.dumps({"exitcode": code, "exited": 1, "out-data": value})
+
+
+def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="failed"):
+    invocations = []
+
+    def call(target, *args):
+        invocations.append(args)
+        if args == ("hostname",):
+            return node + "\n"
+        if args == ("qm", "list"):
+            return inventory
+        if args[:4] == ("qm", "guest", "exec", "100"):
+            return response(api)
+        if args[:4] == ("qm", "guest", "exec", "101"):
+            return response(db, 0 if db == "active" else 3)
+        raise AssertionError("unknown action: " + repr(args))
+    return call, invocations
+
+
+class ProdVmHealthTests(unittest.TestCase):
+    def test_realistic_failing_state_is_hold(self):
+        runner, calls = mocked_runner()
+        result = health.snapshot("root@pve.example", "one", runner)
+        self.assertEqual(result["gate"], "HOLD")
+        self.assertFalse(result["checks"]["api_container_healthy"])
+        self.assertTrue(result["checks"]["ingress_gateway_vm_running"])
+        self.assertFalse(result["checks"]["postgresql_active"])
+        self.assertFalse(result["release_authorized"])
+        self.assertEqual(len(calls), 4)
+
+    def test_fully_healthy_services_still_cannot_approve_release(self):
+        runner, _ = mocked_runner(api="healthy", db="active")
+        result = health.snapshot("root@pve.example", "one", runner)
+        self.assertTrue(result["service_health_observed"])
+        self.assertFalse(result["release_authorized"])
+        self.assertFalse(result["checks"]["independent_restore_verified"])
+
+    def test_wrong_pve_node_does_not_probe_guests(self):
+        runner, calls = mocked_runner(node="unknown")
+        self.assertFalse(health.snapshot("root@pve.example", "one", runner)["service_health_observed"])
+        self.assertEqual(calls, [("hostname",)])
+
+    def test_incomplete_or_stopped_inventory_is_fail_closed(self):
+        for content in (INVENTORY.replace("running", "stopped", 1),
+                        INVENTORY.replace("102 vitrial-prod-obj", "102 wrong-obj"),
+                        INVENTORY + "101 vitrial-prod-db running\n",
+                        INVENTORY.replace("111 opnsense", "111 wrong-gateway"),
+                        INVENTORY.replace("111 opnsense             running", "111 opnsense             stopped"),
+                        ""):
+            runner, calls = mocked_runner(inventory=content)
+            self.assertFalse(health.snapshot("root@pve.example", "one", runner)["checks"]["vm_inventory"])
+            self.assertEqual(len(calls), 2)
+
+    def test_guest_payload_rejects_errors_partial_or_malformed(self):
+        for payload in (None, "", "{}", response("healthy", code=1),
+                        json.dumps({"exited": 0, "exitcode": 0, "out-data": "healthy"}),
+                        json.dumps({"exited": 1, "exitcode": 0, "out-data": 2})):
+            self.assertIsNone(health.guest_stdout(payload))
+
+    def test_unrecognized_health_result_is_denied(self):
+        runner, _ = mocked_runner(api="starting", db="activating")
+        result = health.snapshot("root@pve.example", "one", runner)
+        self.assertFalse(result["service_health_observed"])
+
+    def test_target_validation_disallows_shell_metacharacters(self):
+        for target in ("root@pve.example;id", "pve.example", "root@pve.example\nx", ""):
+            with self.assertRaises(ValueError):
+                health.snapshot(target, "one")
+        with self.assertRaises(ValueError):
+            health.snapshot("root@pve.example", "one;id")
+
+    def test_missing_remote_response_is_hold(self):
+        runner, _ = mocked_runner(node="")
+        self.assertFalse(health.snapshot("root@pve.example", "one", runner)["checks"]["node_identity"])
+
+
+if __name__ == "__main__":
+    unittest.main()
