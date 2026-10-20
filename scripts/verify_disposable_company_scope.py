@@ -91,6 +91,20 @@ def assert_fifth_seat_denied(*, base: str, admin: str, payload: dict) -> None:
         if exc.code != 409:
             raise RuntimeError("fifth seat refusal not HTTP 409") from None
 
+def assert_inactive_member_bearer_denied(*, base: str, token: str) -> None:
+    """A deactivated membership must reject its pre-deactivation bearer."""
+    request = Request(
+        base + "/api/v1/auth/me", method="GET",
+        headers={"Authorization": "Bearer " + token,
+                 "Accept": "application/json"},
+    )
+    try:
+        with build_opener(DenyRedirect()).open(request, timeout=6):
+            raise RuntimeError("deactivated member retained an active bearer")
+    except HTTPError as exc:
+        if exc.code != 401:
+            raise RuntimeError("deactivated member refusal was not HTTP 401") from None
+
 
 def verify(base: str, file: Path, admin: str) -> dict:
     data = ensure_local_handoff(base, file)
@@ -149,6 +163,55 @@ def verify(base: str, file: Path, admin: str) -> dict:
 
     fifth = new_member(company=company, nonce=nonce, label="fifth", shared=True)
     assert_fifth_seat_denied(base=base, admin=admin, payload=fifth)
+
+    # Revoke a member through the actual synthetic administrative boundary.
+    # Their *existing* bearer must stop authenticating immediately, not only
+    # a newly issued token. Freeing this seat must permit exactly one new seat.
+    inactive = dict(limited)
+    inactive["active"] = False
+    inactive["sessionID"] = "synthetic-deactivate-" + nonce
+    exchange(
+        base, "/internal/admin/v1/bootstrap", method="POST",
+        headers={"X-Vitrial-Admin-Key": admin}, payload=inactive,
+    )
+    assert_inactive_member_bearer_denied(base=base, token=limited_token)
+    after_exit = exchange(
+        base, "/api/v1/company/workspace",
+        headers={"Authorization": "Bearer " + shared_token},
+    )
+    visible = after_exit.get("members")
+    if (after_exit.get("occupiedSeats") != 3
+            or after_exit.get("seatsRemaining") != 1
+            or type(visible) is not list or len(visible) != 3
+            or limited["membershipID"] in {
+                m.get("membershipID") for m in visible if type(m) is dict
+            }):
+        raise RuntimeError("inactive member remains counted or visible")
+    _, replacement_records = one_member(
+        base=base, admin=admin, payload=fifth, expected_scopes=True,
+    )
+    replacement_ids = {
+        record.get("entityID") for record in replacement_records
+        if type(record) is dict
+    }
+    if not expected.issubset(replacement_ids):
+        raise RuntimeError("reclaimed active seat cannot see team Customer/Project")
+    after_replacement = exchange(
+        base, "/api/v1/company/workspace",
+        headers={"Authorization": "Bearer " + shared_token},
+    )
+    replacement_members = after_replacement.get("members")
+    ids = {
+        m.get("membershipID") for m in replacement_members
+        if type(m) is dict
+    } if type(replacement_members) is list else set()
+    if (after_replacement.get("occupiedSeats") != 4
+            or after_replacement.get("seatsRemaining") != 0
+            or len(ids) != 4
+            or fifth["membershipID"] not in ids
+            or limited["membershipID"] in ids):
+        raise RuntimeError("seat-replacement directory state inconsistent")
+
     return {
         "gate": "PASS", "tested_company_seats": 4,
         "new_shared_member_uses_explicit_ids": False,
@@ -158,6 +221,9 @@ def verify(base: str, file: Path, admin: str) -> dict:
         "shared_member_directory_count": 3,
         "restricted_member_directory_count": 1,
         "fifth_active_seat_denied_http_409": True,
+        "deactivated_member_prior_bearer_http_401": True,
+        "seat_reclaimed_and_replaced": True,
+        "former_member_absent_after_replacement": True,
         "production_changed": False,
     }
 
