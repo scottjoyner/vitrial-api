@@ -377,8 +377,56 @@ jobs:
             -f deploy/compose.acceptance.yml config >/dev/null
       - name: Boot migrations, persistent services, API and internal-CA HTTPS edge
         run: |
-          docker compose --env-file /tmp/vitrial-acceptance.env \
-            -f deploy/compose.acceptance.yml up -d
+          # Docker Compose can abort dependency startup when the API's first
+          # health probes fail even if it becomes healthy shortly afterward.
+          # Continue only after Docker's OWN health status turns green, then
+          # re-evaluate the same disposable Compose graph. Fail otherwise.
+          compose() {
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml "$@"
+          }
+          if ! compose up -d; then
+            echo "::warning::Initial disposable startup rejected; checking bounded health convergence."
+            recovered=false
+            for attempt in $(seq 1 12); do
+              api_id="$(compose ps -q api 2>/dev/null || true)"
+              health="missing"
+              if [[ -n "$api_id" ]]; then
+                health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$api_id" 2>/dev/null || true)"
+              fi
+              echo "acceptance_api_health_attempt=$attempt status=$health"
+              if [[ "$health" == "healthy" ]]; then
+                if compose up -d; then
+                  recovered=true
+                  break
+                fi
+              fi
+              sleep 5
+            done
+            if [[ "$recovered" != "true" ]]; then
+              echo "::error::Acceptance startup failed; collecting bounded service health diagnostics."
+              api_id="$(compose ps -q api 2>/dev/null || true)"
+              if [[ -n "$api_id" ]]; then
+                echo "Docker healthcheck command and bounded last six exit statuses:"
+                docker inspect --format '{{json .Config.Healthcheck.Test}}' "$api_id" || true
+                docker inspect --format '{{range .State.Health.Log}}health_start={{.Start}} health_end={{.End}} exit={{.ExitCode}}{{println}}{{end}}' "$api_id" | tail -6 || true
+              fi
+              echo "Same executable used by healthcheck, invoked once with categorical failure only:"
+              compose exec -T api python -m scripts.probe_dependencies || true
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml ps || true
+            # Categorical read-only diagnosis inside the *same* API container
+            # whose healthcheck failed. Neither URLs nor secrets are printed.
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml exec -T api \
+              python -c 'import asyncio,json; from app.readiness import collect_dependency_readiness; r=asyncio.run(collect_dependency_readiness()); print(json.dumps({"database":r.database,"objectStorage":r.object_storage,"status":r.status},sort_keys=True))' \
+              || true
+            docker compose --env-file /tmp/vitrial-acceptance.env \
+              -f deploy/compose.acceptance.yml logs --no-color --tail 65 \
+              api migrate s3-init postgres s3 2>/dev/null || true
+              exit 1
+            fi
+          fi
           for attempt in $(seq 1 30); do
             if curl -kfsS https://localhost:8443/health >/dev/null; then
               exit 0
@@ -402,7 +450,7 @@ jobs:
       - name: Prove dependency readiness and restart persistence
         run: |
           COMPOSE="docker compose --env-file /tmp/vitrial-acceptance.env -f deploy/compose.acceptance.yml"
-          $COMPOSE exec -T api python scripts/probe_dependencies.py
+          $COMPOSE exec -T api python -m scripts.probe_dependencies
           $COMPOSE exec -T postgres psql -U vitrial -d vitrial -v ON_ERROR_STOP=1 \
             -c "CREATE TABLE IF NOT EXISTS deployment_smoke (id integer primary key); INSERT INTO deployment_smoke (id) VALUES (1) ON CONFLICT DO NOTHING;"
           $COMPOSE exec -T api python scripts/probe_evidence_durability.py write
@@ -415,7 +463,7 @@ jobs:
           done
           test "$($COMPOSE exec -T postgres psql -U vitrial -d vitrial -Atc 'SELECT count(*) FROM deployment_smoke WHERE id = 1')" = "1"
           $COMPOSE exec -T api python scripts/probe_evidence_durability.py verify
-          $COMPOSE exec -T api python scripts/probe_dependencies.py --quiet
+          $COMPOSE exec -T api python -m scripts.probe_dependencies --quiet
       - name: Tear down smoke deployment
         if: always()
         run: |

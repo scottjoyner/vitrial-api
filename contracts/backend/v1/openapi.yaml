@@ -226,6 +226,7 @@ components:
         - item.configuration.manage
         - item.configuration.finalize
         - item.configuration.reopen
+        - item.components.authorize
         - quotation.create
         - quotation.send
         - quotation.approve

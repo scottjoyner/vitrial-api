@@ -31,7 +31,7 @@ echo "==> rolling application image back without downgrading the database"
 compose pull api
 compose up -d --no-deps api
 compose up -d caddy
-compose exec -T api python scripts/probe_dependencies.py
+compose exec -T api python -m scripts.probe_dependencies
 curl --fail --silent --show-error \
   --retry 12 --retry-delay 5 --retry-all-errors \
   "https://${API_HOST}/health" >/dev/null

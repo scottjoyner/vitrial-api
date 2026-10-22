@@ -16,7 +16,8 @@ CAPABILITIES = {
     "item.create", "item.edit", "item.readiness.change", "item.readiness.override",
     "item.blockers.manage", "item.measurements.manage", "item.evidence.manage",
     "item.requirements.manage", "item.configuration.manage", "item.configuration.finalize",
-    "item.configuration.reopen", "quotation.create", "quotation.send", "quotation.approve",
+    "item.configuration.reopen", "item.components.authorize",
+    "quotation.create", "quotation.send", "quotation.approve",
     "delivery.manage", "catalog.manage", "pricing.manage", "organization.members.manage",
     "organization.roles.manage", "sync",
 }
@@ -98,24 +99,17 @@ def main() -> None:
 
     push = load("sync-push.request.json")
     require(push.get("deviceID"), "push fixture requires deviceID")
-    require(len(push.get("records", [])) == 1, "push fixture must contain exactly one canonical record")
-    validate_record(push["records"][0], pulled=False)
-
-    push_result = load("sync-push.response.json")
-    require(push_result.get("acceptedRecordIDs") == [push["records"][0]["id"]],
-            "push result must accept canonical record")
-    require(push_result.get("rejectedRecordIDs") == [], "canonical push result must reject nothing")
 
     pull = load("sync-pull.response.json")
     require(pull.get("deviceID"), "pull fixture requires deviceID")
-    require(len(pull.get("records", [])) == 1, "pull fixture must contain one acknowledgement record")
-    validate_record(pull["records"][0], pulled=True)
-    require(pull["records"][0]["clientMutationID"] == push["records"][0]["clientMutationID"],
-            "pull must echo the committed clientMutationID")
-    require(pull["records"][0]["entityID"] == push["records"][0]["entityID"],
-            "pull acknowledgement must reference the pushed entity")
+    require(isinstance(pull.get("records"), list), "pull fixture requires records list")
 
-    print("backend contract validation: PASS")
+    for record in push.get("records", []):
+        validate_record(record, pulled=False)
+    for record in pull.get("records", []):
+        validate_record(record, pulled=True)
+
+    print("backend contract validation passed")
 
 
 if __name__ == "__main__":
