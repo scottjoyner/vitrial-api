@@ -21,6 +21,7 @@ Capability = Literal[
     "item.blockers.manage", "item.measurements.manage", "item.evidence.manage",
     "item.requirements.manage", "item.configuration.manage",
     "item.configuration.finalize", "item.configuration.reopen",
+    "item.components.authorize",
     "quotation.create", "quotation.send", "quotation.approve", "delivery.manage",
     "catalog.manage", "pricing.manage", "organization.members.manage",
     "organization.roles.manage", "sync",
