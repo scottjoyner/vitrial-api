@@ -18,6 +18,7 @@ from app.admin import (
 )
 from app.auth import Principal, current_principal, profile_for
 from app.auth_session_routes import router as auth_session_router
+from app.configurator_component_routes import router as configurator_component_router
 from app.db import session_scope
 from app.drain import drain_state
 from app.drain import lifespan as drain_lifespan
@@ -59,6 +60,7 @@ app = FastAPI(
 app.include_router(auth_session_router)
 app.include_router(reference_router)
 app.include_router(sync_v2_router)
+app.include_router(configurator_component_router)
 
 DocumentID = Annotated[str, Path(min_length=1)]
 
