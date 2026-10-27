@@ -70,7 +70,8 @@ class ProdVmHealthTests(unittest.TestCase):
         self.assertFalse(result["checks"]["postgresql_bind_matches_guest_ip"])
 
     def test_malformed_or_wildcard_bind_fails_closed(self):
-        for bound in ("*", "0.0.0.0", "10.0.3.280", "10.0.3.28.example"):
+        for bound in ("*", "0.0.0.0", "10.0.3.280", "10.0.3.28.example",
+                      "10.0.3.28,*", "10.0.3.28,0.0.0.0", "10.0.3.28,10.0.3.1"):
             runner, _ = mocked_runner(api="healthy", db="active", listen_ip=bound)
             self.assertFalse(health.snapshot("root@pve.example", "one", runner)[
                 "checks"]["postgresql_bind_matches_guest_ip"])
