@@ -1,0 +1,6 @@
+# EXACT historical false-positive exception, not an API token or a credential.
+# Commit ab3a6e8 assigned a public sslip.io DNS hostname to a variable named
+# APPROVED_API_HOST; the generic-api-key heuristic detected that naming shape.
+# The public hostname is non-secret; the variable was renamed in a later commit.
+# Do not expand this file with path-based or rule-wide exclusions.
+ab3a6e8e1ad1e05b9176836915f048a8efb552f9:scripts/audit_prod_vm_health_readonly.py:generic-api-key:21
