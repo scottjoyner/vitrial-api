@@ -21,7 +21,8 @@ def response(value, code=0):
     return json.dumps({"exitcode": code, "exited": 1, "out-data": value})
 
 
-def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="failed"):
+def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="failed",
+                  private_ip="10.0.3.28", listen_ip="10.77.0.10"):
     invocations = []
 
     def call(target, *args):
@@ -33,7 +34,12 @@ def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="faile
         if args[:4] == ("qm", "guest", "exec", "100"):
             return response(api)
         if args[:4] == ("qm", "guest", "exec", "101"):
-            return response(db, 0 if db == "active" else 3)
+            if "systemctl" in args:
+                return response(db, 0 if db == "active" else 3)
+            if "ip" in args:
+                return response(f"2: eth0 inet {private_ip}/24 brd 10.0.3.255 scope global eth0")
+            if "grep" in args:
+                return response(f"listen_addresses = '{listen_ip}'")
         raise AssertionError("unknown action: " + repr(args))
     return call, invocations
 
@@ -47,14 +53,32 @@ class ProdVmHealthTests(unittest.TestCase):
         self.assertTrue(result["checks"]["ingress_gateway_vm_running"])
         self.assertFalse(result["checks"]["postgresql_active"])
         self.assertFalse(result["release_authorized"])
-        self.assertEqual(len(calls), 4)
+        self.assertFalse(result["checks"]["postgresql_bind_matches_guest_ip"])
+        self.assertEqual(len(calls), 6)
 
     def test_fully_healthy_services_still_cannot_approve_release(self):
-        runner, _ = mocked_runner(api="healthy", db="active")
+        runner, _ = mocked_runner(api="healthy", db="active", listen_ip="10.0.3.28")
         result = health.snapshot("root@pve.example", "one", runner)
         self.assertTrue(result["service_health_observed"])
         self.assertFalse(result["release_authorized"])
         self.assertFalse(result["checks"]["independent_restore_verified"])
+
+    def test_bind_drift_blocks_even_healthy_service(self):
+        runner, _ = mocked_runner(api="healthy", db="active", listen_ip="10.77.0.10")
+        result = health.snapshot("root@pve.example", "one", runner)
+        self.assertFalse(result["service_health_observed"])
+        self.assertFalse(result["checks"]["postgresql_bind_matches_guest_ip"])
+
+    def test_malformed_or_wildcard_bind_fails_closed(self):
+        for bound in ("*", "0.0.0.0", "10.0.3.280", "10.0.3.28.example"):
+            runner, _ = mocked_runner(api="healthy", db="active", listen_ip=bound)
+            self.assertFalse(health.snapshot("root@pve.example", "one", runner)[
+                "checks"]["postgresql_bind_matches_guest_ip"])
+
+    def test_missing_guest_address_fails_closed(self):
+        runner, _ = mocked_runner(api="healthy", db="active", private_ip="127.0.0.1", listen_ip="10.0.3.28")
+        self.assertFalse(health.snapshot("root@pve.example", "one", runner)[
+            "checks"]["postgresql_bind_matches_guest_ip"])
 
     def test_wrong_pve_node_does_not_probe_guests(self):
         runner, calls = mocked_runner(node="unknown")
