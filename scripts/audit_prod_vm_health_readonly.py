@@ -18,7 +18,7 @@ VM_IDS = {
 }
 CONTAINER = "vitrial-api-production-api-1"
 CADDY_CONTAINER = "vitrial-api-production-caddy-1"
-APPROVED_API_HOST = "vitrial.38-143-56-142.sslip.io"
+EXPECTED_PUBLIC_SNI_HOSTNAME = "vitrial.38-143-56-142.sslip.io"
 
 
 def valid_target(target):
@@ -138,7 +138,7 @@ def snapshot(target, node, runner=ssh_readonly):
                                  "/etc/postgresql/17/main/conf.d/vitrial.conf")
         checks["api_container_healthy"] = guest_stdout(api) == "healthy"
         checks["api_caddy_host_matches_production"] = (
-            guest_stdout(caddy_host) == APPROVED_API_HOST
+            guest_stdout(caddy_host) == EXPECTED_PUBLIC_SNI_HOSTNAME
         )
         checks["postgresql_active"] = guest_stdout(db) == "active"
         checks["postgresql_bind_matches_guest_ip"] = listen_address_matches_private_ip(
