@@ -65,7 +65,7 @@ class ProdVmHealthTests(unittest.TestCase):
     def test_fully_healthy_services_still_cannot_approve_release(self):
         runner, _ = mocked_runner(
             api="healthy", db="active", listen_ip="10.0.3.28",
-            caddy_host=health.APPROVED_API_HOST
+            caddy_host=health.EXPECTED_PUBLIC_SNI_HOSTNAME
         )
         result = health.snapshot("root@pve.example", "one", runner)
         self.assertTrue(result["service_health_observed"])
