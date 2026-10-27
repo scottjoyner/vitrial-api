@@ -22,7 +22,8 @@ def response(value, code=0):
 
 
 def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="failed",
-                  private_ip="10.0.3.28", listen_ip="10.77.0.10"):
+                  private_ip="10.0.3.28", listen_ip="10.77.0.10",
+                  caddy_host="vitrial.38-143-56-139.sslip.io"):
     invocations = []
 
     def call(target, *args):
@@ -32,7 +33,11 @@ def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="faile
         if args == ("qm", "list"):
             return inventory
         if args[:4] == ("qm", "guest", "exec", "100"):
-            return response(api)
+            if "inspect" in args:
+                return response(api)
+            if "printenv" in args and "API_HOST" in args:
+                return response(caddy_host)
+            raise AssertionError("unknown API guest action: " + repr(args))
         if args[:4] == ("qm", "guest", "exec", "101"):
             if "systemctl" in args:
                 return response(db, 0 if db == "active" else 3)
@@ -54,14 +59,37 @@ class ProdVmHealthTests(unittest.TestCase):
         self.assertFalse(result["checks"]["postgresql_active"])
         self.assertFalse(result["release_authorized"])
         self.assertFalse(result["checks"]["postgresql_bind_matches_guest_ip"])
-        self.assertEqual(len(calls), 6)
+        self.assertFalse(result["checks"]["api_caddy_host_matches_production"])
+        self.assertEqual(len(calls), 7)
 
     def test_fully_healthy_services_still_cannot_approve_release(self):
-        runner, _ = mocked_runner(api="healthy", db="active", listen_ip="10.0.3.28")
+        runner, _ = mocked_runner(
+            api="healthy", db="active", listen_ip="10.0.3.28",
+            caddy_host=health.APPROVED_API_HOST
+        )
         result = health.snapshot("root@pve.example", "one", runner)
         self.assertTrue(result["service_health_observed"])
         self.assertFalse(result["release_authorized"])
         self.assertFalse(result["checks"]["independent_restore_verified"])
+
+    def test_healthy_api_with_retired_caddy_host_is_still_hold(self):
+        runner, _ = mocked_runner(
+            api="healthy", db="active", listen_ip="10.0.3.28",
+            caddy_host="vitrial.38-143-56-139.sslip.io"
+        )
+        report = health.snapshot("root@pve.example", "one", runner)
+        self.assertFalse(report["checks"]["api_caddy_host_matches_production"])
+        self.assertFalse(report["service_health_observed"])
+
+    def test_caddy_hostname_requires_exact_approved_value(self):
+        for caddy_host in ("", "vitrial.38-143-56-139.sslip.io",
+                           "vitrial.38-143-56-142.sslip.io.evil.example",
+                           "https://vitrial.38-143-56-142.sslip.io",
+                           "VITRIAL.38-143-56-142.sslip.io"):
+            runner, _ = mocked_runner(api="healthy", db="active",
+                                      listen_ip="10.0.3.28", caddy_host=caddy_host)
+            self.assertFalse(health.snapshot("root@pve.example", "one", runner)[
+                "checks"]["api_caddy_host_matches_production"])
 
     def test_bind_drift_blocks_even_healthy_service(self):
         runner, _ = mocked_runner(api="healthy", db="active", listen_ip="10.77.0.10")
