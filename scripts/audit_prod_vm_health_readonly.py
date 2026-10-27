@@ -17,6 +17,8 @@ VM_IDS = {
     111: "opnsense",
 }
 CONTAINER = "vitrial-api-production-api-1"
+CADDY_CONTAINER = "vitrial-api-production-caddy-1"
+APPROVED_API_HOST = "vitrial.38-143-56-142.sslip.io"
 
 
 def valid_target(target):
@@ -107,6 +109,7 @@ def snapshot(target, node, runner=ssh_readonly):
         "vm_inventory": False,
         "ingress_gateway_vm_running": False,
         "api_container_healthy": False,
+        "api_caddy_host_matches_production": False,
         "postgresql_active": False,
         "postgresql_bind_matches_guest_ip": False,
         "object_store_authenticated": False,
@@ -122,6 +125,9 @@ def snapshot(target, node, runner=ssh_readonly):
         api = runner(target, "qm", "guest", "exec", "100", "--",
                      "/usr/bin/env", "docker", "inspect", "--format={{.State.Health.Status}}",
                      CONTAINER)
+        caddy_host = runner(target, "qm", "guest", "exec", "100", "--",
+                            "/usr/bin/env", "docker", "exec", CADDY_CONTAINER,
+                            "printenv", "API_HOST")
         db = runner(target, "qm", "guest", "exec", "101", "--",
                     "/usr/bin/env", "systemctl", "is-active", "postgresql@17-main")
         guest_ip = runner(target, "qm", "guest", "exec", "101", "--",
@@ -131,6 +137,9 @@ def snapshot(target, node, runner=ssh_readonly):
                                  "^listen_addresses[[:space:]]*=",
                                  "/etc/postgresql/17/main/conf.d/vitrial.conf")
         checks["api_container_healthy"] = guest_stdout(api) == "healthy"
+        checks["api_caddy_host_matches_production"] = (
+            guest_stdout(caddy_host) == APPROVED_API_HOST
+        )
         checks["postgresql_active"] = guest_stdout(db) == "active"
         checks["postgresql_bind_matches_guest_ip"] = listen_address_matches_private_ip(
             configured_bind, private_ipv4_address(guest_ip)
@@ -141,7 +150,9 @@ def snapshot(target, node, runner=ssh_readonly):
         "service_health_observed": (
             checks["node_identity"] and checks["vm_inventory"]
             and checks["ingress_gateway_vm_running"]
-            and checks["api_container_healthy"] and checks["postgresql_active"]
+            and checks["api_container_healthy"]
+            and checks["api_caddy_host_matches_production"]
+            and checks["postgresql_active"]
             and checks["postgresql_bind_matches_guest_ip"]
         ),
         "release_authorized": False,
