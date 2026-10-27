@@ -77,7 +77,11 @@ def listen_address_matches_private_ip(raw, address):
     match = re.fullmatch(r"listen_addresses\s*=\s*'([^']+)'", lines[0])
     if not match:
         return False
-    return address in [part.strip() for part in match.group(1).split(",")]
+    bound = [part.strip() for part in match.group(1).split(",")]
+    allowed = {address, "127.0.0.1", "::1", "localhost"}
+    return address in bound and len(bound) == len(set(bound)) and all(
+        part in allowed for part in bound
+    )
 
 
 def inventory_valid(data):
