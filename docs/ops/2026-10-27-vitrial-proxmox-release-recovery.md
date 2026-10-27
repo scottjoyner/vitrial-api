@@ -12,6 +12,29 @@
 - Public HTTPS `vitrial.38-143-56-142.sslip.io:443` rejects the requested SNI (`unrecognized_name`). VM100 private Caddy accepts the **old** `.139` hostname with valid HTTPS `/health` 200, but rejects the **new** `.142` SNI. This proves TWO routing/hostname configurations need review, not merely iOS URL replacement.
 - Updated `scripts/audit_prod_vm_health_readonly.py` detects DB bind drift and exits with `release_authorized=false`, `gate=HOLD`. Eleven network-free tests passed and the current live read-only audit returned exit 2.
 
+## October 27 verified VM101 backup custody (read-only, production unchanged)
+
+A newer NFS archive was found through the Proxmox storage inventory:
+`remote_nfs_backups:backup/vzdump-qemu-101-2026_10_27-05_06_48.vma.zst`
+(611,157,962 bytes). Source SHA-256:
+`ebd1c2f44afd9f3307f2263cda0a154171e56b2982af7f3836f7beb7e57e418f`.
+
+Source archive passed `zstd -tq` and streaming `zstd -dc | vma verify -`
+with exit 0. A separate encrypted, strict-host-key SSH transfer copied the
+**exact same archive** to x1-370's private ext4 custody directory,
+`/home/scott/.local/share/vitrial-recovery-custody/20261027/`.
+The destination is mode 0700 and the file and receipt mode 0400; size,
+SHA-256 and independent zstd validation passed. The copy did **not** go
+onto shared plaintext NAS. The x1 local SSD provides a different
+physical host, **not** offsite immutability or a proven PostgreSQL
+recovery-point objective.
+
+The earlier protected October 3/11/23 copies remain intact. No VM101 restart,
+guest configuration mutation, data rewrite or customer-data API request
+occurred. Do not mistake archive byte integrity or this second-host
+copy for an independently restored/booted October 27 database with authenticated
+business-row reconciliation. Production release remains **HOLD**.
+
 ## Review/repair order
 
 1. Preserve guest configuration and identify a current independently restorable VM101 PostgreSQL backup, its storage owner, and rollback plan. Validate an **isolated** recovery copy before opening the running production data directory. Snapshot success alone is insufficient.
