@@ -52,6 +52,34 @@ def guest_stdout(payload):
         return None
 
 
+def private_ipv4_address(raw):
+    """Parse one exact eth0 address from bounded guest iproute2 output."""
+    value = guest_stdout(raw)
+    if value is None:
+        return None
+    matches = re.findall(r"\\binet\\s+(10\\.0\\.3\\.\\d{1,3})/\\d{1,2}\\b", value)
+    if len(matches) != 1:
+        return None
+    return matches[0] if all(int(x) <= 255 for x in matches[0].split(".")) else None
+
+
+def listen_address_matches_private_ip(raw, address):
+    """Only an explicit bind to the verified guest IP passes.
+
+    A broad wildcard is not accepted as a fix to a stale production bind.
+    """
+    value = guest_stdout(raw)
+    if address is None or value is None:
+        return False
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if len(lines) != 1:
+        return False
+    match = re.fullmatch(r"listen_addresses\\s*=\\s*'([^']+)'", lines[0])
+    if not match:
+        return False
+    return address in [part.strip() for part in match.group(1).split(",")]
+
+
 def inventory_valid(data):
     if not isinstance(data, str):
         return False
@@ -76,6 +104,7 @@ def snapshot(target, node, runner=ssh_readonly):
         "ingress_gateway_vm_running": False,
         "api_container_healthy": False,
         "postgresql_active": False,
+        "postgresql_bind_matches_guest_ip": False,
         "object_store_authenticated": False,
         "independent_restore_verified": False,
         "physical_testflight_accepted": False,
@@ -91,8 +120,17 @@ def snapshot(target, node, runner=ssh_readonly):
                      CONTAINER)
         db = runner(target, "qm", "guest", "exec", "101", "--",
                     "/usr/bin/env", "systemctl", "is-active", "postgresql@17-main")
+        guest_ip = runner(target, "qm", "guest", "exec", "101", "--",
+                          "/usr/bin/env", "ip", "-4", "-o", "addr", "show", "dev", "eth0")
+        configured_bind = runner(target, "qm", "guest", "exec", "101", "--",
+                                 "/usr/bin/env", "grep", "-E",
+                                 "^listen_addresses[[:space:]]*=",
+                                 "/etc/postgresql/17/main/conf.d/vitrial.conf")
         checks["api_container_healthy"] = guest_stdout(api) == "healthy"
         checks["postgresql_active"] = guest_stdout(db) == "active"
+        checks["postgresql_bind_matches_guest_ip"] = listen_address_matches_private_ip(
+            configured_bind, private_ipv4_address(guest_ip)
+        )
     return {
         "schema": "vitrial.production-readiness-snapshot.v1",
         "checks": checks,
@@ -100,6 +138,7 @@ def snapshot(target, node, runner=ssh_readonly):
             checks["node_identity"] and checks["vm_inventory"]
             and checks["ingress_gateway_vm_running"]
             and checks["api_container_healthy"] and checks["postgresql_active"]
+            and checks["postgresql_bind_matches_guest_ip"]
         ),
         "release_authorized": False,
         "gate": "HOLD",
