@@ -108,6 +108,7 @@ def snapshot(target, node, runner=ssh_readonly):
         "node_identity": False,
         "vm_inventory": False,
         "ingress_gateway_vm_running": False,
+        "ingress_nginx_vhost_configured": False,
         "api_container_healthy": False,
         "api_caddy_host_matches_production": False,
         "postgresql_active": False,
@@ -122,6 +123,19 @@ def snapshot(target, node, runner=ssh_readonly):
         checks["vm_inventory"] = inventory_valid(runner(target, "qm", "list"))
         checks["ingress_gateway_vm_running"] = checks["vm_inventory"]
     if checks["vm_inventory"]:
+        # This is an uncredentialed, read-only grep of the loaded nginx
+        # configuration on the actual OPNsense guest. It emits only a fixed
+        # status token, never the nginx -T content (other virtual hosts share
+        # this gateway). Existing default TLS listener rejects unmatched SNI.
+        nginx_probe = (
+            "/usr/local/sbin/nginx -T 2>/dev/null | grep -E "
+            "'^[[:space:]]*server_name[[:space:]]+"
+            "vitrial[.]38-143-56-142[.]sslip[.]io([[:space:];]|$)' "
+            ">/dev/null && printf 'configured\\n'"
+        )
+        nginx = runner(target, "qm", "guest", "exec", "111", "--",
+                       "/bin/sh", "-c", nginx_probe)
+        checks["ingress_nginx_vhost_configured"] = guest_stdout(nginx) == "configured"
         api = runner(target, "qm", "guest", "exec", "100", "--",
                      "/usr/bin/env", "docker", "inspect", "--format={{.State.Health.Status}}",
                      CONTAINER)
@@ -150,6 +164,7 @@ def snapshot(target, node, runner=ssh_readonly):
         "service_health_observed": (
             checks["node_identity"] and checks["vm_inventory"]
             and checks["ingress_gateway_vm_running"]
+            and checks["ingress_nginx_vhost_configured"]
             and checks["api_container_healthy"]
             and checks["api_caddy_host_matches_production"]
             and checks["postgresql_active"]
