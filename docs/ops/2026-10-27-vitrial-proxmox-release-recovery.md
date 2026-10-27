@@ -31,9 +31,45 @@ recovery-point objective.
 
 The earlier protected October 3/11/23 copies remain intact. No VM101 restart,
 guest configuration mutation, data rewrite or customer-data API request
-occurred. Do not mistake archive byte integrity or this second-host
-copy for an independently restored/booted October 27 database with authenticated
-business-row reconciliation. Production release remains **HOLD**.
+occurred. This archive was subsequently independently booted and SQL-validated
+as described below. Production release remains **HOLD**.
+
+## October 27 isolated PostgreSQL restore — authenticated SQL verified
+
+Restored the SHA-verified archive to **new VM9148** on Proxmox `one`;
+the restore did **not** overwrite production VM101 or prior scratch images.
+Before boot VM9148 was verified stopped, `onboot=0`, with **no `netN`
+or `ipconfigN` devices**. After a longer second boot, its guest agent
+responded; guest IPv4 enumeration reported **only loopback
+`127.0.0.1/8`**, not a LAN interface.
+
+A full **read-only** ext4 `e2fsck -fn` on the restored disk returned
+exit **0** and `global/pg_control` was present. PostgreSQL 17 was
+started **only in VM9148**, using
+`listen_addresses=127.0.0.1`, `archive_mode=off`, and
+`archive_command=/bin/false`. Authenticated local PostgreSQL reads
+confirmed:
+
+- Public schema: **19 tables**, comprising `alembic_version` and
+  **18 application tables**.
+- Exact all-table census: **18/18 business tables contained zero rows**;
+  `alembic_version` contained one row with revision `0007`.
+- `pg_database_size('vitrial') = 8574643` bytes.
+- Active listener exactly `127.0.0.1`; `archive_mode=off`;
+  `pg_is_in_recovery()=false`.
+- `pg_amcheck --database=vitrial --jobs=2 --install-missing`
+  exited **0**; `pg_dump --schema-only --no-owner --no-privileges`
+  exited **0** and wrote a 25,756-byte local scratch report.
+
+PostgreSQL was stopped cleanly with `pg_ctl -m fast -w stop`. VM9148
+was then shut down and verified **stopped, onboot=0, no NIC**.
+The copied source archive and its private x1 custody receipt were unchanged.
+
+This strengthens the repeated **empty pilot database** observation across
+October 3, 11, 23 and 27 restored evidence. It does **not** establish
+whether real customer data exists in a different authoritative database,
+or verify continuous/offsite immutable WAL custody or S3 object integrity.
+No permission to rewrite, purge, migrate, or repoint production is implied.
 
 ## Review/repair order
 
