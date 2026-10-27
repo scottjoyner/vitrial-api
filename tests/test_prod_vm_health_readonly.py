@@ -23,7 +23,8 @@ def response(value, code=0):
 
 def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="failed",
                   private_ip="10.0.3.28", listen_ip="10.77.0.10",
-                  caddy_host="vitrial.38-143-56-139.sslip.io"):
+                  caddy_host="vitrial.38-143-56-139.sslip.io",
+                  nginx_host_enabled=False):
     invocations = []
 
     def call(target, *args):
@@ -32,6 +33,9 @@ def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="faile
             return node + "\n"
         if args == ("qm", "list"):
             return inventory
+        if args[:4] == ("qm", "guest", "exec", "111"):
+            return response("configured" if nginx_host_enabled else "",
+                            0 if nginx_host_enabled else 1)
         if args[:4] == ("qm", "guest", "exec", "100"):
             if "inspect" in args:
                 return response(api)
@@ -60,15 +64,18 @@ class ProdVmHealthTests(unittest.TestCase):
         self.assertFalse(result["release_authorized"])
         self.assertFalse(result["checks"]["postgresql_bind_matches_guest_ip"])
         self.assertFalse(result["checks"]["api_caddy_host_matches_production"])
-        self.assertEqual(len(calls), 7)
+        self.assertFalse(result["checks"]["ingress_nginx_vhost_configured"])
+        self.assertEqual(len(calls), 8)
 
     def test_fully_healthy_services_still_cannot_approve_release(self):
         runner, _ = mocked_runner(
             api="healthy", db="active", listen_ip="10.0.3.28",
-            caddy_host=health.EXPECTED_PUBLIC_SNI_HOSTNAME
+            caddy_host=health.EXPECTED_PUBLIC_SNI_HOSTNAME,
+            nginx_host_enabled=True
         )
         result = health.snapshot("root@pve.example", "one", runner)
         self.assertTrue(result["service_health_observed"])
+        self.assertTrue(result["checks"]["ingress_nginx_vhost_configured"])
         self.assertFalse(result["release_authorized"])
         self.assertFalse(result["checks"]["independent_restore_verified"])
 
@@ -90,6 +97,28 @@ class ProdVmHealthTests(unittest.TestCase):
                                       listen_ip="10.0.3.28", caddy_host=caddy_host)
             self.assertFalse(health.snapshot("root@pve.example", "one", runner)[
                 "checks"]["api_caddy_host_matches_production"])
+
+    def test_nginx_missing_sni_vhost_blocks_even_healthy_api_and_database(self):
+        runner, _ = mocked_runner(
+            api="healthy", db="active", listen_ip="10.0.3.28",
+            caddy_host=health.EXPECTED_PUBLIC_SNI_HOSTNAME,
+            nginx_host_enabled=False
+        )
+        report = health.snapshot("root@pve.example", "one", runner)
+        self.assertFalse(report["checks"]["ingress_nginx_vhost_configured"])
+        self.assertFalse(report["service_health_observed"])
+
+    def test_nginx_probe_uses_only_fixed_readonly_virtualhost_check(self):
+        runner, calls = mocked_runner(nginx_host_enabled=True)
+        health.snapshot("root@pve.example", "one", runner)
+        guest_probes = [call for call in calls if call[:4] == (
+            "qm", "guest", "exec", "111"
+        )]
+        self.assertEqual(len(guest_probes), 1)
+        self.assertEqual(guest_probes[0][4:7], ("--", "/bin/sh", "-c"))
+        self.assertIn("/usr/local/sbin/nginx -T", guest_probes[0][7])
+        self.assertIn("server_name", guest_probes[0][7])
+        self.assertNotIn("curl -k", guest_probes[0][7])
 
     def test_bind_drift_blocks_even_healthy_service(self):
         runner, _ = mocked_runner(api="healthy", db="active", listen_ip="10.77.0.10")
