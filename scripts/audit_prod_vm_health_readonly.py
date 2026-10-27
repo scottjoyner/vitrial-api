@@ -57,7 +57,7 @@ def private_ipv4_address(raw):
     value = guest_stdout(raw)
     if value is None:
         return None
-    matches = re.findall(r"\\binet\\s+(10\\.0\\.3\\.\\d{1,3})/\\d{1,2}\\b", value)
+    matches = re.findall(r"\binet\s+(10\.0\.3\.\d{1,3})/\d{1,2}\b", value)
     if len(matches) != 1:
         return None
     return matches[0] if all(int(x) <= 255 for x in matches[0].split(".")) else None
@@ -74,7 +74,7 @@ def listen_address_matches_private_ip(raw, address):
     lines = [line.strip() for line in value.splitlines() if line.strip()]
     if len(lines) != 1:
         return False
-    match = re.fullmatch(r"listen_addresses\\s*=\\s*'([^']+)'", lines[0])
+    match = re.fullmatch(r"listen_addresses\s*=\s*'([^']+)'", lines[0])
     if not match:
         return False
     return address in [part.strip() for part in match.group(1).split(",")]
