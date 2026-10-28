@@ -268,6 +268,49 @@ three-file review**: listener, archived WAL command, and this
 client CIDR, plus the two VM100 dependency endpoint changes.
 All existing settings and rollback files must remain preserved.
 
+## Pristine October 27 VM101 archive WAL witness (independent of started scratch)
+
+An untouched VM101 `vzdump` archive was located on the Proxmox NFS
+backup store at
+`/mnt/nfs_arrg/ProxmoxBackups/dump/vzdump-qemu-101-2026_10_27-05_06_48.vma.zst`.
+Its SHA-256 `ebd1c2f44afd9f3307f2263cda0a154171e56b2982af7f3836f7beb7e57e418f`
+matched the independent existing x1 custody receipt. `zstd -dc |
+vma list -` identified the expected VM101 160-GiB disk.
+
+The original archive was decompressed with `vma extract` into a
+new root-private forensic directory
+`/var/lib/vz/vitrial-archive-pristine-20261027`.
+Its extracted raw disk was sparsely stored (~1.7 GiB actual, 160
+GiB logical). Root directory mode was `0700`, extracted files
+`0600`. The GPT partition 1 filesystem was mounted on a
+read-only loop attachment with `ro,noload,nosuid,nodev,noexec`
+and the mount was unmounted. No guest boot, Postgres start, or
+write to the archive or extracted filesystem occurred.
+
+**All four** critical 16-MiB `pg_wal` segments extracted from
+the *pristine backup*, `1B`–`1E`, had exact SHA-256 matches
+to the earlier signed/source custody receipt:
+
+- `1B`: `a2c72a608912747365fc0d99c2aca4836c8c9cd5706f5ee9fe323ef5ee0052d5`
+- `1C`: `8a9aab5133c6c1e29ec1c245f4037a9735e59ffb2d58a5b6298b0d9ee9248c60`
+- `1D`: `5eaca349b48024121dad28c02b274c0b03c6844b7cdedc2ba57dcf8644e12ece`
+- `1E`: `8b8aac29ceb5afe6b40ac2b4379e2871916767bf8c463f7133949f5f20728e26`
+
+This is stronger than the earlier running-scratch witness: after
+the isolated VM9148 PostgreSQL startup, its WAL directory showed
+`1C` with a changed digest, `1B` absent, and newly present
+`1F`/`20`. The post-start scratch directory must **not** be
+mistaken for pristine source backup bytes. Those differences
+alone are not evidence of source data corruption; comparing the
+intact, untouched source archive now proves the four WAL
+segments were present and byte-identical **before** isolated startup.
+
+**Remaining HOLD:** full PostgreSQL WAL replay to an approved
+point, authoritative customer-data reconciliation, independently
+immutable/offsite encrypted custody with recoverable keys, safe
+production restart/rollback and controlled client routing. These
+hash checks do not authorize live database restart or distribution.
+
 ## Review/repair order
 
 1. Preserve guest configuration and identify a current independently restorable VM101 PostgreSQL backup, its storage owner, and rollback plan. Validate an **isolated** recovery copy before opening the running production data directory. Snapshot success alone is insufficient.
