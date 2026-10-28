@@ -130,6 +130,47 @@ separate customer-data store exists. Preserve all six versions and
 delete markers; changing the endpoint alone would not prove ownership
 or satisfy production readiness.
 
+## October 27 live WAL byte-level verification and remaining custody hold
+
+All observations below were **read-only** on production VM101 while
+PostgreSQL 17 remained stopped. The restored VM9148 remained separate.
+
+- Local archive: 21 complete 16-MiB segments, hexadecimal suffixes
+  `06`–`1A`. Guest-mounted NFS mirror: 26 complete 16-MiB
+  segments `01`–`1A`. All **21 overlapping local and NFS files
+  matched SHA-256 byte for byte**. Segment `1A` also matched the
+  PostgreSQL data directory for a full three-way hash comparison.
+- The *production data directory* contains five 16-MiB WAL files
+  `1A`–`1E`. Suffixes `1B`–`1E` were **not present in either
+  standalone archive**. All four latest files `1B`, `1C`,
+  `1D`, `1E` matched the exact SHA-256 source digests recorded
+  in the October 24 private custody receipt; each retained consistent
+  inode, size and modification-time metadata during reading.
+- A PostgreSQL 17 `pg_waldump` read-only scan beginning at
+  `0/1A000000` emitted six WAL records, then stopped at
+  `0/1B000060` with an invalid-record-length/zero-filled-tail
+  diagnostic. That is **not** a full WAL replay or an approved RPO.
+  Do not infer data corruption solely from the tail diagnostic.
+- The Oct27 full VM101 `vzdump` backup has an independently checked
+  copy on x1. An additional attempt to examine four WAL segments
+  independently in isolated VM9148 did **not** complete: its guest
+  agent never became ready; an offline read-only qcow2 mount attempt
+  could not resolve the partition device. VM9148 was stopped, with
+  `onboot=0`, no network interface, and the temporary NBD attachment
+  verified disconnected. Do not claim that those backup-embedded WAL
+  bytes were independently read or compared.
+- Public trusted TLS at
+  `https://vitrial.38-143-56-142.sslip.io/ready` still fails
+  SNI negotiation (`tlsv1 unrecognized name`; HTTP status 000).
+  Read-only guest inspection of VM111's active nginx configuration
+  files found **zero `sslip.io` references**. No change was made
+  to VM111, its other TLS sites, VM100 Caddy or VM150.
+
+**Status: WAL byte-mirror quality improved, but four newer WAL
+segments are not separately archived, immutable offsite custody and
+approved recovery point remain unresolved; production PG restart and
+public ingress/Apple TestFlight remain HOLD.**
+
 ## Review/repair order
 
 1. Preserve guest configuration and identify a current independently restorable VM101 PostgreSQL backup, its storage owner, and rollback plan. Validate an **isolated** recovery copy before opening the running production data directory. Snapshot success alone is insufficient.
