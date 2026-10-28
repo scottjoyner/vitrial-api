@@ -7,6 +7,7 @@ validate backups, S3 credentials, human approvals, or phone acceptance.
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 
@@ -29,8 +30,11 @@ def valid_target(target):
 def ssh_readonly(target, *argv):
     try:
         result = subprocess.run(
+            # OpenSSH joins remote argv into a shell command. Explicitly quote
+            # each argument so Docker templates, pipes, semicolons and nginx
+            # probes reach the guest unchanged (without remote shell expansion).
             ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-             "-o", "ConnectTimeout=4", target, *argv],
+             "-o", "ConnectTimeout=4", target, shlex.join(argv)],
             capture_output=True, text=True, timeout=12, check=False,
         )
         if result.returncode != 0 or len(result.stdout) > 32768:
