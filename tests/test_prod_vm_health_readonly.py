@@ -1,6 +1,9 @@
 """Synthetic, network-free regression tests for SCRUM-39 VM health probe."""
 import importlib.util
 import json
+import shlex
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 import unittest
 
@@ -57,6 +60,39 @@ def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="faile
 
 
 class ProdVmHealthTests(unittest.TestCase):
+    def test_ssh_preserves_shell_metacharacters_inside_docker_format_argument(self):
+        args = (
+            "qm", "guest", "exec", "102", "--", "/usr/bin/env",
+            "docker", "inspect",
+            "--format={{.State.Running}};{{range .Mounts}}{{.Type}}:{{.Destination}};{{end}}",
+            health.OBJECT_CONTAINER,
+        )
+        result = SimpleNamespace(returncode=0, stdout=response("true;bind:/data;"))
+        with patch.object(health.subprocess, "run", return_value=result) as mocked:
+            output = health.ssh_readonly("root@pve.example", *args)
+        self.assertEqual(health.guest_stdout(output), "true;bind:/data;")
+        argv = mocked.call_args.args[0]
+        self.assertEqual(argv[-2], "root@pve.example")
+        self.assertEqual(argv[-1], shlex.join(args))
+        self.assertEqual(tuple(shlex.split(argv[-1])), args)
+        self.assertEqual(mocked.call_args.kwargs["timeout"], 12)
+
+    def test_ssh_preserves_nested_nginx_shell_probe_as_single_guest_argument(self):
+        probe = (
+            "/usr/local/sbin/nginx -T 2>/dev/null | grep -E "
+            "'^[[:space:]]*server_name[[:space:]]+"
+            "vitrial[.]38-143-56-142[.]sslip[.]io([[:space:];]|$)' "
+            ">/dev/null && printf 'configured\\n'"
+        )
+        args = ("qm", "guest", "exec", "111", "--", "/bin/sh", "-c", probe)
+        result = SimpleNamespace(returncode=0, stdout=response("configured"))
+        with patch.object(health.subprocess, "run", return_value=result) as mocked:
+            self.assertEqual(health.guest_stdout(health.ssh_readonly("root@pve.example", *args)),
+                             "configured")
+        argv = mocked.call_args.args[0]
+        self.assertEqual(argv[-1], shlex.join(args))
+        self.assertEqual(tuple(shlex.split(argv[-1])), args)
+
     def test_realistic_failing_state_is_hold(self):
         runner, calls = mocked_runner()
         result = health.snapshot("root@pve.example", "one", runner)
