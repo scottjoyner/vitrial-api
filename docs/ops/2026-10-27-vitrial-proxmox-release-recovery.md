@@ -204,6 +204,42 @@ offsite custody, approved replay/RPO and production recovery
 authorization remain HOLD. Public ingress/Apple TestFlight
 remain HOLD.**
 
+## PostgreSQL API authentication CIDR is a third required cutover file
+
+VM100's guest `eth0` confirms the API client is
+`10.0.3.27/24`. Read-only inspection of the actual VM101
+`/etc/postgresql/17/main/pg_hba.conf` found the sole remote API
+rule at line 133:
+
+`host vitrial vitrial 10.77.0.2/32 scram-sha-256`
+
+VM101 therefore would reject authenticated traffic from the API
+even after repairing the listener and VM100 `DATABASE_URL`.
+Do **not** use a wildcard CIDR; the narrowly scoped proposed
+client rule is:
+
+`host vitrial vitrial 10.0.3.27/32 scram-sha-256`
+
+The new **read-only** `scripts/plan_vm101_hba_cidr.py`
+checks for exactly one original rule, rejects broad/duplicate/
+unrecognized rules, and produces SHA-256 digests of the unchanged
+file and exact CIDR-only candidate. It neither writes the config
+nor restarts PostgreSQL. **13 synthetic tests passed**.
+Execution against live VM101 returned:
+
+- `status=CANDIDATE_ONLY_HOLD`
+- current SHA-256:
+  `c160e6dc4f7188d6b90c530aa6d516355cdfdc4fa939a8b947ef7e1dff355c6d`
+- proposed SHA-256:
+  `a71a0b83f0c084c39c13a6f212765bcd5e9ee0c26c6d83e66f7057913aa97f75`
+- `changed_rules=1`, `production_modified=false`,
+  `postgres_restarted=false`, `release_authorized=false`.
+
+Production PostgreSQL recovery now needs a **coordinated
+three-file review**: listener, archived WAL command, and this
+client CIDR, plus the two VM100 dependency endpoint changes.
+All existing settings and rollback files must remain preserved.
+
 ## Review/repair order
 
 1. Preserve guest configuration and identify a current independently restorable VM101 PostgreSQL backup, its storage owner, and rollback plan. Validate an **isolated** recovery copy before opening the running production data directory. Snapshot success alone is insufficient.
