@@ -18,6 +18,7 @@ VM_IDS = {
 }
 CONTAINER = "vitrial-api-production-api-1"
 CADDY_CONTAINER = "vitrial-api-production-caddy-1"
+OBJECT_CONTAINER = "vitrial-object-s3-1"
 EXPECTED_PUBLIC_SNI_HOSTNAME = "vitrial.38-143-56-142.sslip.io"
 
 
@@ -113,6 +114,7 @@ def snapshot(target, node, runner=ssh_readonly):
         "api_caddy_host_matches_production": False,
         "postgresql_active": False,
         "postgresql_bind_matches_guest_ip": False,
+        "object_store_running_with_data_bind": False,
         "object_store_authenticated": False,
         "independent_restore_verified": False,
         "physical_testflight_accepted": False,
@@ -158,6 +160,17 @@ def snapshot(target, node, runner=ssh_readonly):
         checks["postgresql_bind_matches_guest_ip"] = listen_address_matches_private_ip(
             configured_bind, private_ipv4_address(guest_ip)
         )
+        # Docker running state alone cannot prove S3 credentials, object
+        # consistency, or restore durability. This limited structural witness
+        # confirms the service is attached to a persistent /data bind rather
+        # than container ephemeral storage. No volumes are opened or altered.
+        object_mount = runner(target, "qm", "guest", "exec", "102", "--",
+                              "/usr/bin/env", "docker", "inspect",
+                              "--format={{.State.Running}};{{range .Mounts}}{{.Type}}:{{.Destination}};{{end}}",
+                              OBJECT_CONTAINER)
+        checks["object_store_running_with_data_bind"] = (
+            guest_stdout(object_mount) == "true;bind:/data;"
+        )
     return {
         "schema": "vitrial.production-readiness-snapshot.v1",
         "checks": checks,
@@ -169,6 +182,7 @@ def snapshot(target, node, runner=ssh_readonly):
             and checks["api_caddy_host_matches_production"]
             and checks["postgresql_active"]
             and checks["postgresql_bind_matches_guest_ip"]
+            and checks["object_store_running_with_data_bind"]
         ),
         "release_authorized": False,
         "gate": "HOLD",
