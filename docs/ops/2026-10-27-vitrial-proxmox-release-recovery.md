@@ -204,6 +204,34 @@ offsite custody, approved replay/RPO and production recovery
 authorization remain HOLD. Public ingress/Apple TestFlight
 remain HOLD.**
 
+## Second physical-host custody of the four newest WAL files
+
+After verified VM101 NFS WAL backups, all four `1B`–`1E`
+files were transferred over authenticated, strict-host-key SSH
+**from Proxmox's NFS mount to x1-370's separate local SSD**.
+They were *not* stored on the shared CIFS `/nas` mount.
+
+Exact destination:
+`/home/scott/.local/share/vitrial-recovery-custody/20261027/wal-1b-1e`
+
+The destination is on x1's independent 4-TB local NVMe/ext4
+mount. Each 16,777,216-byte incoming file used a unique partial
+path, was SHA-256 checked against the previously recorded
+live VM101 source receipt, and was only then renamed into its
+final name. Directory mode is `0700`, WAL files and the
+custody manifest are `0400`; the directory was fsynced.
+A fresh, independent x1 readback reported **4/4 complete
+SHA-256 matches**, 0 partials, and verified permissions.
+Total copied bytes: **67,108,864 (64 MiB)**.
+
+This materially improves resilience against loss of either
+the VM101 host's live disk or the shared NFS server. It does
+**not** establish a geographically independent/offsite copy,
+WORM/immutable retention, an operator-approved encryption
+recipient and recoverable key, or complete PostgreSQL PITR.
+Live VM101 PostgreSQL remained down, VM9148 remained stopped,
+and no source WAL/configuration was modified.
+
 ## PostgreSQL API authentication CIDR is a third required cutover file
 
 VM100's guest `eth0` confirms the API client is
