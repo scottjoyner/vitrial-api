@@ -107,6 +107,29 @@ review VM100 Caddy hostname and VM111 OPNsense multi-tenant HTTPS routing.
 Do not try a one-variable partial cutover or modify the unrelated
 VM150/old `.139` public service. Keep `release_authorized=false`.
 
+## S3 current and historical version integrity witness
+
+The same VM100 container and existing S3 credentials were used **in memory**
+against VM102 private `http://10.0.3.29:9000` for a strictly
+read-only, bounded inventory. A complete `ListObjectsV2` page reported
+**one current object of 52 bytes** (`IsTruncated=false`).
+`HeadObject` and `GetObject` for that current object succeeded; length
+and returned content's MD5 matched the object's 32-hex ETag.
+
+A complete `ListObjectVersions` page reported **six data versions of
+282 bytes in total** plus **five delete markers**
+(`IsTruncated=false`). All six historical versions were read back
+by explicit VersionId; each byte length and MD5/ETag check passed.
+No object keys, payload bytes, bucket identities, API secrets or credentials
+were printed. No S3 write/delete, replay, or version changes occurred.
+
+This is **bounded object integrity proof for the currently visible
+versioned bucket**, not independent immutable custody, full S3 API
+recovery, approval to delete historical versions, or evidence that no
+separate customer-data store exists. Preserve all six versions and
+delete markers; changing the endpoint alone would not prove ownership
+or satisfy production readiness.
+
 ## Review/repair order
 
 1. Preserve guest configuration and identify a current independently restorable VM101 PostgreSQL backup, its storage owner, and rollback plan. Validate an **isolated** recovery copy before opening the running production data directory. Snapshot success alone is insufficient.
