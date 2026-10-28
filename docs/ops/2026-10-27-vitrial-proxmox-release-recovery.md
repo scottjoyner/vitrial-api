@@ -166,10 +166,43 @@ PostgreSQL 17 remained stopped. The restored VM9148 remained separate.
   files found **zero `sslip.io` references**. No change was made
   to VM111, its other TLS sites, VM100 Caddy or VM150.
 
-**Status: WAL byte-mirror quality improved, but four newer WAL
-segments are not separately archived, immutable offsite custody and
-approved recovery point remain unresolved; production PG restart and
-public ingress/Apple TestFlight remain HOLD.**
+### Restricted NFS WAL custody copies created after byte verification
+
+After confirming production PostgreSQL was **down**, a strictly
+additive custody operation ran *as the postgres user* on VM101.
+Exactly the four 16-MiB source segments `1B`–`1E` were copied
+into a new, separate guest-mounted NFS directory:
+
+`/mnt/vitrial-backups/vitrial/postgres/wal-custody-hold-20261027`
+
+Source hashes were verified against the October 24 custody receipt
+**before** the new directory was created. Each copy used a new
+exclusive `.partial` file, a byte-count/SHA-256 check, file fsync,
+and an atomic rename into its final name. A private
+`SHA256_CUSTODY.json` manifest was written and fsynced. The
+directory was created with mode `0700`, and the four segment
+files have mode `0600`.
+
+A second independent read of the new NFS directory confirmed
+**four of four** full 16,777,216-byte files match the source
+SHA-256 receipt, no `.partial` files remain, and the restrictive
+permissions persist. Total newly preserved WAL: **67,108,864
+bytes (64 MiB)**. There was no change to the source WAL,
+existing active WAL archives, PostgreSQL configuration, or
+service process. A subsequent `pg_lsclusters` confirmed the
+production 17/main cluster was still **down**; scratch VM9148
+remained **stopped**.
+
+These are **standalone backup-custody copies in a private NFS
+folder, not completed PostgreSQL archive_command output**.
+The NFS share is not independently immutable/offsite/encrypted
+and a verified recovery-point replay is still unavailable.
+
+**Status: local/offhost mirrored WAL bytes verified and the
+four newer segments separately preserved on NFS, but immutable
+offsite custody, approved replay/RPO and production recovery
+authorization remain HOLD. Public ingress/Apple TestFlight
+remain HOLD.**
 
 ## Review/repair order
 
