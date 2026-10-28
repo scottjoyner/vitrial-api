@@ -71,6 +71,42 @@ whether real customer data exists in a different authoritative database,
 or verify continuous/offsite immutable WAL custody or S3 object integrity.
 No permission to rewrite, purge, migrate, or repoint production is implied.
 
+## VM100 private-route audit and VM102 authenticated S3 witness (October 27)
+
+From authenticated Proxmox QGA on VM100, the running API container's
+Docker inspect data was passed directly into the **redacted, read-only**
+`audit_vitrial_private_dependencies.py` and
+`plan_vm100_private_routes.py`. No secret values were printed or
+written to a planning artifact.
+
+| Endpoint setting | Observed VM100 runtime | Intended route |
+|---|---|---|
+| `DATABASE_URL` | `10.77.0.10:5432` | `10.0.3.28:5432` (VM101) |
+| `S3_ENDPOINT_URL` | `10.77.0.11:9000` | `10.0.3.29:9000` (VM102) |
+
+Both existing routes failed the current private-network match. The planner
+validated one container with **34** environment entries and proposed
+changing **only those two endpoint settings**. It returned
+`PATCH_REQUIRED`, not approval to re-create the service. Its private
+credential-preserving candidate was deliberately not serialized.
+
+VM102 guest `eth0` independently confirmed `10.0.3.29/24`. A
+credentialed, **read-only** boto3 `HeadBucket` probe was then run
+*inside the existing VM100 application container*, replacing only the
+in-memory S3 client endpoint with `http://10.0.3.29:9000`, using that
+container's existing environment credentials without displaying them.
+The selected bucket returned **HTTP 200**. No bucket/object list or data,
+writes, or restart occurred. This proves authenticated access at the
+**intended private S3 address**, not persisted live configuration,
+object contents, restart durability, or full API readiness.
+
+**Coordinated cutover dependency:** secure VM101 WAL custody and
+approved PostgreSQL listener/archiver repair precede VM100 dependency
+recreation; after VM100 DB and S3 links are corrected, independently
+review VM100 Caddy hostname and VM111 OPNsense multi-tenant HTTPS routing.
+Do not try a one-variable partial cutover or modify the unrelated
+VM150/old `.139` public service. Keep `release_authorized=false`.
+
 ## Review/repair order
 
 1. Preserve guest configuration and identify a current independently restorable VM101 PostgreSQL backup, its storage owner, and rollback plan. Validate an **isolated** recovery copy before opening the running production data directory. Snapshot success alone is insufficient.
