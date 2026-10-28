@@ -24,7 +24,8 @@ def response(value, code=0):
 def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="failed",
                   private_ip="10.0.3.28", listen_ip="10.77.0.10",
                   caddy_host="vitrial.38-143-56-139.sslip.io",
-                  nginx_host_enabled=False):
+                  nginx_host_enabled=False,
+                  object_mount="true;bind:/data;"):
     invocations = []
 
     def call(target, *args):
@@ -36,6 +37,8 @@ def mocked_runner(*, node="one", inventory=INVENTORY, api="unhealthy", db="faile
         if args[:4] == ("qm", "guest", "exec", "111"):
             return response("configured" if nginx_host_enabled else "",
                             0 if nginx_host_enabled else 1)
+        if args[:4] == ("qm", "guest", "exec", "102"):
+            return response(object_mount)
         if args[:4] == ("qm", "guest", "exec", "100"):
             if "inspect" in args:
                 return response(api)
@@ -65,7 +68,9 @@ class ProdVmHealthTests(unittest.TestCase):
         self.assertFalse(result["checks"]["postgresql_bind_matches_guest_ip"])
         self.assertFalse(result["checks"]["api_caddy_host_matches_production"])
         self.assertFalse(result["checks"]["ingress_nginx_vhost_configured"])
-        self.assertEqual(len(calls), 8)
+        self.assertTrue(result["checks"]["object_store_running_with_data_bind"])
+        self.assertFalse(result["checks"]["object_store_authenticated"])
+        self.assertEqual(len(calls), 9)
 
     def test_fully_healthy_services_still_cannot_approve_release(self):
         runner, _ = mocked_runner(
@@ -76,6 +81,8 @@ class ProdVmHealthTests(unittest.TestCase):
         result = health.snapshot("root@pve.example", "one", runner)
         self.assertTrue(result["service_health_observed"])
         self.assertTrue(result["checks"]["ingress_nginx_vhost_configured"])
+        self.assertTrue(result["checks"]["object_store_running_with_data_bind"])
+        self.assertFalse(result["checks"]["object_store_authenticated"])
         self.assertFalse(result["release_authorized"])
         self.assertFalse(result["checks"]["independent_restore_verified"])
 
@@ -119,6 +126,31 @@ class ProdVmHealthTests(unittest.TestCase):
         self.assertIn("/usr/local/sbin/nginx -T", guest_probes[0][7])
         self.assertIn("server_name", guest_probes[0][7])
         self.assertNotIn("curl -k", guest_probes[0][7])
+
+    def test_object_storage_requires_running_service_and_persistent_data_bind(self):
+        for mount in ("false;bind:/data;", "true;", "true;volume:/data;",
+                      "true;bind:/other;", "true;bind:/data;bind:/tmp;",
+                      "running;bind:/data;", "", "true;bind:/data"):
+            runner, _ = mocked_runner(
+                api="healthy", db="active", listen_ip="10.0.3.28",
+                nginx_host_enabled=True,
+                caddy_host=health.EXPECTED_PUBLIC_SNI_HOSTNAME,
+                object_mount=mount,
+            )
+            report = health.snapshot("root@pve.example", "one", runner)
+            self.assertFalse(report["checks"]["object_store_running_with_data_bind"])
+            self.assertFalse(report["service_health_observed"])
+
+    def test_object_storage_mount_witness_is_not_s3_authority(self):
+        runner, _ = mocked_runner(
+            api="healthy", db="active", listen_ip="10.0.3.28",
+            nginx_host_enabled=True, caddy_host=health.EXPECTED_PUBLIC_SNI_HOSTNAME,
+            object_mount="true;bind:/data;",
+        )
+        report = health.snapshot("root@pve.example", "one", runner)
+        self.assertTrue(report["service_health_observed"])
+        self.assertFalse(report["checks"]["object_store_authenticated"])
+        self.assertFalse(report["release_authorized"])
 
     def test_bind_drift_blocks_even_healthy_service(self):
         runner, _ = mocked_runner(api="healthy", db="active", listen_ip="10.77.0.10")
