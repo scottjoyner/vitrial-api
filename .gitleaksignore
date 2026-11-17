@@ -1,0 +1,5 @@
+# Exactly one researched historical Gitleaks false-positive fingerprint.
+# The matched source value is the public Vitrial sslip.io hostname, not an
+# API token. Full-history scanning, all other rules, and Trivy remain active.
+# See docs/research/GITLEAKS_PUBLIC_HOST_FALSE_POSITIVE_20261116.md.
+ab3a6e8e1ad1e05b9176836915f048a8efb552f9:scripts/audit_prod_vm_health_readonly.py:generic-api-key:21
