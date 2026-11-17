@@ -54,20 +54,20 @@ jobs:
               return raw[a:b]
           before=block(old)
           after=block(new)
-          assert old.replace(before,after,1)==new, "HOLD: unrelated uv.lock drift"
-          assert 'version = "2026.7.22"' in before
+          assert old == new, "HOLD: uv lock is not reproducible or drifted"
+          assert 'version = "2026.10.23"' in before
           import re
           version=re.search(r'^version = "([^"]+)"$',after,re.M)
           assert version
           nums=tuple(map(int,version.group(1).split(".")))
-          assert nums >= (2026,10,19), "HOLD: unpatched certifi version"
-          assert "certifi==2026.10.19" in Path("requirements-lock.txt").read_text()
+          assert nums == (2026,10,23), "HOLD: expected exact patched certifi version"
+          assert "certifi==2026.10.23" in Path("requirements-lock.txt").read_text()
           meta={
               "source_sha":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
               "package":"certifi",
-              "from":"2026.7.22",
+              "from":"2026.10.23",
               "to":version.group(1),
-              "only_certifi_block_changed":True,
+              "lock_reproduction_idempotent":True,
               "release_authorized":False,
               "secret_scan_bypassed":False,
           }
