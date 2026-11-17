@@ -129,26 +129,25 @@ jobs:
       # implementation -- Apache 2.0 rather than AGPL -- published to two
       # registries, so a single-registry outage cannot break this again.
       #
-      # This step is deliberately best-effort. The S3 tests are the only thing
-      # that needs object storage; the PostgreSQL integration tests, the
-      # Alembic upgrade/downgrade proof and the contract validation do not. If
-      # the image cannot be pulled or does not become healthy, S3_INTEGRATION is
-      # set to 0 so those tests skip with an honest reason instead of the whole
-      # job failing at setup. The job therefore cannot get worse than it is now.
+      # Storage setup records a categorical availability marker, but the
+      # subsequent live Docker-probe acceptance step REQUIRES S3_INTEGRATION=1
+      # and fails the entire PostgreSQL+S3 job otherwise. The fixture image is
+      # immutable: default and user override must be OCI digest references.
+      # Tests may no longer claim complete integration if S3 did not start.
       - name: Start S3-compatible object storage
         run: |
           set -uo pipefail
-          image="${S3_IMAGE:-rustfs/rustfs:latest}"
-          # The fallback tag is unpinned, so a new upstream release changes what CI is
-          # testing without any code change. `postgres:17` is pinned to a major for the
-          # same reason reproducibility matters here. Set the `S3_IMAGE` repository
-          # variable to a digest to make this explicit; until then, say so on every run
-          # so a surprise object-storage change is visible in the log rather than
-          # inferred later.
-          if [ "$image" = "rustfs/rustfs:latest" ]; then
-            echo "::warning::S3_IMAGE is unset; falling back to the unpinned $image. A new upstream release will change what CI tests."
+          # Registry-authenticated OCI index digest of rustfs/rustfs:latest,
+          # observed on 2026-11-16. An upstream tag change cannot change our
+          # CI test server. Both amd64 and arm64 resolve from this same index.
+          image="${S3_IMAGE:-rustfs/rustfs@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a}"
+          # An explicit repo variable is permitted only when immutable too.
+          # Reject mutable tags before pulling or starting *any* S3 container.
+          if [[ ! "$image" =~ ^[a-zA-Z0-9._:/-]+@sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::S3_IMAGE must be an immutable OCI image@sha256:digest reference"
+            exit 1
           fi
-          echo "object storage image: $image"
+          echo "object storage image (immutable digest): $image"
           if ! docker run -d --name vitrial-s3 \
             -p 9000:9000 \
             -e RUSTFS_ACCESS_KEY="$S3_ACCESS_KEY_ID" \
