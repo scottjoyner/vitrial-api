@@ -1,0 +1,84 @@
+name: Review-only Vitrial security scans (no scanner bypass)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/probe_dependencies.py'
+      - 'tests/test_probe_dependencies_isolation.py'
+      - '.github/workflows/security-continuation-review.yml'
+  push:
+    branches:
+      - research/vitrial-security-continuation-20261116
+    paths:
+      - '.github/workflows/security-continuation-review.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-review-only:
+    name: Supplemental fs+image+SBOM review (NOT release admission)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout PR source without retained credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Confirm source revision and clean patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check HEAD^ HEAD
+          test -z "$(git status --porcelain)"
+          test -f scripts/probe_dependencies.py
+          test -f tests/test_probe_dependencies_isolation.py
+          printf 'Review SHA: %s\n' "$(git rev-parse HEAD)"
+
+      - name: Independently scan source files and dependencies
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: '.'
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Build synthetic nonproduction image
+        run: docker build -t vitrial-api:security-continuation-review .
+
+      - name: Independently scan built image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: vitrial-api:security-continuation-review
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Generate CycloneDX SBOM for same image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: vitrial-api:security-continuation-review
+          format: cyclonedx
+          output: sbom-review-only.cdx.json
+
+      - name: Retain review-only SBOM (nonproduction)
+        uses: actions/upload-artifact@v7
+        with:
+          name: vitrial-security-review-only-sbom
+          path: sbom-review-only.cdx.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Preserve full-history secret-scan blocker
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'TRIVY_REVIEW_ONLY; main CI gitleaks full-history FAIL remains a separate mandatory HOLD'
+          echo 'Not a production image, no release/signing/deploy credentials or approval'
