@@ -1,0 +1,86 @@
+name: Research-only certifi lock regeneration (no source push)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/certifi-lock-refresh-review.yml'
+      - 'requirements-lock.txt'
+      - 'uv.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    name: Reproducible patched-certifi uv.lock artifact (NO release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact PR source (no persistent credentials)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Install pinned offline research resolver
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install fixed uv tool version
+        run: python3 -m pip install 'uv==0.10.0'
+
+      - name: Upgrade only certifi in ephemeral uv lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv lock --upgrade-package certifi
+
+      - name: Verify package fix and forbid unrelated lock drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess, tomllib
+          from pathlib import Path
+          old = subprocess.check_output(["git","show","HEAD:uv.lock"],text=True)
+          new = Path("uv.lock").read_text()
+          prefix = '[[package]]\nname = "certifi"\n'
+          assert old.count(prefix)==1 and new.count(prefix)==1
+          def block(raw):
+              a=raw.index(prefix)
+              b=raw.find("[[package]]",a+len(prefix))
+              if b<0:b=len(raw)
+              return raw[a:b]
+          before=block(old)
+          after=block(new)
+          assert old == new, "HOLD: uv lock is not reproducible or drifted"
+          assert 'version = "2026.10.23"' in before
+          import re
+          version=re.search(r'^version = "([^"]+)"$',after,re.M)
+          assert version
+          nums=tuple(map(int,version.group(1).split(".")))
+          assert nums == (2026,10,23), "HOLD: expected exact patched certifi version"
+          assert "certifi==2026.10.23" in Path("requirements-lock.txt").read_text()
+          meta={
+              "source_sha":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+              "package":"certifi",
+              "from":"2026.10.23",
+              "to":version.group(1),
+              "lock_reproduction_idempotent":True,
+              "release_authorized":False,
+              "secret_scan_bypassed":False,
+          }
+          Path("certifi-lock-refresh-proof.json").write_text(json.dumps(meta,sort_keys=True)+"\n")
+          print(json.dumps(meta,sort_keys=True))
+          PY
+
+      - name: Retain generated review-only lock and provenance
+        uses: actions/upload-artifact@v7
+        with:
+          name: vitrial-certifi-lock-review-only
+          path: |
+            uv.lock
+            certifi-lock-refresh-proof.json
+          retention-days: 7
+          if-no-files-found: error
