@@ -50,6 +50,14 @@ jobs:
       - name: Build synthetic nonproduction image
         run: docker build -t vitrial-api:security-continuation-review .
 
+      - name: Independently attest patched zlib1g version inside built image
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(docker run --rm --network none --entrypoint dpkg-query vitrial-api:security-continuation-review -W -f='\${Version}' zlib1g)"
+          dpkg --compare-versions "$version" ge '1:1.3.dfsg+really1.3.1-1+deb13u1'
+          echo 'PASS_DEBIAN_13_ZLIB_PATCHED_IN_REVIEW_IMAGE'
+
       - name: Independently scan built image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
