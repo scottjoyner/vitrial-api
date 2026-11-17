@@ -1,5 +1,16 @@
 FROM python:3.12-slim AS runtime
 
+# CVE-2026-85091: the current Debian 13 slim base can contain vulnerable
+# zlib1g. Upgrade from Debian's signed security repository and FAIL the build
+# if the exact minimum patched trixie package is not available. This layer
+# changes only the review image; no running host/service package is touched.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends --only-upgrade zlib1g; \
+    installed="$(dpkg-query -W -f='${Version}' zlib1g)"; \
+    dpkg --compare-versions "$installed" ge '1:1.3.dfsg+really1.3.1-1+deb13u1'; \
+    rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
