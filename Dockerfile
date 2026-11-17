@@ -1,5 +1,17 @@
 FROM python:3.12-slim AS runtime
 
+# Debian 13 security advisory DSA-6613-1 / CVE-2026-85091.
+# The upstream slim tag can temporarily lag the patched zlib1g package.
+# Upgrade only the affected OS library and fail the image build unless the
+# verified Debian Trixie security version (or newer) is actually installed.
+# Keep image vulnerability scanning fully enforcing HIGH/CRITICAL.
+RUN set -eu; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends --only-upgrade zlib1g; \
+    installed="$(dpkg-query -W -f='${Version}' zlib1g)"; \
+    dpkg --compare-versions "$installed" ge '1:1.3.dfsg+really1.3.1-1+deb13u1'; \
+    rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
