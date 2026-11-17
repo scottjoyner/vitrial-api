@@ -187,6 +187,17 @@ jobs:
           )
           client.create_bucket(Bucket="vitrial-evidence")
           PY
+      # A green job must prove that the real Docker healthcheck, not only its
+      # isolated mocks, sees both fixtures and correctly isolates either outage.
+      # The existing best-effort S3 setup is NOT acceptable as release evidence
+      # for this check: when S3 cannot start, this step fails closed.
+      - name: Prove bounded Docker probe against live isolated PostgreSQL and S3
+        run: |
+          test "${S3_INTEGRATION:-0}" = "1" || {
+            echo "::error::Live Docker health probe HOLD: isolated S3 is unavailable"
+            exit 1
+          }
+          python scripts/validate_live_dependency_probe.py
       - name: Prove upgrade from zero and reversible baseline
         run: |
           alembic upgrade head
